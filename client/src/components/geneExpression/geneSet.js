@@ -1,5 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
+import { AnchorButton } from "@blueprintjs/core";
 import { FaChevronRight, FaChevronDown } from "react-icons/fa";
 import actions from "../../actions";
 import Gene from "./gene";
@@ -25,6 +26,8 @@ class GeneSet extends React.Component {
     super(props);
     this.state = {
       isOpen: false,
+      genePage: 0,
+      maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1*((props.setGenes.length % 10)===0)
     };
   }
 
@@ -64,7 +67,18 @@ class GeneSet extends React.Component {
 
     return undefined;
   };
-
+  decrementGenePage = () => { 
+    const { genePage } = this.state;
+    this.setState({
+      genePage: genePage-1
+    })
+  }
+  incrementGenePage = () => { 
+    const { genePage } = this.state;
+    this.setState({
+      genePage: genePage+1
+    })
+  }  
   onGenesetMenuClick = () => {
     const { isOpen } = this.state;
     this.setState({ isOpen: !isOpen });
@@ -80,8 +94,9 @@ class GeneSet extends React.Component {
 
   renderGenes() {
     const { setName, setGenes, setGenesWithDescriptions } = this.props;
+    const { genePage } = this.state;
 
-    return setGenes.map((gene) => {
+    return setGenes.slice(genePage*10,(genePage+1)*10).map((gene) => {
       const { geneDescription } = setGenesWithDescriptions.get(gene);
 
       return (
@@ -97,7 +112,7 @@ class GeneSet extends React.Component {
 
   render() {
     const { setName, setGenes, genesetDescription } = this.props;
-    const { isOpen } = this.state;
+    const { isOpen, maxGenePage, genePage } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
 
@@ -169,6 +184,27 @@ class GeneSet extends React.Component {
             setGenes={setGenes}
           />
         )}
+        {isOpen &&!genesetIsEmpty ? 
+        <div style={{
+          textAlign: "right"
+        }}>
+          {`Showing genes ${genePage*10}-${(genePage+1)*10} out of ${setGenes.length}`}
+          <AnchorButton
+            type="button"
+            icon="chevron-left"
+            onClick={this.decrementGenePage}
+            minimal
+            disabled={genePage === 0}
+          />
+          <AnchorButton
+            type="button"
+            icon="chevron-right"
+            onClick={this.incrementGenePage}
+            minimal
+            disabled={genePage === maxGenePage}
+          />          
+        </div>
+         : null}
         {isOpen && !genesetIsEmpty && this.renderGenes()}
         <EditGenesetNameDialogue
           parentGeneset={setName}
