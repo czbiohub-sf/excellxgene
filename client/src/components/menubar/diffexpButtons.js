@@ -11,6 +11,9 @@ import { DgeHotkeys } from "../hotkeys";
   differential: state.differential,
   diffexpMayBeSlow: state.config?.parameters?.["diffexp-may-be-slow"] ?? false,
   diffexpCellcountMax: state.config?.limits?.diffexp_cellcount_max,
+  displaySankey: state.sankeySelection.displaySankey,
+  numChecked: state.sankeySelection.numChecked,
+  diffExpController: state.diffExpController
 }))
 class DiffexpButtons extends React.PureComponent {
   computeDiffExp = () => {
@@ -24,7 +27,12 @@ class DiffexpButtons extends React.PureComponent {
       );
     }
   };
-
+  computeDiffExpAll = () => {
+    const { dispatch } = this.props;
+    dispatch(
+      actions.requestDifferentialExpressionAll()
+    );
+  };
   render() {
     /* diffexp-related buttons may be disabled */
     const {
@@ -32,6 +40,9 @@ class DiffexpButtons extends React.PureComponent {
       differential,
       diffexpMayBeSlow,
       diffexpCellcountMax,
+      displaySankey,
+      numChecked,
+      diffExpController
     } = this.props;
 
     const haveBothCellSets =
@@ -43,7 +54,8 @@ class DiffexpButtons extends React.PureComponent {
     const slowMsg = diffexpMayBeSlow
       ? " (CAUTION: large dataset - may take longer or fail)"
       : "";
-    const tipMessage = `See top 10 differentially expressed genes${slowMsg}`;
+    const tipMessage = `See top 100 differentially expressed genes${slowMsg}`;
+    const tipMessage2 = `See top 100 differentially expressed genes for each label in the selected category${slowMsg}`;
     const tipMessageWarn = `The total number of cells for differential expression computation
                             may not exceed ${diffexpCellcountMax}. Try reselecting new cell sets.`;
 
@@ -75,6 +87,21 @@ class DiffexpButtons extends React.PureComponent {
             onClick={this.computeDiffExp}
           />
         </Tooltip>
+        <Tooltip
+          content={warnMaxSizeExceeded ? tipMessageWarn : tipMessage2}
+          position="bottom"
+          hoverOpenDelay={globals.tooltipHoverOpenDelayQuick}
+          intent={warnMaxSizeExceeded ? "danger" : "none"}
+        >
+          <AnchorButton
+            disabled={!displaySankey || numChecked!==1}
+            intent={"primary"}
+            loading={differential.loading}
+            icon="right-join"
+            fill
+            onClick={this.computeDiffExpAll}
+          />
+        </Tooltip>        
       </ButtonGroup>
     );
   }

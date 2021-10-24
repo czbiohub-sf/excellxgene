@@ -20,6 +20,8 @@ The behavior manifest in these action creators:
 Note that crossfilter indices are lazy created, as needed.
 */
 
+import { keys } from "lodash";
+
 export const genesetDelete = (genesetName) => (dispatch, getState) => {
   const state = getState();
   const { genesets } = state;
@@ -33,7 +35,26 @@ export const genesetDelete = (genesetName) => (dispatch, getState) => {
     annoMatrix: obsCrossfilter.annoMatrix,
   });
 };
-
+export const genesetDeleteGroup = (genesetGroup) => (dispatch, getState) => {
+  const state = getState();
+  const { genesets } = state;
+  const keys = []
+  const geneSymbolsAll = []
+  for (let [key, value] of (genesets?.genesets ?? new Map())){
+    if (value.genesetDescription === genesetGroup){
+      keys.push(key)
+      geneSymbolsAll.push(Array.from(value.genes.keys()))
+    }
+  }
+  const obsCrossfilter = dropGenesets(dispatch, state, keys, geneSymbolsAll);
+  
+  dispatch({
+    type: "geneset: batch delete",
+    genesetNames: keys,
+    obsCrossfilter,
+    annoMatrix: obsCrossfilter.annoMatrix,
+  });
+};
 export const genesetAddGenes = (genesetName, genes) => (dispatch, getState) => {
   const state = getState();
   const { obsCrossfilter: prevObsCrossfilter } = state;
@@ -122,5 +143,29 @@ function dropGeneset(dispatch, state, genesetName, geneSymbols) {
       selection: g,
     })
   );
+  return obsCrossfilter;
+}
+function dropGenesets(dispatch, state, genesetNames, geneSymbolsAll) {
+  const { obsCrossfilter: prevObsCrossfilter } = state;
+  let obsCrossfilter = prevObsCrossfilter;
+  for (const [i,geneSymbols] of geneSymbolsAll.entries()) {
+    const genesetName = genesetNames[i];
+    obsCrossfilter = geneSymbols.reduce(
+      (crossfilter, gene) => dropGeneDimension(crossfilter, state, gene),
+      dropGenesetSummaryDimension(obsCrossfilter, state, genesetName)
+    );
+    dispatch({
+      type: "continuous metadata histogram cancel",
+      continuousNamespace: { isGeneSetSummary: true },
+      selection: genesetName,
+    });
+    geneSymbols.forEach((g) =>
+      dispatch({
+        type: "continuous metadata histogram cancel",
+        continuousNamespace: { isUserDefined: true },
+        selection: g,
+      })
+    );    
+  }
   return obsCrossfilter;
 }

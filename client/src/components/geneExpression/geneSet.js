@@ -111,7 +111,7 @@ class GeneSet extends React.Component {
   }
 
   render() {
-    const { setName, setGenes, genesetDescription } = this.props;
+    const { setName, setGenes, genesetDescription, displayLabel } = this.props;
     const { isOpen, maxGenePage, genePage } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
@@ -150,7 +150,7 @@ class GeneSet extends React.Component {
                 }}
                 data-testid={`${setName}:geneset-label`}
               >
-                {setName}
+                {displayLabel}
               </span>
             </Truncate>
             {isOpen ? (

@@ -35,7 +35,6 @@ const SECOND_HALF_INNER_STYLE = {
 export default (props) => {
   const { children, tooltipAddendum = "" } = props;
   // Truncate only support a single child with a text child
-
   if (
     React.Children.count(children) !== 1 ||
     React.Children.count(children.props?.children) !== 1

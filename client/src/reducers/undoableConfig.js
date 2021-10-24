@@ -108,6 +108,7 @@ const saveOnActions = new Set([
   /* geneset component action */
   "geneset: create",
   "geneset: delete",
+  "geneset: batch delete",
   "geneset: update",
   "geneset: add genes",
   "geneset: delete genes",

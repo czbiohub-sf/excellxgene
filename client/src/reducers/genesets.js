@@ -133,6 +133,20 @@ const GeneSets = (
         genesets,
       };
     }
+    case "geneset: batch delete": {
+      const { genesetNames } = action;
+      const genesets = new Map(state.genesets); // clone
+
+      for (const genesetName of genesetNames) {
+        if (!state.genesets.has(genesetName))
+          throw new Error("geneset: delete -- geneset name does not exist.");
+        genesets.delete(genesetName);
+      }
+      return {
+        ...state,
+        genesets,
+      };
+    }    
 
     /**
      * Update the named geneset with a new name and description.  Preserves the existing
@@ -358,15 +372,50 @@ const GeneSets = (
         lastTid: tid,
       };
     }
+    case "request differential expression all success": {
+      const { dataList, nameList, dateString, grouping } = action;
+      const diffExpGeneSets = [];
 
+      for (const [i, data] of dataList.entries()) {
+        const name = nameList[i];
+
+        const genesetNames = {
+          positive: `${name} : (${dateString})`,
+        };
+  
+        for (const polarity of Object.keys(genesetNames)) {
+          const genes = new Map(
+            data[polarity].map((diffExpGene) => [
+              diffExpGene[0],
+              {
+                geneSymbol: diffExpGene[0],
+              },
+            ])
+          );
+          diffExpGeneSets.push([
+            genesetNames[polarity],
+            {
+              genesetName: genesetNames[polarity],
+              genesetDescription: `${grouping} (${dateString})`,
+              genes,
+            },
+          ]);
+        }
+      }
+      const genesets = new Map([...diffExpGeneSets, ...state.genesets]); // clone
+      return {
+        ...state,
+        genesets
+      };
+    }
     case "request differential expression success": {
       const { data } = action;
 
       const dateString = new Date().toLocaleString();
 
       const genesetNames = {
-        positive: `Pop1 high (${dateString})`,
-        negative: `Pop2 high (${dateString})`,
+        positive: `Pop1 high : (${dateString})`,
+        negative: `Pop2 high : (${dateString})`,
       };
 
       const diffExpGeneSets = [];
@@ -383,7 +432,7 @@ const GeneSets = (
           genesetNames[polarity],
           {
             genesetName: genesetNames[polarity],
-            genesetDescription: "",
+            genesetDescription: `${dateString}`,
             genes,
           },
         ]);
@@ -394,6 +443,7 @@ const GeneSets = (
       return {
         ...state,
         genesets,
+
       };
     }
 

@@ -51,10 +51,12 @@ class DimredPanel extends React.PureComponent {
         <ParameterInput 
           label="Use SAM?"
           param="doSAM"
+          tooltipContent={"Check to use the SAM algorithm for dimensionality reduction."}
         />                     
         <ParameterInput
           label="Scale data?"
           param="scaleData"
+          tooltipContent={"Scale the data such that genes have zero mean and unit variance prior to PCA."}
         />
       </ControlGroup>
       <AnchorButton
@@ -81,12 +83,7 @@ class DimredPanel extends React.PureComponent {
               max={annoMatrix.nVar}
               label="n_top_genes"
               param="nTopGenesHVG"
-            />  
-            <ParameterInput
-              min={1}
-              disabled={reembedParams.doSAM}
-              label="n_bins"
-              param="nBinsHVG"
+              tooltipContent={"The number of highly variable genes to select."}
             />        
           </ControlGroup>                    
         </Collapse>  
@@ -112,12 +109,14 @@ class DimredPanel extends React.PureComponent {
             min={1}
             label="n_comps"
             param="numPCs"
+            tooltipContent={"Number of top principal components to calculate."}
             />
             <div style={{"margin":"auto 0"}}>
               <ParameterInput
               label="svd_solver"
               param="pcaSolver"
               options={["arpack","randomized","auto","lopcg"]}
+              tooltipContent={"The SVD solver to use."}
               />   
             </div>             
           </ControlGroup>
@@ -144,12 +143,14 @@ class DimredPanel extends React.PureComponent {
               min={1}
               label="n_neighbors"
               param="neighborsKnn"
+              tooltipContent={"The number of nearest neighbors to compute."}
               />  
             <div style={{"margin":"auto 0"}}>
               <ParameterInput
                 label="metric"
                 param="distanceMetric"
                 options={["euclidean","correlation","cosine"]}
+                tooltipContent={"The distance metric for computing nearest neighbors."}
                 />
             </div>
             <div style={{"margin":"auto 0"}}>
@@ -157,6 +158,7 @@ class DimredPanel extends React.PureComponent {
                 label="method"
                 param="neighborsMethod"
                 options={["umap","gauss","rapids"]}
+                tooltipContent={"The method used for calculating nearest neighbor connectivities (unused when SAM is enabled)."}
                 />   
               </div>                                    
             </ControlGroup>         
@@ -185,12 +187,16 @@ class DimredPanel extends React.PureComponent {
               param="nnaSAM"
               min={1}
               max={annoMatrix.schema.nVar}
+              tooltipContent={"The top num_norm_avg dispersions averaged to determine the \
+              normalization factor when calculating the weights."}
             />     
             <div style={{"margin":"auto 0"}}>
               <ParameterInput
                 label="Weight mode"
                 param="weightModeSAM"
                 options={["rms","dispersion","combined"]}
+                tooltipContent={"Determines how gene weights are calculated. 'rms' is most robust. \
+                The others typically yield manifolds with higher granularity but can sometimes overcluster."}
               />    
             </div> 
           </ControlGroup>                 
@@ -212,9 +218,10 @@ class DimredPanel extends React.PureComponent {
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={hvgshown}>      
           <ParameterInput
-            min={0.01}
+            min={0.0}
             label="min_dist"
             param="umapMinDist"
+            tooltipContent={"Minimum distance between points in the UMAP projection. Increase for less crowding."}
           />            
         </Collapse>  
       </div>                  

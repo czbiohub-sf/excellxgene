@@ -14,6 +14,18 @@ const Differential = (
         loading: true,
         error: null,
       };
+    case "request differential expression all started":
+      return {
+        ...state,
+        loading: true,
+        error: null,
+      };      
+    case "request differential expression all completed":
+      return {
+        ...state,
+        error: null,
+        loading: false,
+    };      
     case "request differential expression success":
       return {
         ...state,
@@ -47,5 +59,33 @@ const Differential = (
       return state;
   }
 };
+
+export const diffExpController = (
+  state = {
+    pendingFetch: null,
+  },
+  action
+) => {
+  switch (action.type) {
+    case "diffexp: request start": {
+      return {
+        ...state,
+        pendingFetch: action.abortableFetch,
+      };
+    }
+    case "diffexp: request aborted":
+    case "diffexp: request cancel":
+    case "diffexp: request completed": {
+      return {
+        ...state,
+        pendingFetch: null,
+      };
+    }
+    default: {
+      return state;
+    }
+  }
+};
+
 
 export default Differential;

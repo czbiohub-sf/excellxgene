@@ -28,6 +28,7 @@ class BatchPanel extends React.PureComponent {
               min={1}
               label="neighbors_within_batch"
               param="bbknnNeighborsWithinBatch"
+              tooltipContent={"Number of neighbors reported for each batch."}
             />                   
           </div>
         );
@@ -40,11 +41,13 @@ class BatchPanel extends React.PureComponent {
                 min={1}
                 label="knn"
                 param="scanoramaKnn"
+                tooltipContent={"Number of neighbors to use for matching."}
               />     
               <ParameterInput 
                 min={0}
                 label="sigma"
                 param="scanoramaSigma"
+                tooltipContent={"Correction smoothing parameter on Gaussian kernel."}
               />      
             </ControlGroup>  
             <ControlGroup fill={true} vertical={false}>             
@@ -53,11 +56,13 @@ class BatchPanel extends React.PureComponent {
                 max={1}
                 label="alpha"
                 param="scanoramaAlpha"
+                tooltipContent={"Alignment score minimum cutoff."}
               />  
               <ParameterInput 
                 min={0}
                 label="batch_size"
                 param="scanoramaBatchSize"
+                tooltipContent={"Batch size used in alignment vector computation."}
               />                                                   
             </ControlGroup>
           </div>
@@ -83,18 +88,21 @@ class BatchPanel extends React.PureComponent {
           <ParameterInput 
             label="Batch correct?"
             param="doBatch"
+            tooltipContent={"Check to perform batch correction."}
           />
           <ParameterInput 
             disabled={disabled}
             label="Method"
             param="batchMethod"
             options={["BBKNN","Harmony","Scanorama"]}
+            tooltipContent={"The batch correction method."}
           />      
           <ParameterInput 
             disabled={disabled}        
             label="Batch key"
             param="batchKey"
             options={allCategoryNames}
+            tooltipContent={"The categorical variable with the batches to be corrected."}
           />    
         </ControlGroup>  
       {panel}      

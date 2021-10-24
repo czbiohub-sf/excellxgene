@@ -543,6 +543,97 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
   }
 };
 
+const requestDifferentialExpressionAll = (num_genes = 100) => async (
+  dispatch,
+  getState
+) => {
+  dispatch({ type: "request differential expression all started" });
+
+  try {
+    /*
+    Steps:
+    1. for each category,
+    2. get the most differentially expressed genes
+    3. get expression data for each
+    */
+    const { annoMatrix, sankeySelection } = getState();
+    const { categories } = sankeySelection;
+
+    let labels;
+    let categoryName;
+    for (const [key, value] of Object.entries(categories)) {
+      if(value){
+        labels = await annoMatrix.fetch("obs",key)
+        categoryName = key;
+      }
+    }    
+    labels = labels.__columns[0];
+    const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
+    const diffexpListsLists = [];
+    for ( const cat of allCategories ) {
+      if (cat !== "unassigned"){
+        let set1 = []
+        let set2 = []
+        for (let i = 0; i < labels.length; i++){
+          if(labels[i] === cat){
+            set1.push(i)
+          } else {
+            set2.push(i)
+          }
+        }
+        const varIndexName = annoMatrix.schema.annotations.var.index;
+        set1 = Array.isArray(set1) ? set1 : Array.from(set1);
+        set2 = Array.isArray(set2) ? set2 : Array.from(set2);
+    
+        const res = await fetch(
+          `${globals.API.prefix}${globals.API.version}diffexp/obs`,
+          {
+            method: "POST",
+            headers: new Headers({
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            }),
+            body: JSON.stringify({
+              mode: "topN",
+              count: num_genes,
+              set1: { filter: { obs: { index: set1 } } },
+              set2: { filter: { obs: { index: set2 } } },
+            }),
+            credentials: "include",
+          }
+        );
+    
+        if (!res.ok || res.headers.get("Content-Type") !== "application/json") {
+          return dispatchDiffExpErrors(dispatch, res);
+        }
+    
+        const response = await res.json();
+        const varIndex = await annoMatrix.fetch("var", varIndexName);
+        const diffexpLists = { positive: [] };
+        for (const polarity of Object.keys(diffexpLists)) {
+          diffexpLists[polarity] = response[polarity].map((v) => [
+            varIndex.at(v[0], varIndexName),
+            ...v.slice(1),
+          ]);
+        }
+        diffexpListsLists.push(diffexpLists);
+      } 
+    }
+    dispatch({
+      type: "request differential expression all success",
+      dataList: diffexpListsLists,
+      nameList: allCategories,
+      dateString: new Date().toLocaleString(),
+      grouping: categoryName,
+    });         
+    dispatch({type: "request differential expression all completed"})      
+  } catch (error) {
+    return dispatch({
+      type: "request differential expression error",
+      error,
+    });
+  }
+};
 const selectAll = () => async (dispatch, getState) => {
   dispatch({ type: "select all observations" });
   try {
@@ -568,6 +659,7 @@ function fetchJson(pathAndQuery) {
 
 export default {
   reembedParamsObsmFetch,
+  requestDifferentialExpressionAll,
   doInitialDataLoad,
   requestDataLayerChange,
   requestReloadBackend,
@@ -619,6 +711,7 @@ export default {
   setCellSetFromSelection: selnActions.setCellSetFromSelection,
   setCellSetFromInputArray: selnActions.setCellSetFromInputArray,
   genesetDelete: genesetActions.genesetDelete,
+  genesetDeleteGroup: genesetActions.genesetDeleteGroup,
   genesetAddGenes: genesetActions.genesetAddGenes,
   genesetDeleteGenes: genesetActions.genesetDeleteGenes,
 };

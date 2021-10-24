@@ -109,11 +109,13 @@ export const GenesetHotkeys = (props) => {
         global: true,
         label: "Delete the most recent geneset.",
         onKeyDown: async () => {
-          const geneset = Array.from(genesets.values())[0].genesetName;
-          dispatch({
-            type: "color by nothing"
-          });
-          dispatch(actions.genesetDelete(geneset));
+          const geneset = Array.from(genesets.values())[0]?.genesetDescription;
+          if (geneset) {
+            dispatch({
+              type: "color by nothing"
+            });
+            dispatch(actions.genesetDeleteGroup(geneset));
+          }
         },
       },
     ],

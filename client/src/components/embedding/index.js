@@ -311,6 +311,7 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
         <AnchorButton
           icon="small-cross"
           minimal
+          intent="danger"
           style={{
             cursor: "pointer",
             marginLeft: "auto",

@@ -121,6 +121,10 @@ export const layoutChoiceAction = (newLayoutChoice) => async (
     obsCrossfilter: prevCrossfilter,
     layoutChoice,
   } = getState();
+  
+  dispatch({
+    type: "reset subset"
+  })  
   const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
     prevAnnoMatrix,
     prevCrossfilter,

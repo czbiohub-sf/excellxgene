@@ -65,29 +65,34 @@ class PrepPanel extends React.PureComponent {
         <ParameterInput 
           label="Batch preprocess?"
           param="doBatchPrep"
+          tooltipContent={"Check to use different preprocessing parameters for each batch."}
         />   
         <ParameterInput 
           disabled={batchDisabled}        
           label="Batch key"
           param="batchPrepKey"
           options={allCategoryNames}
+          tooltipContent={"The categorical variable containing the batch information."}
         />
         <ParameterInput 
           disabled={batchDisabled || disabledBatchLabel}        
           label="Batch label"
           param="batchPrepLabel"
           options={allBatchPrepLabels}
+          tooltipContent={"The batch for which the parameters will be set."}
         />              
       </ControlGroup>        
       <ControlGroup fill={true} vertical={false}>
         <ParameterInput 
           label="Preprocess?"
           param="doPreprocess"
+          tooltipContent={"Check to perform preprocessing."}
         />           
         <ParameterInput
           label="Data layer"
           param="dataLayer"
           options={annoMatrix.schema.layers}
+          tooltipContent={"The gene expression layer to be used for preprocessing."}
         />                   
       </ControlGroup>  
       <AnchorButton
@@ -111,11 +116,13 @@ class PrepPanel extends React.PureComponent {
             min={0}
             label="min_counts"
             param="minCountsCF"
+            tooltipContent={"The minimum number of total gene counts."}
             />
             <ParameterInput
             min={0}
             label="min_genes"
             param="minGenesCF"
+            tooltipContent={"The minimum number of detected genes."}
             />         
           </ControlGroup>
         </Collapse>
@@ -141,6 +148,7 @@ class PrepPanel extends React.PureComponent {
               min={0}
               label="min_counts"
               param="minCountsGF"
+              tooltipContent={"The minimum number of total cell counts."}
               />        
             </ControlGroup>
             <ControlGroup fill={true} vertical={false}>
@@ -149,12 +157,14 @@ class PrepPanel extends React.PureComponent {
               max={100}
               label="min_cells (%)"
               param="minCellsGF"
+              tooltipContent={"The minimum % of cells expressing a gene."}
               />
               <ParameterInput
               min={0}
               max={100}
               label="max_cells (%)"
               param="maxCellsGF"
+              tooltipContent={"The maximum % of cells expressing a gene."}
               />         
             </ControlGroup>          
         </Collapse>
@@ -179,10 +189,12 @@ class PrepPanel extends React.PureComponent {
           <ParameterInput
               label="Sum normalize?"
               param="sumNormalizeCells"
+              tooltipContent={"Check to normalize cells to have median library size (assumes raw counts)."}
             />            
             <ParameterInput
               label="Log transform?"
               param="logTransform"
+              tooltipContent={"Check to log-transform your data (assumes raw counts)."}
             />
           </ControlGroup> 
         </Collapse>       

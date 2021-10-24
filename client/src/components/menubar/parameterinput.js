@@ -1,11 +1,14 @@
 import React, { useEffect } from "react";
 import { connect } from "react-redux";
+import * as globals from "../../globals";
 import {
   AnchorButton,
   NumericInput,
   Label,
   Checkbox,
-  MenuItem
+  MenuItem,
+  Position,
+  Tooltip,
 } from "@blueprintjs/core";
 import { defaultPrepParams } from "../../reducers/reembed";
 import { Select } from "@blueprintjs/select";
@@ -46,7 +49,7 @@ class ParameterInput extends React.PureComponent {
     return Math.min(Math.max(num, min), max);
   };      
   render() {
-    const { dispatch, param, label, min, max, reembedParams } = this.props;    
+    const { dispatch, param, label, min, max, reembedParams, tooltipContent } = this.props;    
     let { value, refresher } = this.state;
     let params = reembedParams;
 
@@ -59,51 +62,73 @@ class ParameterInput extends React.PureComponent {
       case "boolean": {
         return (
           <div>
-            <Checkbox checked={params[param]} label={label} style={{"paddingTop":"10px"}}
-              onChange={() => {
-                dispatch({
-                  type: "reembed: set parameter",
-                  key: param,
-                  value: !params[param]
-                  })
-                }
-              } 
-            /> 
+            <Tooltip
+                content={tooltipContent}
+                position={Position.BOTTOM}
+                boundary="viewport"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+              >               
+                <Checkbox checked={params[param]} label={label} style={{"paddingTop":"10px"}}
+                  onChange={() => {
+                    dispatch({
+                      type: "reembed: set parameter",
+                      key: param,
+                      value: !params[param]
+                      })
+                    }
+                  } 
+                /> 
+            </Tooltip>
           </div>          
         )
       } case "string": {
         const { disabled, options } = this.props;
         return (
           <div style={{"paddingTop":"5px"}}>
-            <Select
-            disabled={disabled}
-            items={
-              options
-            }
-            filterable={false}
-            itemRenderer={(d, { handleClick }) => {
-              return (
-                <MenuItem
-                  onClick={handleClick}
-                  key={d}
-                  text={d}
-                />
-              );
-            }}
-            onItemSelect={(d) => {
-              dispatch({
-                type: "reembed: set parameter",
-                key: param,
-                value: d
-                }) 
-            }}
-          >
-            <AnchorButton
+            <Tooltip
+              content={tooltipContent}
+              position={Position.BOTTOM}
+              boundary="viewport"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              modifiers={{
+                preventOverflow: { enabled: false },
+                hide: { enabled: false },
+              }}
+            >   
+              <Select
               disabled={disabled}
-              text={`${label}: ${params[param]}`}
-              rightIcon="double-caret-vertical"
-            />
-          </Select>
+              items={
+                options
+              }
+              filterable={false}
+              itemRenderer={(d, { handleClick }) => {
+                return (
+                  <MenuItem
+                    onClick={handleClick}
+                    key={d}
+                    text={d}
+                  />
+                );
+              }}
+              onItemSelect={(d) => {
+                dispatch({
+                  type: "reembed: set parameter",
+                  key: param,
+                  value: d
+                  }) 
+              }}
+            >
+              <AnchorButton
+                disabled={disabled}
+                text={`${label}: ${params[param]}`}
+                rightIcon="double-caret-vertical"
+              />
+            </Select>
+          </Tooltip>
         </div>
         );
       } default: {
@@ -111,31 +136,42 @@ class ParameterInput extends React.PureComponent {
         return (
           <Label>
             {label}
-            <NumericInput
-              disabled={disabled}
-              allowNumericCharactersOnly={true}
-              placeholder={label}
-              value={refresher ? params[param] : value}
-              min={min}
-              max={max}
-              minorStepSize={0.001}
-              onValueChange={
-                (_valueAsNumber, valueAsString) => {
-                  let val = (valueAsString.charAt(0)==="0" && valueAsString.charAt(1)!=="." 
-                    ? valueAsString.substr(1) : valueAsString
-                  );
-                  val =  val!=="" && parseFloat(val)>=min ? val : min.toString();
-                  const clamped = parseFloat(val) < min || parseFloat(val) > max;
-                  val = clamped ? this.clamp(parseFloat(val),min,max).toString() : val;
-                  this.setState({value: val, refresher: false})
-                  dispatch({
-                    type: "reembed: set parameter",
-                    key: param,
-                    value: parseFloat(val)
-                  })
+            <Tooltip
+              content={tooltipContent}
+              position={Position.BOTTOM}
+              boundary="viewport"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              modifiers={{
+                preventOverflow: { enabled: false },
+                hide: { enabled: false },
+              }}
+            >               
+              <NumericInput
+                disabled={disabled}
+                allowNumericCharactersOnly={true}
+                placeholder={label}
+                value={refresher ? params[param] : value}
+                min={min}
+                max={max}
+                minorStepSize={0.001}
+                onValueChange={
+                  (_valueAsNumber, valueAsString) => {
+                    let val = (valueAsString.charAt(0)==="0" && valueAsString.charAt(1)!=="." 
+                      ? valueAsString.substr(1) : valueAsString
+                    );
+                    val =  val!=="" && parseFloat(val)>=min ? val : min.toString();
+                    const clamped = parseFloat(val) < min || parseFloat(val) > max;
+                    val = clamped ? this.clamp(parseFloat(val),min,max).toString() : val;
+                    this.setState({value: val, refresher: false})
+                    dispatch({
+                      type: "reembed: set parameter",
+                      key: param,
+                      value: parseFloat(val)
+                    })
+                  }
                 }
-              }
-            />
+              />
+            </Tooltip>
           </Label> 
         );
       }
