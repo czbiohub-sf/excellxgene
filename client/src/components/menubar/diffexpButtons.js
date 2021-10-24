@@ -13,7 +13,6 @@ import { DgeHotkeys } from "../hotkeys";
   diffexpCellcountMax: state.config?.limits?.diffexp_cellcount_max,
   displaySankey: state.sankeySelection.displaySankey,
   numChecked: state.sankeySelection.numChecked,
-  diffExpController: state.diffExpController
 }))
 class DiffexpButtons extends React.PureComponent {
   computeDiffExp = () => {
@@ -42,7 +41,6 @@ class DiffexpButtons extends React.PureComponent {
       diffexpCellcountMax,
       displaySankey,
       numChecked,
-      diffExpController
     } = this.props;
 
     const haveBothCellSets =

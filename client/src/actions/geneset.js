@@ -19,9 +19,6 @@ The behavior manifest in these action creators:
   
 Note that crossfilter indices are lazy created, as needed.
 */
-
-import { keys } from "lodash";
-
 export const genesetDelete = (genesetName) => (dispatch, getState) => {
   const state = getState();
   const { genesets } = state;
