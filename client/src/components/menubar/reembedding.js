@@ -20,7 +20,8 @@ import DimredPanel from "./dimredpanel";
   annoMatrix: state.annoMatrix,
   idhash: state.config?.parameters?.["annotations-user-data-idhash"] ?? null,
   obsCrossfilter: state.obsCrossfilter,
-  layoutChoice: state.layoutChoice
+  layoutChoice: state.layoutChoice,
+  isSubsetted: state.controls.isSubsetted
 }))
 class Reembedding extends React.PureComponent {
   constructor(props) {
@@ -42,10 +43,13 @@ class Reembedding extends React.PureComponent {
   };
 
   handleRunAndDisableReembedDialog = () => {
-    const { dispatch, reembedParams, layoutChoice, obsCrossfilter } = this.props;
+    const { dispatch, reembedParams, layoutChoice, obsCrossfilter, isSubsetted } = this.props;
     const { embName } = this.state
     let parentName;
-    if (obsCrossfilter.countSelected() === obsCrossfilter.annoMatrix.nObs) {
+
+    if (obsCrossfilter.countSelected() === obsCrossfilter.annoMatrix.nObs && isSubsetted) {
+      parentName = layoutChoice.current;
+    } else if (obsCrossfilter.countSelected() === obsCrossfilter.annoMatrix.nObs) {
       if (layoutChoice.current.includes(";;")){
         parentName = layoutChoice.current.split(";;")
         parentName.pop()

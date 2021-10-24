@@ -258,6 +258,12 @@ class LeidenClusterAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.leiden_put(request, data_adaptor)
 
+class ReembedParametersObsmAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    def put(self, data_adaptor):
+        return common_rest.reembed_parameters_obsm_put(request, data_adaptor)
+
 class ReembedParametersAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
@@ -321,7 +327,10 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(AnnotationsVarAPI, "/annotations/var")
     add_resource(DataVarAPI, "/data/var")
     add_resource(GenesetsAPI, "/genesets")
+    
     add_resource(ReembedParametersAPI, "/reembed-parameters")
+    add_resource(ReembedParametersObsmAPI, "/reembed-parameters-obsm")
+
     add_resource(SankeyPlotAPI, "/sankey")
     add_resource(LayerAPI, "/layer")
     add_resource(RenameObsAPI, "/renameObs")

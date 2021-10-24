@@ -11,7 +11,7 @@ import {
 import { Flipper, Flipped } from "react-flip-toolkit";
 import Async from "react-async";
 import memoize from "memoize-one";
-
+import * as d3 from "d3";
 import Value from "../value";
 import AnnoMenu from "./annoMenuCategory";
 import AnnoDialogEditCategoryName from "./annoDialogEditCategoryName";
@@ -51,6 +51,12 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
   };
 })
 class Category extends React.PureComponent {
+  constructor(props){
+    super(props);
+    this.state = {
+      sortDirection: null
+    }
+  }
   static getSelectionState(
     categoricalSelection,
     metadataField,
@@ -84,7 +90,69 @@ class Category extends React.PureComponent {
       categorySummary
     );
   }
+  
+  onSortCategoryLabels = () => {
+    const { sortDirection } = this.state;
+    if (sortDirection === "descending") {
+      this.setState({
+        ...this.state,
+        sortDirection: "ascending"
+      })        
+    } else if (sortDirection === "ascending") {
+      this.setState({
+        ...this.state,
+        sortDirection: null
+      })
+    } else { 
+      this.setState({
+        ...this.state,
+        sortDirection: "descending"
+      })
+    }
+  }
+  componentDidUpdate = (prevProps) => {
+    const { colors, isExpanded } = this.props;
+    const { colorMode, colorAccessor } = colors;
+    const { colors: colorsPrev } = prevProps;
+    const { colorMode: colorModePrev, colorAccessor: colorAccessorPrev } = colorsPrev;
 
+    const continuousColoring = (
+      colorMode === "color by continuous metadata" || 
+      colorMode === "color by geneset mean expression" || 
+      colorMode =="color by expression"
+    )    
+    const continuousColoringPrev = (
+      colorModePrev === "color by continuous metadata" || 
+      colorModePrev === "color by geneset mean expression" || 
+      colorModePrev =="color by expression"
+    )        
+    if (continuousColoring !== continuousColoringPrev && continuousColoringPrev) {
+      this.setState({
+        ...this.state,
+        sortDirection: null
+      })
+    }
+
+    if ( (colorAccessor !== colorAccessorPrev && isExpanded) || (isExpanded && (isExpanded !== prevProps.isExpanded) && continuousColoring)) {
+      const { annoMatrix, metadataField, colors } = this.props;
+      this.fetchData(annoMatrix, metadataField, colors).then((val) => {
+        const [ categoryData, categorySummary, colorData ] = val;
+        if (colorData && categoryData && categorySummary) {
+          const col = colorData.col(colorData.colIndex.rindex[0]).asArray();
+          const cats = categoryData.col(categoryData.colIndex.rindex[0]).asArray();          
+
+          const averages = {}
+          for (const [i,value] of col.entries()){
+            averages[cats[i]] = ((averages[cats[i]] ?? 0) + value) / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(cats[i])]
+          }
+          this.setState({
+            continuousAverages: averages
+          })
+        }
+      })
+    }
+    
+  }
   handleColorChange = () => {
     const { dispatch, metadataField } = this.props;
     dispatch({
@@ -176,7 +244,7 @@ class Category extends React.PureComponent {
     const categorySummary = this.createCategorySummaryFromDfCol(
       column,
       colSchema
-    );
+    ); 
     return [categoryData, categorySummary, colorData];
   }
 
@@ -234,9 +302,11 @@ class Category extends React.PureComponent {
       sankeySelected,
       layoutChoiceSankey
     } = this.props;
-
+    const { colorMode } = colors;
+    const continuousColoring = (colorMode === "color by continuous metadata" || colorMode === "color by geneset mean expression" || colorMode =="color by expression")
     const checkboxID = `category-select-${metadataField}`;
     const sankeyCheckboxID = `sankey-select-${metadataField}`;
+    const { sortDirection, continuousAverages } = this.state;
 
     return (
       <CategoryCrossfilterContext.Provider value={crossfilter}>
@@ -296,6 +366,10 @@ class Category extends React.PureComponent {
                   sankeyCheckboxID={sankeyCheckboxID}
                   sankeySelected={sankeySelected}
                   layoutChoiceSankey={layoutChoiceSankey}
+                  continuousColoring={continuousColoring}
+                  sortDirection={sortDirection}
+                  onSortCategoryLabels={this.onSortCategoryLabels}
+                  continuousAverages={continuousAverages}
                 />
               );
             }}
@@ -393,7 +467,10 @@ const CategoryHeader = React.memo(
     onCategoryToggleAllClick,
     sankeySelected,
     onCategorySankeyClick,
-    layoutChoiceSankey
+    layoutChoiceSankey,
+    continuousColoring,
+    onSortCategoryLabels,
+    sortDirection
   }) => {
     /*
     Render category name and controls (eg, color-by button).
@@ -403,6 +480,14 @@ const CategoryHeader = React.memo(
     useEffect(() => {
       checkboxRef.current.indeterminate = selectionState === "some";
     }, [checkboxRef.current, selectionState]);
+    
+    let sortIcon = "expand-all";
+    
+    if (sortDirection === "ascending"){
+      sortIcon="chevron-up"
+    } else if (sortDirection === "descending"){
+      sortIcon="chevron-down"
+    }
 
     return (
       <>
@@ -466,6 +551,13 @@ const CategoryHeader = React.memo(
         {<AnnoDialogEditCategoryName metadataField={metadataField} />}
         {<AnnoDialogAddLabel metadataField={metadataField} />}
         <div>
+          <AnchorButton
+            onClick={onSortCategoryLabels}
+            active={sortDirection}
+            minimal
+            disabled={!continuousColoring || !isExpanded}
+            icon={sortIcon}
+          />
           <AnnoMenu
             metadataField={metadataField}
             isUserAnno={isUserAnno}
@@ -542,7 +634,11 @@ const CategoryRender = React.memo(
     sankeySelected,
     onCategorySankeyClick,
     sankeyCheckboxID,
-    layoutChoiceSankey
+    layoutChoiceSankey,
+    continuousColoring,
+    onSortCategoryLabels,
+    sortDirection,
+    continuousAverages
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -591,6 +687,10 @@ const CategoryRender = React.memo(
             onCategorySankeyClick={onCategorySankeyClick}
             sankeySelected={sankeySelected}
             layoutChoiceSankey={layoutChoiceSankey}
+            continuousColoring={continuousColoring}
+            onSortCategoryLabels={onSortCategoryLabels}
+            sortDirection={sortDirection}
+            isEpxanded={isExpanded}
           />
         </div>
         <div style={{ marginLeft: 26 }}>
@@ -605,6 +705,8 @@ const CategoryRender = React.memo(
                 colorAccessor={colorAccessor}
                 colorData={colorData}
                 colorTable={colorTable}
+                sortDirection={sortDirection}
+                continuousAverages={continuousAverages}
               />
             ) : null
           }
@@ -628,23 +730,70 @@ const CategoryValueList = React.memo(
     colorAccessor,
     colorData,
     colorTable,
+    sortDirection,
+    continuousAverages
   }) => {
-    const tuples = [...categorySummary.categoryValueIndices];
-    /*
-    Render the value list.  If this is a user annotation, we use a flipper
-    animation, if read-only, we don't bother and save a few bits of perf.
-    */
+    let tuples = [...categorySummary.categoryValueIndices];
+    
+    let newTuples;
+    if (continuousAverages) {
+      if (sortDirection){
+        newTuples = [];
+        for (const item in continuousAverages) {
+          newTuples.push([item, continuousAverages[item]]);
+        }
+        
+        newTuples.sort(function(a, b) {
+            return (a[1] - b[1]);
+        });
+        for (let i = 0; i < newTuples.length; i++) {
+          newTuples[i][1] = i
+        }        
+        if (sortDirection === "descending"){
+          newTuples.reverse()
+          for (let i = 0; i < newTuples.length; i++) {
+            newTuples[i][1] = i
+          }                 
+        }
+        if (!("unassigned" in continuousAverages)){
+          newTuples.push(["unassigned",newTuples.length])
+        }
+      } else {
+        newTuples = tuples;
+      }
+    } else {
+      newTuples = tuples;
+    }    
+    const newCategoryValues = [];
+    const categoryValueCountsObj = {}
+    categorySummary.categoryValueCounts.forEach((item,index)=>{
+      categoryValueCountsObj[categorySummary.categoryValues[index]] = item;
+    })
+    const newCategoryValueCounts = []
+
+    for (let i = 0; i < categorySummary.categoryValues.length; i++) {
+      newCategoryValues.push(newTuples[i][0])
+      newCategoryValueCounts.push(categoryValueCountsObj[newTuples[i][0]])
+    }
+    const newCategoryValueIndices = new Map(newTuples)
+    const newCategorySummary = {
+      ...categorySummary, 
+      categoryValues: newCategoryValues, 
+      categoryValueCounts: newCategoryValueCounts, 
+      categoryValueIndices: newCategoryValueIndices
+    }    
+
     if (!isUserAnno) {
       return (
         <>
-          {tuples.map(([value, index]) => (
+          {newTuples.map(([value, index]) => (
             <Value
               key={value}
               isUserAnno={isUserAnno}
               metadataField={metadataField}
               categoryIndex={index}
               categoryData={categoryData}
-              categorySummary={categorySummary}
+              categorySummary={newCategorySummary}
               colorAccessor={colorAccessor}
               colorData={colorData}
               colorTable={colorTable}
@@ -655,20 +804,22 @@ const CategoryValueList = React.memo(
     }
 
     /* User annotation */
-    const flipKey = tuples.map((t) => t[0]).join("");
+    const flipKey = [...categorySummary.categoryValueIndices].map((t) => t[0]).join("");
+
     return (
       <Flipper flipKey={flipKey}>
-        {tuples.map(([value, index]) => (
+        {newTuples.map(([value, index]) => (
           <Flipped key={value} flipId={value}>
             <Value
               isUserAnno={isUserAnno}
               metadataField={metadataField}
               categoryIndex={index}
               categoryData={categoryData}
-              categorySummary={categorySummary}
+              categorySummary={newCategorySummary}
               colorAccessor={colorAccessor}
               colorData={colorData}
               colorTable={colorTable}
+              sortDirection={sortDirection}
             />
           </Flipped>
         ))}

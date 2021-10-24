@@ -114,7 +114,9 @@ class Embedding extends React.PureComponent {
       this.setState({
         isEmbeddingExpanded: {...isEmbeddingExpanded, [e.currentTarget.value]: true}
       })
+      dispatch(actions.reembedParamsObsmFetch(e.currentTarget.value));
       dispatch(actions.layoutChoiceAction(e.currentTarget.value));
+      
     } 
   };
 

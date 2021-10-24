@@ -10,7 +10,7 @@ const Controls = (
     // all of the data + selection state
     userDefinedGenes: [],
     userDefinedGenesLoading: false,
-
+    isSubsetted: false,
     resettingInterface: false,
     graphInteractionMode: "select",
     opacityForDeselectedCells: 0.2,
@@ -31,7 +31,7 @@ const Controls = (
 
   switch (action.type) {
     case "initial data load start": {
-      return { ...state, loading: true };
+      return { ...state, loading: true, isSubsetted: false, };
     }
     case "initial data load complete": {
       /* now fully loaded */
@@ -40,12 +40,14 @@ const Controls = (
         loading: false,
         error: null,
         resettingInterface: false,
+        isSubsetted: false,
       };
     }
     case "reset subset": {
       return {
         ...state,
         resettingInterface: false,
+        isSubsetted: false,
       };
     }
     case "subset to selection": {
@@ -53,6 +55,7 @@ const Controls = (
         ...state,
         loading: false,
         error: null,
+        isSubsetted: true,
       };
     }
     case "request user defined gene started": {
@@ -100,7 +103,8 @@ const Controls = (
       const { refresher } = state;
       return {
         ...state,
-        refresher: !refresher
+        refresher: !refresher,
+        isSubsetted: false,
       }
     }
     /*******************************

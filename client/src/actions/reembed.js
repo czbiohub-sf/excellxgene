@@ -91,7 +91,9 @@ export function requestReembed(reembedParams,parentName,embName) {
         layoutChoice,
       } = getState();
       const base = prevAnnoMatrix.base().addEmbedding(schema);
-
+      dispatch({
+        type: "reset subset"
+      })
       const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
         base,
         prevCrossfilter,
@@ -175,7 +177,9 @@ export function requestPreprocessing(reembedParams) {
 
       const baseDataUrl = `${API.prefix}${API.version}`;
       const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, schema);
-      
+      dispatch({
+        type: "reset subset"
+      })
       const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
         annoMatrixNew,
         prevCrossfilter,

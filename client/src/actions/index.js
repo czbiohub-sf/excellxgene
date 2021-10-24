@@ -108,6 +108,36 @@ export async function reembedParamsFetch(dispatch) {
     });
   }
 }
+export const reembedParamsObsmFetch = (embName) => async (
+  dispatch,
+  _getState
+) => {
+  const defaultResponse = defaultReembedParams;
+  const res = await fetch(
+    `${API.prefix}${API.version}reembed-parameters-obsm`,
+    {
+      method: "PUT",
+      headers: new Headers({
+        Accept: "application/octet-stream",
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        embName: embName
+      }),
+      credentials: "include",
+    },
+  );
+  const response = await res.json();
+
+  const isEmpty = Object.keys(response.reembedParams).length === 0;
+  if (!isEmpty){
+    dispatch({
+      type: "reembed: load",
+      params: response.reembedParams,
+    }); 
+  }
+}
+
 
 function prefetchEmbeddings(annoMatrix) {
   /*
@@ -537,6 +567,7 @@ function fetchJson(pathAndQuery) {
 }
 
 export default {
+  reembedParamsObsmFetch,
   doInitialDataLoad,
   requestDataLayerChange,
   requestReloadBackend,
