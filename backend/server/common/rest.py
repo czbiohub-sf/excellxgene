@@ -361,9 +361,9 @@ def output_data_put(request, data_adaptor):
 
         temp = {}
         for key in data_adaptor.data.uns.keys():
-            if key[:2] == "N_" and "_mask" not in key:
+            if key[:2] == "N_" and "_mask" not in key and "_params" not in key:
                 temp[key] = data_adaptor.data.uns[key][filt][:,filt]
-            elif key[:2] == "N_":
+            elif key[:2] == "N_" and "_params" not in key:
                 temp[key] = data_adaptor.data.uns[key][filt]
 
         adata = data_adaptor.data[filt].copy()
@@ -393,7 +393,7 @@ def output_data_put(request, data_adaptor):
                 k2 = k[2:]
             else:
                 k2 = k
-            k2 = k2.split('_mask')[0]
+            k2 = k2.split('_mask')[0].split("_params")
             if name not in k2.split(';;') and k[:2] == "N_":          
                 del adata.uns[k]  
 
@@ -448,9 +448,9 @@ def reload_put(request, data_adaptor):
 
     temp = {}
     for key in data_adaptor.data.uns.keys():
-        if key[:2] == "N_" and "_mask" not in key:
+        if key[:2] == "N_" and "_mask" not in key and "_params" not in key:
             temp[key] = data_adaptor.data.uns[key][filt][:,filt]
-        elif key[:2] == "N_":
+        elif key[:2] == "N_" and "_params" not in key:
             temp[key] = data_adaptor.data.uns[key][filt]
 
     adata = data_adaptor.data[filt].copy()
@@ -568,6 +568,7 @@ def delete_obsm_put(request, data_adaptor):
             try:
                 del data_adaptor.data.uns[f"N_{embName}"]
                 del data_adaptor.data.uns[f"N_{embName}_mask"]
+                del data_adaptor.data.uns[f"N_{embName}_params"]
             except:
                 pass
 
@@ -578,6 +579,7 @@ def delete_obsm_put(request, data_adaptor):
             try:
                 del data_adaptor.data_orig.uns[f"N_{embName}"]
                 del data_adaptor.data_orig.uns[f"N_{embName}_mask"]
+                del data_adaptor.data_orig.uns[f"N_{embName}_params"]
             except:
                 pass            
 
@@ -719,6 +721,27 @@ def reembed_parameters_get(request, data_adaptor):
         return make_response(
             jsonify({"reembedParams": reembedParams}), HTTPStatus.OK
         )
+    except (ValueError, KeyError, AnnotationsError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e))
+
+def reembed_parameters_obsm_put(request, data_adaptor):
+    embName = request.get_json()["embName"]
+    reembedParams = data_adaptor.data.uns.get(f"N_{embName}_params",None)
+    if reembedParams is not None:
+        try:
+            del reembedParams['parentParams']
+        except:
+            pass
+
+    try:
+        if reembedParams is not None:
+            return make_response(
+                jsonify({"reembedParams": reembedParams}), HTTPStatus.OK
+            )
+        else:
+            return make_response(
+                jsonify({"reembedParams": {}}), HTTPStatus.OK
+            )            
     except (ValueError, KeyError, AnnotationsError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e))
 

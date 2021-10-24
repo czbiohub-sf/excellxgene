@@ -586,7 +586,7 @@ class AnndataAdaptor(DataAdaptor):
                     try:
                         sc.pp.log1p(adata_raw) 
                     except:
-                        pass                    
+                        pass
 
         self.data.X = adata_raw.X
         self.data.layers['X'] = adata_raw.X
@@ -598,6 +598,39 @@ class AnndataAdaptor(DataAdaptor):
             result[filt] = umap[filt]
             self.data.obsm[k] = result
         
+        doBatchPrep = reembedParams.get("doBatchPrep",False)
+        batchPrepParams = reembedParams.get("batchPrepParams",{})
+        batchPrepKey = reembedParams.get("batchPrepKey","")
+        batchPrepLabel = reembedParams.get("batchPrepLabel","")
+
+        doPreprocess = reembedParams.get("doPreprocess",False)
+        minCountsCF = reembedParams.get("minCountsCF",0)
+        minGenesCF = reembedParams.get("minGenesCF",0)
+        minCellsGF = reembedParams.get("minCellsGF",0)
+        maxCellsGF = reembedParams.get("maxCellsGF",100)
+        minCountsGF = reembedParams.get("minCountsGF",0)
+        logTransform = reembedParams.get("logTransform",False)
+        dataLayer = reembedParams.get("dataLayer","X")
+        sumNormalizeCells = reembedParams.get("sumNormalizeCells",False)
+
+        prepParams = {
+            "doBatchPrep":doBatchPrep,
+            "batchPrepParams":batchPrepParams,
+            "batchPrepKey":batchPrepKey,
+            "batchPrepLabel":batchPrepLabel,
+            "doPreprocess":doPreprocess,
+            "minCountsCF":minCountsCF,
+            "minGenesCF":minGenesCF,
+            "minCellsGF":minCellsGF,
+            "maxCellsGF":maxCellsGF,
+            "minCountsGF":minCountsGF,
+            "logTransform":logTransform,
+            "dataLayer":dataLayer,
+            "sumNormalizeCells":sumNormalizeCells,        
+        }        
+        self.data.uns['latestPreParams'] = prepParams
+        self.data_orig.uns['latestPreParams'] = prepParams
+
         self._save_orig_data()
         self._create_schema()
         return self.get_schema()
@@ -768,6 +801,19 @@ class AnndataAdaptor(DataAdaptor):
         self.data.obsp["connectivities"] = nnm
         self.data.uns[f"N_{name}"] = nnm
         self.data.uns[f"N_{name}_mask"] = np.array(list(obs_mask)).flatten()
+        
+        parentParams = self.data.uns.get(f"N_{parentName}_params",None)
+        latestPreParams = self.data.uns.get(f"latestPreParams",None)
+        if latestPreParams is not None:
+            for k in latestPreParams.keys():
+                reembedParams[k] = latestPreParams[k]
+                
+        if (parentParams is not None):
+            reembedParams[f"parentParams"]=parentParams
+        
+        self.data.uns[f"N_{name}_params"]=reembedParams
+        self.data_orig.uns[f"N_{name}_params"]=reembedParams
+        
         self._save_orig_data(action="emb",key=name)
         return layout_schema
 
