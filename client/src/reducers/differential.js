@@ -60,32 +60,4 @@ const Differential = (
   }
 };
 
-export const diffExpController = (
-  state = {
-    pendingFetch: null,
-  },
-  action
-) => {
-  switch (action.type) {
-    case "diffexp: request start": {
-      return {
-        ...state,
-        pendingFetch: action.abortableFetch,
-      };
-    }
-    case "diffexp: request aborted":
-    case "diffexp: request cancel":
-    case "diffexp: request completed": {
-      return {
-        ...state,
-        pendingFetch: null,
-      };
-    }
-    default: {
-      return state;
-    }
-  }
-};
-
-
 export default Differential;
