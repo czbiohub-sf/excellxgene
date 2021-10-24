@@ -393,7 +393,7 @@ def output_data_put(request, data_adaptor):
                 k2 = k[2:]
             else:
                 k2 = k
-            k2 = k2.split('_mask')[0].split("_params")
+            k2 = k2.split('_mask')[0].split("_params")[0]
             if name not in k2.split(';;') and k[:2] == "N_":          
                 del adata.uns[k]  
 
