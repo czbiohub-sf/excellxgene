@@ -31,7 +31,7 @@ var formatStats = (stats, port) => {
   if (!hasErrors && !hasWarnings) {
     console.log(chalk.green("Compiled successfully!"));
     console.log();
-    console.log("The app is running at http://localhost:" + port + "/");
+    console.log("The app is running at http://172.29.45.34:" + port + "/");
     console.log();
     return;
   }

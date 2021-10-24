@@ -12,7 +12,7 @@ const CLIENT_PORT = process.env.CXG_CLIENT_PORT;
 const { CXG_SERVER_PORT } = process.env;
 
 const API = {
-  prefix: `http://localhost:${CXG_SERVER_PORT}/`,
+  prefix: `http://172.29.45.34:${CXG_SERVER_PORT}/`,
 };
 
 // Set up compiler
@@ -41,7 +41,7 @@ app.use(favicon("./favicon.png"));
 
 app.get("/login", async (req, res) => {
   try {
-    res.redirect(`${API.prefix}login?dataset=http://localhost:${CLIENT_PORT}`);
+    res.redirect(`${API.prefix}login?dataset=http://172.29.45.34:${CLIENT_PORT}`);
   } catch (err) {
     console.error(err);
   }
@@ -49,7 +49,7 @@ app.get("/login", async (req, res) => {
 
 app.get("/logout", async (req, res) => {
   try {
-    res.redirect(`${API.prefix}logout?dataset=http://localhost:${CLIENT_PORT}`);
+    res.redirect(`${API.prefix}logout?dataset=http://172.29.45.34:${CLIENT_PORT}`);
   } catch (err) {
     console.error(err);
   }
