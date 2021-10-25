@@ -140,10 +140,12 @@ class Category extends React.PureComponent {
         if (colorData && categoryData && categorySummary) {
           const col = colorData.col(colorData.colIndex.rindex[0]).asArray();
           const cats = categoryData.col(categoryData.colIndex.rindex[0]).asArray();          
-
           const averages = {}
           for (const [i,value] of col.entries()){
-            averages[cats[i]] = ((averages[cats[i]] ?? 0) + value) / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(cats[i])]
+            averages[cats[i]] = ((averages[cats[i]] ?? 0) + value)
+          }
+          for (const key in averages){
+            averages[key] = averages[key] / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(key)]
           }
           this.setState({
             continuousAverages: averages
@@ -782,7 +784,7 @@ const CategoryValueList = React.memo(
       categoryValueCounts: newCategoryValueCounts, 
       categoryValueIndices: newCategoryValueIndices
     }    
-
+    console.log(continuousAverages)
     if (!isUserAnno) {
       return (
         <>
