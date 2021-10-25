@@ -726,8 +726,9 @@ def reembed_parameters_get(request, data_adaptor):
 
 def reembed_parameters_obsm_put(request, data_adaptor):
     embName = request.get_json()["embName"]
-    reembedParams = data_adaptor.data.uns.get(f"N_{embName}_params",None).copy()
+    reembedParams = data_adaptor.data.uns.get(f"N_{embName}_params",None)
     if reembedParams is not None:
+        reembedParams = reembedParams.copy()
         try:
             del reembedParams['parentParams']
         except:
