@@ -784,7 +784,7 @@ const CategoryValueList = React.memo(
       categoryValueCounts: newCategoryValueCounts, 
       categoryValueIndices: newCategoryValueIndices
     }    
-    console.log(continuousAverages)
+
     if (!isUserAnno) {
       return (
         <>
