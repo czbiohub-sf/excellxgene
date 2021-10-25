@@ -111,7 +111,7 @@ class Category extends React.PureComponent {
     }
   }
   componentDidUpdate = (prevProps) => {
-    const { colors, isExpanded } = this.props;
+    const { colors, isExpanded, annoMatrix } = this.props;
     const { colorMode, colorAccessor } = colors;
     const { colors: colorsPrev } = prevProps;
     const { colorMode: colorModePrev, colorAccessor: colorAccessorPrev } = colorsPrev;
@@ -133,7 +133,9 @@ class Category extends React.PureComponent {
       })
     }
 
-    if ( (colorAccessor !== colorAccessorPrev && isExpanded) || (isExpanded && (isExpanded !== prevProps.isExpanded) && continuousColoring)) {
+    if ((colorAccessor !== colorAccessorPrev && isExpanded) || 
+        (isExpanded && (isExpanded !== prevProps.isExpanded) && continuousColoring) ||
+        (isExpanded && (annoMatrix.nObs !== prevProps.annoMatrix.nObs))) {
       const { annoMatrix, metadataField, colors } = this.props;
       this.fetchData(annoMatrix, metadataField, colors).then((val) => {
         const [ categoryData, categorySummary, colorData ] = val;
@@ -146,6 +148,11 @@ class Category extends React.PureComponent {
           }
           for (const key in averages){
             averages[key] = averages[key] / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(key)]
+          }
+          for (const item of categorySummary.allCategoryValues){
+            if (!(item in averages)) {
+              averages[item] = 0;
+            }
           }
           this.setState({
             continuousAverages: averages
@@ -772,11 +779,11 @@ const CategoryValueList = React.memo(
       categoryValueCountsObj[categorySummary.categoryValues[index]] = item;
     })
     const newCategoryValueCounts = []
-
     for (let i = 0; i < categorySummary.categoryValues.length; i++) {
       newCategoryValues.push(newTuples[i][0])
       newCategoryValueCounts.push(categoryValueCountsObj[newTuples[i][0]])
     }
+    
     const newCategoryValueIndices = new Map(newTuples)
     const newCategorySummary = {
       ...categorySummary, 
@@ -799,6 +806,8 @@ const CategoryValueList = React.memo(
               colorAccessor={colorAccessor}
               colorData={colorData}
               colorTable={colorTable}
+              sortDirection={sortDirection}     
+              continuousAverages={continuousAverages}         
             />
           ))}
         </>
@@ -822,6 +831,7 @@ const CategoryValueList = React.memo(
               colorData={colorData}
               colorTable={colorTable}
               sortDirection={sortDirection}
+              continuousAverages={continuousAverages}
             />
           </Flipped>
         ))}

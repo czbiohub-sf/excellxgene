@@ -185,7 +185,7 @@ class CategoryValue extends React.Component {
       categoryIndex: newCategoryIndex,
       categorySummary: newCategorySummary,
       isSelected: newIsSelected,
-      sortDirection: newSortDirection
+      sortDirection: newSortDirection,
     } = nextProps;
 
     const label = categorySummary.categoryValues[categoryIndex];
@@ -198,9 +198,15 @@ class CategoryValue extends React.Component {
     const editingLabel = state.editedLabelText !== nextState.editedLabelText;
     const dilationChange = props.isDilated !== nextProps.isDilated;
 
-    const count = categorySummary.categoryValueCounts[categoryIndex];
-    const newCount = newCategorySummary.categoryValueCounts[newCategoryIndex];
-    const countChanged = count !== newCount;
+    const count = categorySummary.categoryValueCounts;//[categoryIndex];
+    const newCount = newCategorySummary.categoryValueCounts;//;[newCategoryIndex];
+    function arrayEquals(a, b) {
+      return Array.isArray(a) &&
+        Array.isArray(b) &&
+        a.length === b.length &&
+        a.every((val, index) => val === b[index]);
+    }    
+    const countChanged = !arrayEquals(count,newCount);
     const sortDirectionChanged = sortDirection !== newSortDirection
     // If the user edits an annotation that is currently colored-by, colors may be re-assigned.
     // This test is conservative - it may cause re-rendering of entire category (all labels)
@@ -208,6 +214,8 @@ class CategoryValue extends React.Component {
     const colorMightHaveChanged =
       nextProps.colorAccessor === nextProps.metadataField &&
       props.categorySummary !== nextProps.categorySummary;
+    
+
     return (
       labelChanged ||
       valueSelectionChange ||
