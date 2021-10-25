@@ -81,7 +81,7 @@ class Reembedding extends React.PureComponent {
       "Click to recompute UMAP embedding on the currently selected cells.";
 
     return (
-      <ButtonGroup className={styles.menubarButton}>
+      <div>
         <Dialog
           icon="info-sign"
           onClose={this.handleDisableReembedDialog}
@@ -117,7 +117,7 @@ class Reembedding extends React.PureComponent {
             data-testid="reembedding-options"
           />
         </Tooltip>
-      </ButtonGroup>
+      </div>
     );
   }
 }

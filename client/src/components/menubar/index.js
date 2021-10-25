@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, InputGroup, Tooltip } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, InputGroup, Tooltip, HotkeysContext } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -14,6 +14,17 @@ import Reembedding from "./reembedding";
 import Preprocessing from "./preprocessing";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
+
+function HotkeysDialog(props) {
+  const { open } = props;
+  const [, dispatch] = useContext(HotkeysContext);
+  useEffect(() => {
+    if ((open ?? "undefined") !== "undefined"){
+      dispatch({ type: "OPEN_DIALOG" });
+    }
+  }, [open]);
+  return <div />;
+}
 
 @connect((state) => {
   const { annoMatrix } = state;
@@ -321,8 +332,10 @@ class MenuBar extends React.PureComponent {
             this.handleClipPercentileMinValueChange
           }
         />
-        <Reembedding />
-        <Preprocessing />
+        <ButtonGroup className={styles.menubarButton}>
+          <Preprocessing />          
+          <Reembedding />
+        </ButtonGroup>
         <Tooltip
           content="When a category is colored by, show labels on the graph"
           position="bottom"
@@ -422,6 +435,22 @@ class MenuBar extends React.PureComponent {
           handleSubsetReset={this.handleSubsetReset}
         />
         {disableDiffexp ? null : <DiffexpButtons />}
+        <ButtonGroup className={styles.menubarButton}>        
+        <Tooltip
+            content="Click to display hotkey menu ( or SHIFT+?)"
+            position="bottom"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+          >            
+            <AnchorButton
+                type="button"
+                icon="key"
+                onClick={() => {
+                  this.setState({...this.state, hotkeysDialogOpen: !this.state.hotkeysDialogOpen})
+                }}
+              />           
+        </Tooltip>
+        </ButtonGroup>
+        <HotkeysDialog open={this.state.hotkeysDialogOpen}/>
         <div
             style={{
               paddingBottom: "9px",

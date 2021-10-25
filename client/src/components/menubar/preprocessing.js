@@ -56,7 +56,7 @@ class Preprocessing extends React.PureComponent {
     const tipContent =
       "Click to perform preprocessing.";
     return (
-      <ButtonGroup className={styles.menubarButton}>
+      <div>
         <Dialog
           icon="info-sign"
           onClose={this.handleDisablePreprocessingDialog}
@@ -93,7 +93,7 @@ class Preprocessing extends React.PureComponent {
             data-testid="preprocessing-options"
           />
         </Tooltip>
-      </ButtonGroup>
+      </div>
     );
   }
 }
