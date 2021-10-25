@@ -13,7 +13,7 @@ Features include:
 - Interactive selection of data layer for expression visualization
 - Many other quality-of-life improvements.
 
-## Patch notes (v1.2.2)
+## Patch notes (v1.2.3)
 - Gene sets are now grouped based on their descriptions under collapsible headers.
 - Gene sets are now more compact, displaying 10 genes at a time with buttons to flip through pages.
 - Differential expression now calculates the top 100 genes.
@@ -21,6 +21,7 @@ Features include:
 - Embeddings are now indented according to their hierarchical organization, and nested embeddings are collapsible.
 - Categorical labels are now sortable based on the currently displayed continuous medatada.
 - All preprocessing and reembedding parameters now have a tooltip.
+- Added a button to display hotkey menu to the menubar.
 - Various bugfixes.
 
 ### Installation
@@ -39,7 +40,7 @@ conda create -n cxg python=3.7
 conda activate cxg
 ```
 
-3. Install excellxgene with pip (the latest version should be `1.2.2`)
+3. Install excellxgene with pip:
 ```
 pip install excellxgene
 ```
