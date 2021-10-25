@@ -13,6 +13,16 @@ Features include:
 - Interactive selection of data layer for expression visualization
 - Many other quality-of-life improvements.
 
+## Patch notes (v1.2.2)
+- Gene sets are now grouped based on their descriptions under collapsible headers.
+- Gene sets are now more compact, displaying 10 genes at a time with buttons to flip through pages.
+- Differential expression now calculates the top 100 genes.
+- A new button in the menubar allows you to calculate marker genes for all labels in a selected category.
+- Embeddings are now indented according to their hierarchical organization, and nested embeddings are collapsible.
+- Categorical labels are now sortable based on the currently displayed continuous medatada.
+- All preprocessing and reembedding parameters now have a tooltip.
+- Various bugfixes.
+
 ### Installation
 
 1. Install miniconda if conda not available already:
