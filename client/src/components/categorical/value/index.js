@@ -180,12 +180,13 @@ class CategoryValue extends React.Component {
     If and only if true, update the component
     */
     const { props, state } = this;
-    const { categoryIndex, categorySummary, isSelected, sortDirection } = props;
+    const { categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros } = props;
     const {
       categoryIndex: newCategoryIndex,
       categorySummary: newCategorySummary,
       isSelected: newIsSelected,
       sortDirection: newSortDirection,
+      removeHistZeros: newRemoveHistZeros
     } = nextProps;
 
     const label = categorySummary.categoryValues[categoryIndex];
@@ -215,7 +216,7 @@ class CategoryValue extends React.Component {
       nextProps.colorAccessor === nextProps.metadataField &&
       props.categorySummary !== nextProps.categorySummary;
     
-
+    const removeZerosChanged = removeHistZeros !== newRemoveHistZeros;
     return (
       labelChanged ||
       valueSelectionChange ||
@@ -225,7 +226,8 @@ class CategoryValue extends React.Component {
       dilationChange ||
       countChanged ||
       colorMightHaveChanged ||
-      sortDirectionChanged
+      sortDirectionChanged ||
+      removeZerosChanged
     );
   };
 
@@ -284,8 +286,10 @@ class CategoryValue extends React.Component {
     colorData,
     categoryValue,
     width,
-    height
+    height,
+    removeHistZeros
   ) => {
+
     /*
       Knowing that colorScale is based off continuous data,
       createHistogramBins fetches the continuous data in relation to the cells relevant to the category value.
@@ -301,10 +305,13 @@ class CategoryValue extends React.Component {
       groupBy
     ); /* Because the signature changes we really need different names for histogram to differentiate signatures  */
 
-    const bins = histogramMap.has(categoryValue)
+    const bins = JSON.parse(JSON.stringify(histogramMap.has(categoryValue)
       ? histogramMap.get(categoryValue)
-      : new Array(50).fill(0);
-
+      : new Array(50).fill(0)));
+    
+    if (removeHistZeros){
+      bins[0] = 0;
+    }
     const xScale = d3.scaleLinear().domain([0, bins.length]).range([0, width]);
 
     const largestBin = Math.max(...bins);
@@ -450,6 +457,7 @@ class CategoryValue extends React.Component {
       colorTable,
       schema,
       label,
+      removeHistZeros
     } = this.props;
     const colorScale = colorTable?.scale;
 
@@ -470,10 +478,12 @@ class CategoryValue extends React.Component {
         colorData,
         label,
         STACKED_BAR_WIDTH,
-        STACKED_BAR_HEIGHT
+        STACKED_BAR_HEIGHT,
+        removeHistZeros
       ) ?? {}; // if createHistogramBins returns empty object assign null to deconstructed
 
     if (!xScale || !yScale || !bins) return null;
+    
 
     return (
       <MiniHistogram
@@ -487,6 +497,7 @@ class CategoryValue extends React.Component {
         domainLabel={label}
         height={STACKED_BAR_HEIGHT}
         width={STACKED_BAR_WIDTH}
+        key={`Hist_${Math.round(new Date().getTime() / 1000).toString(16)}`}
       />
     );
   };

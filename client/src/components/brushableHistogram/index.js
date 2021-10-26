@@ -199,8 +199,7 @@ class HistogramBrush extends React.PureComponent {
   };
 
   fetchAsyncProps = async () => {
-    const { annoMatrix, width } = this.props;
-
+    const { annoMatrix, width, removeHistZeros } = this.props;
     const { isClipped } = annoMatrix;
 
     const query = this.createQuery();
@@ -232,13 +231,15 @@ class HistogramBrush extends React.PureComponent {
       column,
       MARGIN,
       width || WIDTH,
-      HEIGHT
+      HEIGHT,
+      removeHistZeros
     );
     const miniHistogram = this.calcHistogramCache(
       column,
       MARGIN_MINI,
       width || WIDTH_MINI,
-      HEIGHT_MINI
+      HEIGHT_MINI,
+      removeHistZeros
     );
 
     const isSingleValue = summary.min === summary.max;
@@ -262,7 +263,7 @@ class HistogramBrush extends React.PureComponent {
   };
 
   // eslint-disable-next-line class-methods-use-this -- instance method allows for memoization per annotation
-  calcHistogramCache(col, newMargin, newWidth, newHeight) {
+  calcHistogramCache(col, newMargin, newWidth, newHeight, removeHistZeros) {
     /*
      recalculate expensive stuff, notably bins, summaries, etc.
     */
@@ -288,7 +289,11 @@ class HistogramBrush extends React.PureComponent {
     histogramCache.bins = histogramContinuous(col, numBins, [
       domainMin,
       domainMax,
-    ]); /* memoized */
+    ]); 
+    if (removeHistZeros){
+      histogramCache.bins[0] = 0;
+    }
+    /* memoized */
     histogramCache.binWidth = (domainMax - domainMin) / numBins;
 
     histogramCache.binStart = (i) => domainMin + i * histogramCache.binWidth;
@@ -356,6 +361,7 @@ class HistogramBrush extends React.PureComponent {
       isObs,
       mini,
       setGenes,
+      removeHistZeros
     } = this.props;
 
     let { width } = this.props;
@@ -370,7 +376,7 @@ class HistogramBrush extends React.PureComponent {
       <Async
         watchFn={HistogramBrush.watchAsync}
         promiseFn={this.fetchAsyncProps}
-        watchProps={{ annoMatrix, setGenes }}
+        watchProps={{ annoMatrix, setGenes, removeHistZeros }}
       >
         <Async.Pending initial>
           <StillLoading displayName={field} zebra={zebra} />

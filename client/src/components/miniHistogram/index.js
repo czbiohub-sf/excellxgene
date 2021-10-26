@@ -56,7 +56,6 @@ export default class MiniHistogram extends React.PureComponent {
       width,
       height,
     } = this.props;
-
     return (
       <Popover
         interactionKind={PopoverInteractionKind.HOVER_TARGET_ONLY}

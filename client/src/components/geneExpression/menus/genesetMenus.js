@@ -61,7 +61,7 @@ class GenesetMenus extends React.PureComponent {
   };
 
   render() {
-    const { geneset, genesetsEditable, createText, colorAccessor } = this.props;
+    const { geneset, genesetsEditable, createText, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros } = this.props;
     const isColorBy = geneset === colorAccessor;
 
     return (
@@ -97,6 +97,15 @@ class GenesetMenus extends React.PureComponent {
                     onClick={this.activateEditGenesetNameMode}
                     text="Edit gene set name and description"
                   />
+                  <MenuItem
+                    icon={"vertical-bar-chart-desc"}
+                    data-testclass="handleToggleHistZeros"
+                    data-testid={`${geneset}:toggle-hist-zeros`}
+                    onClick={histToggler}
+                    text={toggleText}
+                    disabled={disableToggle}
+                    active={removeHistZeros}
+                  />                                   
                   <MenuItem
                     icon="trash"
                     intent="danger"

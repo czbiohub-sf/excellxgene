@@ -64,6 +64,7 @@ class Gene extends React.Component {
       isColorAccessor,
       isScatterplotXXaccessor,
       isScatterplotYYaccessor,
+      removeHistZeros
     } = this.props;
     const { geneIsExpanded } = this.state;
     const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0);
@@ -124,6 +125,7 @@ class Gene extends React.Component {
                 field={gene}
                 mini
                 width={MINI_HISTOGRAM_WIDTH}
+                removeHistZeros={removeHistZeros}
               />
             ) : null}
           </div>
@@ -182,7 +184,7 @@ class Gene extends React.Component {
             />
           </div>
         </div>
-        {geneIsExpanded && <HistogramBrush isUserDefined field={gene} />}
+        {geneIsExpanded && <HistogramBrush isUserDefined field={gene} removeHistZeros={removeHistZeros} />}
       </div>
     );
   }

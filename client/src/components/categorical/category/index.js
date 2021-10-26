@@ -54,7 +54,8 @@ class Category extends React.PureComponent {
   constructor(props){
     super(props);
     this.state = {
-      sortDirection: null
+      sortDirection: null,
+      removeHistZeros: false      
     }
   }
   static getSelectionState(
@@ -129,7 +130,7 @@ class Category extends React.PureComponent {
     if (continuousColoring !== continuousColoringPrev && continuousColoringPrev) {
       this.setState({
         ...this.state,
-        sortDirection: null
+        sortDirection: null,
       })
     }
 
@@ -315,7 +316,7 @@ class Category extends React.PureComponent {
     const continuousColoring = (colorMode === "color by continuous metadata" || colorMode === "color by geneset mean expression" || colorMode =="color by expression")
     const checkboxID = `category-select-${metadataField}`;
     const sankeyCheckboxID = `sankey-select-${metadataField}`;
-    const { sortDirection, continuousAverages } = this.state;
+    const { sortDirection, continuousAverages, removeHistZeros } = this.state;
 
     return (
       <CategoryCrossfilterContext.Provider value={crossfilter}>
@@ -379,6 +380,13 @@ class Category extends React.PureComponent {
                   sortDirection={sortDirection}
                   onSortCategoryLabels={this.onSortCategoryLabels}
                   continuousAverages={continuousAverages}
+                  removeHistZeros={removeHistZeros}
+                  histToggler={() => {
+                    this.setState({
+                      ...this.state,
+                      removeHistZeros: !removeHistZeros
+                    })
+                  }}                    
                 />
               );
             }}
@@ -479,7 +487,9 @@ const CategoryHeader = React.memo(
     layoutChoiceSankey,
     continuousColoring,
     onSortCategoryLabels,
-    sortDirection
+    sortDirection,
+    removeHistZeros,
+    histToggler
   }) => {
     /*
     Render category name and controls (eg, color-by button).
@@ -573,7 +583,11 @@ const CategoryHeader = React.memo(
             createText="Add a new label to this category"
             editText="Edit this category's name"
             deleteText="Delete this category, all associated labels, and remove all cell assignments"
+            toggleText={removeHistZeros ? "Include zeros from the mini histograms." : "Exclude zeros from the mini histograms."}
             disableDelete={sankeySelected}
+            disableToggle={!continuousColoring}
+            histToggler={histToggler}
+            removeHistZeros={removeHistZeros}
           />
 
           <Tooltip
@@ -647,7 +661,9 @@ const CategoryRender = React.memo(
     continuousColoring,
     onSortCategoryLabels,
     sortDirection,
-    continuousAverages
+    continuousAverages,
+    removeHistZeros,
+    histToggler
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -700,6 +716,8 @@ const CategoryRender = React.memo(
             onSortCategoryLabels={onSortCategoryLabels}
             sortDirection={sortDirection}
             isEpxanded={isExpanded}
+            removeHistZeros={removeHistZeros}
+            histToggler={histToggler}
           />
         </div>
         <div style={{ marginLeft: 26 }}>
@@ -716,6 +734,7 @@ const CategoryRender = React.memo(
                 colorTable={colorTable}
                 sortDirection={sortDirection}
                 continuousAverages={continuousAverages}
+                removeHistZeros={removeHistZeros}
               />
             ) : null
           }
@@ -740,7 +759,8 @@ const CategoryValueList = React.memo(
     colorData,
     colorTable,
     sortDirection,
-    continuousAverages
+    continuousAverages,
+    removeHistZeros
   }) => {
     let tuples = [...categorySummary.categoryValueIndices];
     
@@ -807,7 +827,8 @@ const CategoryValueList = React.memo(
               colorData={colorData}
               colorTable={colorTable}
               sortDirection={sortDirection}     
-              continuousAverages={continuousAverages}         
+              continuousAverages={continuousAverages}   
+              removeHistZeros={removeHistZeros}      
             />
           ))}
         </>
@@ -832,6 +853,7 @@ const CategoryValueList = React.memo(
               colorTable={colorTable}
               sortDirection={sortDirection}
               continuousAverages={continuousAverages}
+              removeHistZeros={removeHistZeros}
             />
           </Flipped>
         ))}

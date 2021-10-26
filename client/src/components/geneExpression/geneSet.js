@@ -27,7 +27,8 @@ class GeneSet extends React.Component {
     this.state = {
       isOpen: false,
       genePage: 0,
-      maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1*((props.setGenes.length % 10)===0)
+      maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1*((props.setGenes.length % 10)===0),
+      removeHistZeros: false
     };
   }
 
@@ -94,7 +95,7 @@ class GeneSet extends React.Component {
 
   renderGenes() {
     const { setName, setGenes, setGenesWithDescriptions } = this.props;
-    const { genePage } = this.state;
+    const { genePage, removeHistZeros } = this.state;
 
     return setGenes.slice(genePage*10,(genePage+1)*10).map((gene) => {
       const { geneDescription } = setGenesWithDescriptions.get(gene);
@@ -105,6 +106,7 @@ class GeneSet extends React.Component {
           gene={gene}
           geneDescription={geneDescription}
           geneset={setName}
+          removeHistZeros={removeHistZeros}
         />
       );
     });
@@ -112,7 +114,7 @@ class GeneSet extends React.Component {
 
   render() {
     const { setName, setGenes, genesetDescription, displayLabel } = this.props;
-    const { isOpen, maxGenePage, genePage } = this.state;
+    const { isOpen, maxGenePage, genePage, removeHistZeros } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
 
@@ -166,7 +168,18 @@ class GeneSet extends React.Component {
             )}
           </span>
           <div>
-            <GenesetMenus isOpen={isOpen} genesetsEditable geneset={setName} />
+            <GenesetMenus 
+              isOpen={isOpen}
+              genesetsEditable 
+              geneset={setName} 
+              disableToggle={false} 
+              histToggler={()=>{
+                this.setState({...this.state,removeHistZeros: !removeHistZeros})
+                }
+              } 
+              toggleText={removeHistZeros ? "Include zeros in histograms." : "Exclude zeros in histograms."}
+              removeHistZeros={removeHistZeros}
+              />
           </div>
         </div>
 
@@ -182,6 +195,7 @@ class GeneSet extends React.Component {
             isGeneSetSummary
             field={setName}
             setGenes={setGenes}
+            removeHistZeros={removeHistZeros}
           />
         )}
         {isOpen &&!genesetIsEmpty ? 

@@ -55,7 +55,11 @@ class AnnoMenuCategory extends React.PureComponent {
       createText,
       editText,
       deleteText,
-      disableDelete
+      disableDelete,
+      toggleText,
+      disableToggle,
+      histToggler,
+      removeHistZeros
     } = this.props;
 
     return (
@@ -92,6 +96,15 @@ class AnnoMenuCategory extends React.PureComponent {
                     text={editText}
                   />
                   <MenuItem
+                    icon={"vertical-bar-chart-desc"}
+                    data-testclass="handleToggleHistZeros"
+                    data-testid={`${metadataField}:toggle-hist-zeros`}
+                    onClick={histToggler}
+                    text={toggleText}
+                    disabled={disableToggle}
+                    active={removeHistZeros}
+                  />                     
+                  <MenuItem
                     icon={IconNames.TRASH}
                     intent={Intent.DANGER}
                     data-testclass="handleDeleteCategory"
@@ -99,7 +112,7 @@ class AnnoMenuCategory extends React.PureComponent {
                     onClick={this.handleDeleteCategory}
                     text={deleteText}
                     disabled={disableDelete ?? false}
-                  />
+                  />               
                 </Menu>
               }
             >
