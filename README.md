@@ -13,7 +13,7 @@ Features include:
 - Interactive selection of data layer for expression visualization
 - Many other quality-of-life improvements.
 
-## Patch notes (v1.2.4)
+## Patch notes (v1.2.5)
 - When displaying continuous metadata, cells with value zero are drawn as if they are unselected to send them to the background.
 - Category and geneset menus now have a new menu item to include/exclude zeros from the histograms. This is useful  when the distributions are super zero-inflated.
 

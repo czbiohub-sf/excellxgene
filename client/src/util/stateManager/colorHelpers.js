@@ -210,7 +210,7 @@ function _createColorsByContinuousMetadata(data, min, max) {
   for (let i = 0, len = data.length; i < len; i += 1) {
     const val = data[i];
     if (val === 0){
-      rgb[i] = [0.2,0.2,0.2];
+      rgb[i] = [0.5,0.5,0.5];
     } else if (Number.isFinite(val)) {
       const c = scale(val);
       rgb[i] = colors[c];
