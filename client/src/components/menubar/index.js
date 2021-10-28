@@ -451,24 +451,7 @@ class MenuBar extends React.PureComponent {
         </Tooltip>
         </ButtonGroup>
         <HotkeysDialog open={this.state.hotkeysDialogOpen}/>
-        <div
-            style={{
-              paddingBottom: "9px",
-              paddingTop: "8px",
-              width: "400px"
-            }}>
-            <InputGroup
-                id="save-output-name"
-                placeholder="Enter an output path to save the data to an h5ad file..."
-                value={saveName}
-                onChange={this.handleSaveChange}
-            />            
-          </div>  
-          <div
-            style={{
-              paddingBottom: "9px",
-              paddingTop: "8px"
-            }}>  
+        <ButtonGroup className={styles.menubarButton}>   
           <Tooltip
             content="Reset backend to the full dataset."
             position="bottom"
@@ -512,8 +495,14 @@ class MenuBar extends React.PureComponent {
                 }}
               /> 
             </Tooltip>
-              
-          </div>  
+
+            <InputGroup
+                id="save-output-name"
+                placeholder="Enter an output path to save the data to an h5ad file..."
+                value={saveName}
+                onChange={this.handleSaveChange}
+            />                       
+          </ButtonGroup>
        
       </div>
     );
