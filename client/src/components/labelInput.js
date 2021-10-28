@@ -56,8 +56,8 @@ export default class LabelInput extends React.PureComponent {
     /* only report the select if not already reported via onChange() */
     const { target } = item;
     const { query } = this.state;
-    const { onSelect } = this.props;
-    if (target !== query && onSelect) onSelect(target, event);
+    const { onSelect, geneComplete } = this.props;
+    if (target !== query && onSelect || geneComplete && onSelect) onSelect(target, event);
   };
 
   handleKeyDown = (e) => {
@@ -81,8 +81,8 @@ export default class LabelInput extends React.PureComponent {
   };
 
   renderLabelSuggestion = (queryResult, { handleClick, modifiers }) => {
-    if (queryResult.newLabel) {
-      const { newLabelMessage } = this.props;
+    const { newLabelMessage, geneComplete } = this.props;    
+    if (queryResult.newLabel && !geneComplete) {
       return (
         <MenuItem
           icon="flag"
@@ -92,6 +92,18 @@ export default class LabelInput extends React.PureComponent {
           onClick={handleClick}
           text={<em>{queryResult.target}</em>}
           label={newLabelMessage || "New label"}
+        />
+      );
+    } else if (queryResult.newLabel){
+      return (
+        <MenuItem
+          icon="disable"
+          active={false}
+          disabled={true}
+          key={queryResult.target}
+          onClick={handleClick}
+          text={<em>{queryResult.target}</em>}
+          label={"Not found."}
         />
       );
     }

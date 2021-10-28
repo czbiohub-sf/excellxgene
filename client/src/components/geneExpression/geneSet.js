@@ -1,6 +1,7 @@
 import React from "react";
 import { connect } from "react-redux";
-import { AnchorButton } from "@blueprintjs/core";
+import { Icon, Button, AnchorButton } from "@blueprintjs/core";
+import LabelInput from "../labelInput";
 import { FaChevronRight, FaChevronDown } from "react-icons/fa";
 import actions from "../../actions";
 import Gene from "./gene";
@@ -13,6 +14,7 @@ import HistogramBrush from "../brushableHistogram";
 
 @connect((state, ownProps) => {
   return {
+    colorAccessor: state.colors.colorAccessor,
     world: state.world,
     userDefinedGenes: state.controls.userDefinedGenes,
     userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
@@ -28,7 +30,8 @@ class GeneSet extends React.Component {
       isOpen: false,
       genePage: 0,
       maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1*((props.setGenes.length % 10)===0),
-      removeHistZeros: false
+      removeHistZeros: false,
+      queryGene: ""
     };
   }
 
@@ -68,6 +71,14 @@ class GeneSet extends React.Component {
 
     return undefined;
   };
+  onQueryGeneChange = (e) => {
+    this.setState({...this.state, queryGene: e})
+  }  
+  onQueryGeneSelect = (e) => {
+    const { dispatch } = this.props;    
+    this.setState({...this.state, queryGene: e})
+    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(e));
+  }  
   decrementGenePage = () => { 
     const { genePage } = this.state;
     this.setState({
@@ -113,10 +124,11 @@ class GeneSet extends React.Component {
   }
 
   render() {
-    const { setName, setGenes, genesetDescription, displayLabel } = this.props;
-    const { isOpen, maxGenePage, genePage, removeHistZeros } = this.state;
+    const { setName, setGenes, genesetDescription, displayLabel, colorAccessor } = this.props;
+    const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
+    const isColorAccessor = queryGene === colorAccessor;
 
     return (
       <div style={{ marginBottom: 3 }}>
@@ -125,6 +137,7 @@ class GeneSet extends React.Component {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "baseline",
+            backgroundColor: "#E0E0E0	",
           }}
         >
           <span
@@ -199,6 +212,7 @@ class GeneSet extends React.Component {
           />
         )}
         {isOpen &&!genesetIsEmpty ? 
+        <div>
         <div style={{
           textAlign: "right"
         }}>
@@ -218,7 +232,35 @@ class GeneSet extends React.Component {
             disabled={genePage === maxGenePage}
           />          
         </div>
+        <hr/>
+          <div style={{
+            display: "flex"
+          }}>
+    
+          <LabelInput
+            labelSuggestions={setGenes}
+            onChange={this.onQueryGeneChange}
+            onSelect={this.onQueryGeneSelect}
+            label={queryGene}
+            geneComplete
+            inputProps={{placeholder: "Search for gene in this set.", fill: true}}
+            popoverProps={null}
+          />          
+
+          <Button
+            minimal
+            small
+            onClick={this.onColorChangeClick}
+            active={isColorAccessor}
+            intent={isColorAccessor ? "primary" : "none"}
+            icon={<Icon icon="tint" iconSize={12} />}
+          />   
+
+          </div>    
+          <hr/>
+          </div>                               
          : null}
+         
         {isOpen && !genesetIsEmpty && this.renderGenes()}
         <EditGenesetNameDialogue
           parentGeneset={setName}

@@ -1,18 +1,20 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button, ControlGroup, Collapse, AnchorButton } from "@blueprintjs/core";
+import { Button, Icon, Collapse, Position, Tooltip, AnchorButton } from "@blueprintjs/core";
 import ParameterInput from "../menubar/parameterinput";
 import GeneSet from "./geneSet";
 import { GenesetHotkeys } from "../hotkeys";
 import actions from "../../actions";
 import Truncate from "../util/truncate"
-
+import LabelInput from "../labelInput";
 import CreateGenesetDialogue from "./menus/createGenesetDialogue";
 import * as globals from "../../globals";
 import { AnnoMatrixLoader } from "../../annoMatrix";
 
 @connect((state) => {
   return {
+    allGenes: state.controls.allGenes.__columns[0],
+    colorAccessor: state.colors.colorAccessor,
     genesets: state.genesets.genesets,
     annoMatrix: state.annoMatrix,
     reembedParams: state.reembedParameters
@@ -21,7 +23,7 @@ import { AnnoMatrixLoader } from "../../annoMatrix";
 class GeneExpression extends React.Component {
   constructor(props){
     super(props);
-    this.state={};
+    this.state={queryGene: ""};
   }
 
   renderGeneSets = () => {
@@ -50,6 +52,8 @@ class GeneExpression extends React.Component {
       const groupName = key.split(';;').at(-1);
       els.push(
         <div key={key}>
+            <hr/>
+
             <div style={{
               display: "flex"
             }}>
@@ -82,7 +86,14 @@ class GeneExpression extends React.Component {
     }
     return els;
   };
-
+  onQueryGeneChange = (e) => {
+    this.setState({...this.state, queryGene: e})
+  }  
+  onQueryGeneSelect = (e) => {
+    const { dispatch } = this.props;    
+    this.setState({...this.state, queryGene: e})
+    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(e));
+  }
   componentDidUpdate(prevProps) {
     const { dispatch, reembedParams, annoMatrix } = this.props;
     if(prevProps.reembedParams.dataLayerExpr !== reembedParams.dataLayerExpr){
@@ -97,6 +108,12 @@ class GeneExpression extends React.Component {
       })
     }
   }
+  
+  onColorChangeClick = () => {
+    const { dispatch } = this.props;
+    const { queryGene } = this.state;
+    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(queryGene));
+  };
 
   handleActivateCreateGenesetMode = () => {
     const { dispatch } = this.props;
@@ -104,7 +121,9 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix } = this.props;
+    const { dispatch, genesets, annoMatrix, colorAccessor, allGenes } = this.props;
+    const { queryGene } = this.state;
+    const isColorAccessor = colorAccessor === queryGene;
     return (
       <div>
         <GenesetHotkeys
@@ -130,6 +149,30 @@ class GeneExpression extends React.Component {
           </div>
           <CreateGenesetDialogue />
         </div>
+        <div style={{
+          display: "flex"
+        }}>
+  
+        <LabelInput
+          labelSuggestions={allGenes}
+          onChange={this.onQueryGeneChange}
+          onSelect={this.onQueryGeneSelect}
+          label={queryGene}
+          geneComplete
+          inputProps={{placeholder: "Search gene to color by its expression.", fill: true}}
+          popoverProps={null}
+        />          
+
+        <Button
+          minimal
+          small
+          onClick={this.onColorChangeClick}
+          active={isColorAccessor}
+          intent={isColorAccessor ? "primary" : "none"}
+          icon={<Icon icon="tint" iconSize={16} />}
+        />   
+
+        </div>     
         <div>
           { 
             this.renderGeneSets()

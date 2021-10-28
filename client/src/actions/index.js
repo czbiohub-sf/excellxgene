@@ -394,7 +394,7 @@ const doInitialDataLoad = () =>
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
       const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
       prefetchEmbeddings(annoMatrix);
-      
+      const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
       if(layoutSchema.length > 0){
         const name = layoutSchema[0].name
@@ -409,18 +409,18 @@ const doInitialDataLoad = () =>
         dispatch({
           type: "annoMatrix: init complete",
           annoMatrix: annoMatrixNew,
-          obsCrossfilter: obsCrossfilterNew,
+          obsCrossfilter: obsCrossfilterNew
         });        
         
       } else { 
         dispatch({
           type: "annoMatrix: init complete",
           annoMatrix,
-          obsCrossfilter,
+          obsCrossfilter
         });
       }
 
-      dispatch({ type: "initial data load complete" });
+      dispatch({ type: "initial data load complete", allGenes});
 
       const defaultEmbedding = config?.parameters?.default_embedding;
       if (

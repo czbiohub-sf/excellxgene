@@ -570,6 +570,17 @@ const CategoryHeader = React.memo(
         {<AnnoDialogEditCategoryName metadataField={metadataField} />}
         {<AnnoDialogAddLabel metadataField={metadataField} />}
         <div>
+          <Tooltip
+            content={
+              "Click to sort labels by the currently colored continuous metadata."
+            }
+            position={Position.BOTTOM}
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            modifiers={{
+              preventOverflow: { enabled: false },
+              hide: { enabled: false },
+            }}          
+          >
           <AnchorButton
             onClick={onSortCategoryLabels}
             active={sortDirection}
@@ -577,6 +588,7 @@ const CategoryHeader = React.memo(
             disabled={!continuousColoring || !isExpanded}
             icon={sortIcon}
           />
+          </Tooltip>
           <AnnoMenu
             metadataField={metadataField}
             isUserAnno={isUserAnno}

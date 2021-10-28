@@ -17,7 +17,7 @@ const Controls = (
     scatterplotXXaccessor: null, // just easier to read
     scatterplotYYaccessor: null,
     graphRenderCounter: 0 /* integer as <Component key={graphRenderCounter} - a change in key forces a remount */,
-
+    allGenes: null,
     datasetDrawer: false,
   },
   action
@@ -41,6 +41,7 @@ const Controls = (
         error: null,
         resettingInterface: false,
         isSubsetted: false,
+        allGenes: action.allGenes ?? null
       };
     }
     case "reset subset": {
