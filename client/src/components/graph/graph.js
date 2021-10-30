@@ -137,13 +137,13 @@ class Graph extends React.Component {
   });
 
   computeSelectedFlags = memoize(
-    (crossfilter, colorDf, _flagSelected, _flagUnselected) => {
+    (crossfilter, colorMode, colorDf, _flagSelected, _flagUnselected) => {
       const x = crossfilter.fillByIsSelected(
         new Float32Array(crossfilter.size()),
         _flagSelected,
         _flagUnselected
       );
-      if (colorDf) {
+      if (colorDf && colorMode !== "color by categorical metadata") {
         const col = colorDf.icol(0).asArray();
         for (let i = 0, len = x.length; i < len; i += 1) {
           if (col[i]===0){
@@ -183,7 +183,7 @@ class Graph extends React.Component {
   });
 
   computePointFlags = memoize(
-    (crossfilter, colorByData, colorDf, pointDilationData, pointDilationLabel) => {
+    (crossfilter, colorByData, colorMode, colorDf, pointDilationData, pointDilationLabel) => {
       /*
       We communicate with the shader using three flags:
       - isNaN -- the value is a NaN. Only makes sense when we have a colorAccessor
@@ -202,6 +202,7 @@ class Graph extends React.Component {
 
       const selectedFlags = this.computeSelectedFlags(
         crossfilter,
+        colorMode,
         colorDf, 
         flagSelected,
         0
@@ -629,6 +630,7 @@ class Graph extends React.Component {
     const flags = this.computePointFlags(
       crossfilter,
       colorByData,
+      colorsProp.colorMode,
       colorDf,
       pointDilationData,
       pointDilationLabel
