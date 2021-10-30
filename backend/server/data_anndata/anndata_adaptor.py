@@ -810,13 +810,19 @@ class AnndataAdaptor(DataAdaptor):
                 
         if (parentParams is not None):
             reembedParams[f"parentParams"]=parentParams
-        
+
+        reembedParams['sample_ids']=np.array(list(adata.obs_names))
+        reembedParams['feature_ids']=np.array(list(adata.var_names))
+        if doSAM:
+            reembedParams['feature_weights']=np.array(list(sam.adata.var['weights']))
+            
         self.data.uns[f"N_{name}_params"]=reembedParams
         self.data_orig.uns[f"N_{name}_params"]=reembedParams
         
         self._save_orig_data(action="emb",key=name)
         return layout_schema
 
+    
     def compute_diffexp_ttest(self, maskA, maskB, top_n=None, lfc_cutoff=None):
         if top_n is None:
             top_n = self.dataset_config.diffexp__top_n
