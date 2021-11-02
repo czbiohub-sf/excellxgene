@@ -49,6 +49,11 @@ conda activate cxg
 pip install excellxgene
 ```
 
+If your operating system is CentOS, then you may run into issues installing dependencies that require up-to-date `gcc` or `g++` compilers. Please install with the following and try reinstalling `excellxgene` with pip:
+```
+conda install -c conda-forge gcc cxx-compiler
+```
+
 4. Download the git repository to get the example datasets (assumes git is available, if not install it with conda install -c anaconda git)
 ```
 git clone https://github.com/czbiohub/cellxgene
