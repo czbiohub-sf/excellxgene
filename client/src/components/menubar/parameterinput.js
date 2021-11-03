@@ -49,7 +49,7 @@ class ParameterInput extends React.PureComponent {
     return Math.min(Math.max(num, min), max);
   };      
   render() {
-    const { dispatch, param, label, min, max, reembedParams, tooltipContent } = this.props;    
+    const { dispatch, param, label, min, max, reembedParams, tooltipContent, left } = this.props;    
     let { value, refresher } = this.state;
     let params = reembedParams;
 
@@ -91,8 +91,7 @@ class ParameterInput extends React.PureComponent {
           <div style={{"paddingTop":"5px"}}>
             <Tooltip
               content={tooltipContent}
-              position={Position.BOTTOM}
-              boundary="viewport"
+              position={left ? Position.RIGHT : Position.BOTTOM}
               hoverOpenDelay={globals.tooltipHoverOpenDelay}
               modifiers={{
                 preventOverflow: { enabled: false },

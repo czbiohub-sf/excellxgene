@@ -1,15 +1,16 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button, Icon, Collapse, Position, Tooltip, AnchorButton } from "@blueprintjs/core";
+import { Button, Icon, Collapse, H4, AnchorButton } from "@blueprintjs/core";
+import { IconNames } from "@blueprintjs/icons";
 import ParameterInput from "../menubar/parameterinput";
 import GeneSet from "./geneSet";
 import { GenesetHotkeys } from "../hotkeys";
 import actions from "../../actions";
 import Truncate from "../util/truncate"
-import LabelInput from "../labelInput";
 import CreateGenesetDialogue from "./menus/createGenesetDialogue";
 import * as globals from "../../globals";
 import { AnnoMatrixLoader } from "../../annoMatrix";
+import QuickGene from "./quickGene";
 
 @connect((state) => {
   return {
@@ -23,7 +24,7 @@ import { AnnoMatrixLoader } from "../../annoMatrix";
 class GeneExpression extends React.Component {
   constructor(props){
     super(props);
-    this.state={queryGene: ""};
+    this.state={geneSetsExpanded: false};
   }
 
   renderGeneSets = () => {
@@ -86,14 +87,14 @@ class GeneExpression extends React.Component {
     }
     return els;
   };
-  onQueryGeneChange = (e) => {
-    this.setState({...this.state, queryGene: e})
-  }  
-  onQueryGeneSelect = (e) => {
-    const { dispatch } = this.props;    
-    this.setState({...this.state, queryGene: e})
-    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(e));
-  }
+  
+  handleExpandGeneSets = () => {
+    this.setState({
+      ...this.state,
+      geneSetsExpanded: !this.state.geneSetsExpanded,
+    });
+  };
+
   componentDidUpdate(prevProps) {
     const { dispatch, reembedParams, annoMatrix } = this.props;
     if(prevProps.reembedParams.dataLayerExpr !== reembedParams.dataLayerExpr){
@@ -108,12 +109,6 @@ class GeneExpression extends React.Component {
       })
     }
   }
-  
-  onColorChangeClick = () => {
-    const { dispatch } = this.props;
-    const { queryGene } = this.state;
-    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(queryGene));
-  };
 
   handleActivateCreateGenesetMode = () => {
     const { dispatch } = this.props;
@@ -121,61 +116,62 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix, colorAccessor, allGenes } = this.props;
-    const { queryGene } = this.state;
-    const isColorAccessor = colorAccessor === queryGene;
+    const { dispatch, genesets, annoMatrix } = this.props;
+    const { geneSetsExpanded } = this.state;
     return (
       <div>
         <GenesetHotkeys
           dispatch={dispatch}
           genesets={genesets}
         />
+        <div style={{
+          marginBottom: "20px",
+          textAlign: "right"
+        }}>
+          <ParameterInput
+            label="Data layer"
+            param="dataLayerExpr"
+            options={annoMatrix.schema.layers}
+            tooltipContent={"Expression layer used for visualization and differential expression."}
+            left
+          />                   
+        </div>               
+        <QuickGene/>
         <div>
-          <div style={{ display: "flex", marginBottom: 10, justifyContent: "space-between", position: "relative", top: -2 }}>
+          <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between" }}>
+            <H4
+              role="menuitem"
+              tabIndex="0"
+              data-testclass="geneset-heading-expand"
+              onKeyPress={this.handleExpandGeneSets}
+              style={{
+                cursor: "pointer",
+              }}
+              onClick={this.handleExpandGeneSets}
+            >
+              Gene Sets{" "}
+              {geneSetsExpanded ? (
+                <Icon icon={IconNames.CHEVRON_DOWN} />
+              ) : (
+                <Icon icon={IconNames.CHEVRON_RIGHT} />
+              )}
+            </H4>        
+            <div style={{
+              marginBottom: 10, position: "relative", top: -2
+            }}>
             <Button
               data-testid="open-create-geneset-dialog"
               onClick={this.handleActivateCreateGenesetMode}
               intent="primary"
             >
-              Create new <strong>gene set</strong>
+              Create new
             </Button>
-            <ParameterInput
-              label="Data layer"
-              param="dataLayerExpr"
-              options={annoMatrix.schema.layers}
-              tooltipContent={"The gene expression layer used for visualization and differential expression."}
-            />                   
-                              
+            </div>    
           </div>
           <CreateGenesetDialogue />
-        </div>
-        <div style={{
-          display: "flex"
-        }}>
-  
-        <LabelInput
-          labelSuggestions={allGenes}
-          onChange={this.onQueryGeneChange}
-          onSelect={this.onQueryGeneSelect}
-          label={queryGene}
-          geneComplete
-          inputProps={{placeholder: "Search gene to color by its expression.", fill: true}}
-          popoverProps={null}
-        />          
 
-        <Button
-          minimal
-          small
-          onClick={this.onColorChangeClick}
-          active={isColorAccessor}
-          intent={isColorAccessor ? "primary" : "none"}
-          icon={<Icon icon="tint" iconSize={16} />}
-        />   
-
-        </div>     
-        <div>
           { 
-            this.renderGeneSets()
+            geneSetsExpanded && <div>{this.renderGeneSets()}</div>
           }
         </div>
       </div>

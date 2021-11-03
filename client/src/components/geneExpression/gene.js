@@ -59,12 +59,14 @@ class Gene extends React.Component {
 
   render() {
     const {
+      dispatch,
       gene,
       geneDescription,
       isColorAccessor,
       isScatterplotXXaccessor,
       isScatterplotYYaccessor,
-      removeHistZeros
+      removeHistZeros,
+      removeGene
     } = this.props;
     const { geneIsExpanded } = this.state;
     const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0);
@@ -134,7 +136,7 @@ class Gene extends React.Component {
               minimal
               small
               data-testid={`delete-from-geneset-${gene}`}
-              onClick={this.handleDeleteGeneFromSet}
+              onClick={removeGene ? removeGene(gene,isColorAccessor,dispatch) : this.handleDeleteGeneFromSet}
               intent="none"
               style={{ fontWeight: 700, marginRight: 2 }}
               icon={<Icon icon="trash" iconSize={10} />}

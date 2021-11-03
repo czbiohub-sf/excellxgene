@@ -29,7 +29,7 @@ class GeneSet extends React.Component {
     this.state = {
       isOpen: false,
       genePage: 0,
-      maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1*((props.setGenes.length % 10)===0),
+      maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1,
       removeHistZeros: false,
       queryGene: ""
     };
@@ -71,12 +71,24 @@ class GeneSet extends React.Component {
 
     return undefined;
   };
+
+  componentDidUpdate = (prevProps) => {
+    const { setGenes } = this.props;
+    const { setGenes: setGenesPrev } = prevProps;
+    if (setGenes !== setGenesPrev) {
+      this.setState({
+        ...this.state,
+        maxGenePage: Math.ceil((setGenes.length-1) / 10) - 1,
+      })
+    }
+  }
   onQueryGeneChange = (e) => {
     this.setState({...this.state, queryGene: e})
   }  
   onQueryGeneSelect = (e) => {
-    const { dispatch } = this.props;    
-    this.setState({...this.state, queryGene: e})
+    const { dispatch, setGenes } = this.props;    
+    const newGenePage = Math.floor(setGenes.indexOf(e) / 10)
+    this.setState({...this.state, queryGene: e, genePage: newGenePage})
     dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(e));
   }  
   decrementGenePage = () => { 
@@ -97,11 +109,9 @@ class GeneSet extends React.Component {
   };
 
   onColorChangeClick = () => {
-    //   const { dispatch, setName } = this.props;
-    //   dispatch({
-    //     type: "color by gene set",
-    //     colorAccessor: setName,
-    //   });
+    const { dispatch } = this.props;
+    const { queryGene } = this.state;
+    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(queryGene));
   };
 
   renderGenes() {
@@ -216,7 +226,7 @@ class GeneSet extends React.Component {
         <div style={{
           textAlign: "right"
         }}>
-          {`Showing genes ${genePage*10}-${(genePage+1)*10} out of ${setGenes.length}`}
+          {`Showing genes ${genePage*10}-${Math.min((genePage+1)*10,setGenes.length)} out of ${setGenes.length}`}
           <AnchorButton
             type="button"
             icon="chevron-left"
@@ -243,7 +253,6 @@ class GeneSet extends React.Component {
             onSelect={this.onQueryGeneSelect}
             label={queryGene}
             geneComplete
-            inputProps={{placeholder: "Search for gene in this set.", fill: true}}
             popoverProps={null}
           />          
 

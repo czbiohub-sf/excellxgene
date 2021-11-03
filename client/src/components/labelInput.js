@@ -1,5 +1,6 @@
 import React from "react";
 import { InputGroup, MenuItem, Keys } from "@blueprintjs/core";
+import { IconNames } from "@blueprintjs/icons";
 import { Suggest } from "@blueprintjs/select";
 import fuzzysort from "fuzzysort";
 
@@ -147,7 +148,7 @@ export default class LabelInput extends React.PureComponent {
 
   render() {
     const { props } = this;
-    const { labelSuggestions, label, autoFocus = true } = props;
+    const { labelSuggestions, label, geneComplete, autoFocus = true } = props;
     const suggestEnabled = !!labelSuggestions && labelSuggestions.length > 0;
 
     if (!suggestEnabled) {
@@ -176,12 +177,17 @@ export default class LabelInput extends React.PureComponent {
           fill
           inputValueRenderer={(i) => i.target}
           items={queryResults}
+          initialContent={geneComplete ? <MenuItem disabled text="Enter a gene…" /> : null}
           itemRenderer={this.renderLabelSuggestion}
           onItemSelect={this.handleItemSelect}
           query={label}
           onQueryChange={this.handleQueryChange}
           popoverProps={popoverProps}
-          inputProps={inputProps}
+          inputProps={geneComplete ? {
+            placeholder: "Gene set search",
+            leftIcon: IconNames.SEARCH,
+            fill: true,
+          } :inputProps}
           onKeyDown={this.handleKeyDown}
         />
       </>
