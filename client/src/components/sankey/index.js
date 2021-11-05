@@ -9,6 +9,7 @@ import { width } from "../scatterplot/util";
     layoutChoice: state.layoutChoice,
     displaySankey: state.sankeySelection.displaySankey,
     sankeyData: state.sankeySelection.sankeyData,
+    refresher: state.sankeySelection.dataRefresher,
 }))
 class Sankey extends React.Component {
   constructor(props) {
@@ -319,9 +320,10 @@ class Sankey extends React.Component {
     this.constructSankey()
   };
   componentDidUpdate(prevProps) {
-    const { layoutChoice } = this.props
-    if (layoutChoice.current !== prevProps.layoutChoice.current) {
-      this.handleSankey()
+    const { layoutChoice, refresher } = this.props
+    if (layoutChoice.current !== prevProps.layoutChoice.current ||
+        refresher !== prevProps.refresher) {
+      this.constructSankey()
     }
   }
   componentDidMount() {

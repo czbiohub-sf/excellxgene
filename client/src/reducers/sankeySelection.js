@@ -1,5 +1,5 @@
 const SankeySelection = (
-  state={displaySankey: false, categories: {}, sankeyData: null, refresher: false, numChecked: 0},
+  state={displaySankey: false, categories: {}, sankeyData: null, dataRefresher: false, refresher: false, numChecked: 0, cachedSankey: {}, currCacheKey: null, maxLink: 0},
   action
 ) => {
   switch (action.type) {
@@ -33,6 +33,12 @@ const SankeySelection = (
     case "sankey: set data": {
       const { data } = action;
       state.sankeyData = data;
+      const vals = []
+      for (const [_,val] of Object.entries(data.links)) {
+        vals.push(val.value)
+      }
+      state.maxLink = parseFloat(Math.max(...vals).toFixed(2))
+      state.dataRefresher = !state.dataRefresher
       return state;
     }
     case "sankey: rename category": {
@@ -44,9 +50,33 @@ const SankeySelection = (
         ...state,
         categories: newCategories
       };
+    }
+    case "sankey: cache results": {
+      const { sankey, key } = action;
+      const { cachedSankey } = state;
+      return {
+        ...state,
+        cachedSankey: {...cachedSankey, [key]: sankey}
+      }
+    }
+    case "sankey: set current cache key": {
+      const { key } = action;
+      return {
+        ...state,
+        currCacheKey: key
+      }
+    }
+    case "sankey: clear cached result": {
+      const { key } = action;
+      const { cachedSankey } = state;   
+      const { [key]: dummy, ...newObj} = cachedSankey;   
+      return {
+        ...state,
+        cachedSankey: newObj
+      }
     }    
     case "sankey: reset": {
-      return state={displaySankey: false, categories: {}, sankeyData: null, refresher: false, numChecked: 0};
+      return state={dataRefresher: false, cachedSankey: state.cachedSankey, displaySankey: false, categories: {}, sankeyData: null, refresher: false, numChecked: 0, currCacheKey: null};
     }    
     default:
       return state;

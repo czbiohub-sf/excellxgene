@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, InputGroup, Tooltip, HotkeysContext } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, InputGroup, Text, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -64,8 +64,10 @@ function HotkeysDialog(props) {
     displaySankey: state.sankeySelection.displaySankey,
     layoutChoice: state.layoutChoice,
     outputController: state.outputController,
-    sankeyController: state.sankeyController
-
+    sankeyController: state.sankeyController,
+    currCacheKey: state.sankeySelection.currCacheKey,
+    cachedSankey: state.sankeySelection.cachedSankey,
+    maxLink: state.sankeySelection.maxLink
   };
 })
 class MenuBar extends React.PureComponent {
@@ -101,22 +103,24 @@ class MenuBar extends React.PureComponent {
     };
   }
 
-  handleSankey = () => {
+  handleSankey = (threshold,reset) => {
     const { dispatch, layoutChoice } = this.props;
-    if (!layoutChoice.sankey) {
+    if (!layoutChoice.sankey || !reset) {
       const prom = dispatch(requestSankey());
       const links = []
       const nodes = []
       prom.then((res) => {
         let n = []
         res.edges.forEach(function (item, index) {
-          links.push({
-            source: item[0],
-            target: item[1],
-            value: res.weights[index]
-          })
-          n.push(item[0])
-          n.push(item[1])
+          if (res.weights[index] > threshold){
+            links.push({
+              source: item[0],
+              target: item[1],
+              value: res.weights[index]
+            })
+            n.push(item[0])
+            n.push(item[1])
+          }
         });   
         n = n.filter((item, i, ar) => ar.indexOf(item) === i);
   
@@ -128,7 +132,9 @@ class MenuBar extends React.PureComponent {
         
         const data = {links: links, nodes: nodes}
         dispatch({type: "sankey: set data",data: data})
-        dispatch({type: "toggle sankey"})
+        if (reset){
+          dispatch({type: "toggle sankey"})
+        }
       })      
     } else {
       dispatch({type: "sankey: reset"})
@@ -202,7 +208,14 @@ class MenuBar extends React.PureComponent {
       pendingClipPercentiles: { clipPercentileMin, clipPercentileMax },
     });
   };
-
+  getChangeHandler = ( key ) => {
+    return ((value) => {
+      this.setState({ [key]: value})
+    })
+  }
+  onRelease = (value) => {
+    this.handleSankey(value,false)
+  }
   handleClipPercentileMaxValueChange = (v) => {
     /*
     Ignore anything that isn't a legit number
@@ -283,19 +296,20 @@ class MenuBar extends React.PureComponent {
       displaySankey,
       layoutChoice,
       outputController,
-      sankeyController
+      sankeyController,
+      currCacheKey,
+      cachedSankey,
+      maxLink
     } = this.props;
     const { pendingClipPercentiles, saveName } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
     const loading = !!outputController?.pendingFetch;
     const loadingSankey = !!sankeyController?.pendingFetch;
-
     // constants used to create selection tool button
     const [selectionTooltip, selectionButtonIcon] =
       selectionTool === "brush"
         ? ["Brush selection", "Lasso selection"]
         : ["select", "polygon-filter"];
-
     return (
       <div
         style={{
@@ -422,7 +436,7 @@ class MenuBar extends React.PureComponent {
                 disabled={!displaySankey && !layoutChoice.sankey}
                 loading={loadingSankey}
                 onClick={() => {
-                  this.handleSankey()
+                  this.handleSankey(0,true)
                 }}
               />           
             </Tooltip>
@@ -503,7 +517,48 @@ class MenuBar extends React.PureComponent {
                 onChange={this.handleSaveChange}
             />                       
           </ButtonGroup>
-       
+
+          {layoutChoice.sankey ? 
+          <div style={{paddingTop: "10px", flexBasis: "100%", height: 0}}></div> : null}          
+        {layoutChoice.sankey ? 
+        <div style={{
+          width: "20%",
+          textAlign: "right",
+          justifyContent: "right"
+        }}>
+          <AnchorButton
+          type="button"
+          onClick={()=>{dispatch({type: "sankey: clear cached result",key: currCacheKey})}}
+          intent="primary"
+          disabled={!(currCacheKey in cachedSankey)}
+        >
+          Remove from cache
+        </AnchorButton> </div> : null} 
+        {layoutChoice.sankey ? 
+        <div style={{
+          width: "80%",
+          paddingLeft: "50px",
+          paddingRight: "20px",
+          textAlign: "left",
+          whiteSpace: "nowrap",
+          margin: "0 auto",
+          justifyContent: "space-between",
+          display: "flex"
+        }}>
+          <div style={{paddingRight: "15px"}}>Edge threshold:</div> 
+          <div style={{
+            width: "inherit"
+          }}>
+          <Slider
+            min={0}
+            max={maxLink}
+            stepSize={parseFloat((maxLink/100).toFixed(2))}
+            labelStepSize={maxLink}
+            showTrackFill={false}
+            onRelease={this.onRelease}
+            onChange={this.getChangeHandler("alignmentThreshold")}
+            value={this.state?.alignmentThreshold ?? 0}
+          /> </div></div>: null}         
       </div>
     );
   }

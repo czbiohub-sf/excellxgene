@@ -412,26 +412,39 @@ class AnndataAdaptor(DataAdaptor):
             cl.append(np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c]))
             clu.append(np.unique(cl[-1]))
 
+        
         ps = []
         cs = []
-        kmean = nnm.sum(1).A.mean()
         for i,cl1 in enumerate(cl):
             for cl2 in cl[(i+1):]:
-                clu1 = np.unique(cl1)
+                xi,yi = nnm.nonzero()
+                di = nnm.data
+                px,py = xi,cl2[yi]
                 clu2 = np.unique(cl2)
+                clu1 = clu[i]
 
-                for i, c1 in enumerate(clu1):
-                    for j, c2 in enumerate(clu2):
-                        if c1.split('_')[1] !='unassigned' and c2.split('_')[1]!='unassigned':
-                            val = max(nnm[cl1 == c1,:][:, cl2 == c2].sum(1).A.mean(),
-                                nnm[cl2 == c2,:][:, cl1 == c1].sum(1).A.mean())
-                            val /= kmean
-                            if val > 0.2:
-                                cs.append(val)
-                                ps.append([c1,c2])
-                            
+                p = px.astype('str').astype('object')+';'+py.astype('object')
+
+                valdict = _to_dict(p,di)
+                cell_scores = [valdict[k].sum() for k in valdict.keys()]
+                ixer = pd.Series(data=np.arange(clu2.size),index=clu2)
+                xc,yc = np.vstack([k.split(';') for k in valdict.keys()]).T
+                xc = xc.astype('int')
+                yc=ixer[yc].values
+                cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu2.size)).A
+                
+                CSIM = np.zeros((clu1.size, clu2.size))
+                for k, c in enumerate(clu1):
+                    CSIM[k, :] = cell_cluster_scores[cl1==c].mean(0)
+                
+                x,y = CSIM.nonzero()
+                d = CSIM[x,y]
+                x,y = clu1[x],clu2[y]
+                ps.append(np.vstack((x,y)).T)
+                cs.append(d)
+
         ps = np.vstack(ps)
-        cs = np.array(cs)
+        cs = np.concatenate(cs)
         return ps,cs
     
     
@@ -867,3 +880,17 @@ class AnndataAdaptor(DataAdaptor):
     def get_var_keys(self):
         # return list of keys
         return self.data.var.keys().to_list()
+
+def _to_dict(index,vals):
+    a = np.array(list(index))
+    b = np.array(list(vals))
+    idx = np.argsort(a)
+    a = a[idx]
+    b = b[idx]
+    bounds = np.where(a[:-1] != a[1:])[0] + 1
+    bounds = np.append(np.append(0, bounds), a.size)
+    bounds_left = bounds[:-1]
+    bounds_right = bounds[1:]
+    slists = [b[bounds_left[i] : bounds_right[i]] for i in range(bounds_left.size)]
+    d = dict(zip(np.unique(a), slists))
+    return d
