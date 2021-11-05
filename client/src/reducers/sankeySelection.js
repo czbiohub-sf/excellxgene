@@ -37,7 +37,19 @@ const SankeySelection = (
       return state;
     }
     case "sankey: set": {
+      const { selectedCategories: selectedCats} = state;
       const { category, value } = action;
+
+      if (!value) {
+        const index = selectedCats.indexOf(category)
+        if (index > -1){
+          selectedCats.splice(index,1)
+        }
+      } else {
+        selectedCats.push(category)
+      }
+      state.selectedCategories = selectedCats;
+
       state.categories[category] = value;
       state.refresher = !state.refresher;
       const numCheckedNow = Object.values(state.categories).reduce((a, item) => a + item, 0);
