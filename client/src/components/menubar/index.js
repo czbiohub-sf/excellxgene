@@ -134,11 +134,19 @@ class MenuBar extends React.PureComponent {
         dispatch({type: "sankey: set data",data: data})
         if (reset){
           dispatch({type: "toggle sankey"})
+          this.setState({
+            ...this.state,
+            alignmentThreshold: 0
+          })          
         }
       })      
     } else {
       dispatch({type: "sankey: reset"})
       dispatch({type: "toggle sankey"})
+      this.setState({
+        ...this.state,
+        alignmentThreshold: 0
+      })
     }
 
   };
