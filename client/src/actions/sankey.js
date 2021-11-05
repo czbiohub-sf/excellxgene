@@ -32,7 +32,7 @@ async function doSankeyFetch(dispatch, getState) {
       if(value){
         let t = await annoMatrix.fetch("obs",key)
         catNames.push(key)
-        labels.push(t)
+        labels.push(Array.isArray(t.__columns[0]) ? t.__columns[0] : Array.from(t.__columns[0]))
       }
     }
     if (labels.length === 1){

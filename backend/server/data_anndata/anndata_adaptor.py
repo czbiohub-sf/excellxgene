@@ -411,7 +411,6 @@ class AnndataAdaptor(DataAdaptor):
         for i,c in enumerate(labels):
             cl.append(np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c]))
             clu.append(np.unique(cl[-1]))
-
         
         ps = []
         cs = []
