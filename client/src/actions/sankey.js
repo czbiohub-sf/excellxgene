@@ -25,22 +25,24 @@ async function doSankeyFetch(dispatch, getState) {
     const state = getState();
     // get current embedding
     const { layoutChoice, sankeySelection, annoMatrix } = state;
-    const { categories, cachedSankey } = sankeySelection;
+    const { cachedSankey, selectedCategories } = sankeySelection;
     const labels = []
     const catNames = []
-    for (const [key, value] of Object.entries(categories)) {
-      if(value){
-        let t = await annoMatrix.fetch("obs",key)
-        catNames.push(key)
-        labels.push(Array.isArray(t.__columns[0]) ? t.__columns[0] : Array.from(t.__columns[0]))
-      }
+    for (const key of selectedCategories) {
+      let t = await annoMatrix.fetch("obs",key)
+      catNames.push(key)
+      labels.push(Array.isArray(t.__columns[0]) ? t.__columns[0] : Array.from(t.__columns[0]))
     }
     if (labels.length === 1){
       labels.push(labels[0])
     }
-    dispatch({type: "sankey: set current cache key", key: catNames.sort().join(";")})
-    if (catNames.sort().join(";") in cachedSankey) {
-      return [cachedSankey[catNames.sort().join(";")],catNames]
+    if (catNames.length === 2){
+      catNames.sort()
+    }
+    
+    dispatch({type: "sankey: set current cache key", key: catNames.join(";")})
+    if (catNames.join(";") in cachedSankey) {
+      return [cachedSankey[catNames.join(";")],catNames]
     }
 
     const af = abortableFetch(
@@ -53,7 +55,7 @@ async function doSankeyFetch(dispatch, getState) {
         }),
         body: JSON.stringify({
           name: layoutChoice.current,
-          labels: labels,
+          labels: labels
         }),
         credentials: "include",
       },
@@ -90,7 +92,7 @@ export function requestSankey() {
         dispatch({
           type: "sankey: cache results",
           sankey,
-          key: catNames.sort().join(";")
+          key: catNames.join(";")
         })
         return sankey      
       } catch (error) {

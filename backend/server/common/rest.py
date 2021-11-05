@@ -322,7 +322,6 @@ def layout_obs_get(request, data_adaptor):
 def sankey_data_put(request, data_adaptor):
     args = request.get_json()
     labels = args.get("labels", None)
-
     name = args.get("name", None)
 
     if not labels:

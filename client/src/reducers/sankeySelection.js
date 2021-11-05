@@ -1,11 +1,29 @@
 const SankeySelection = (
-  state={displaySankey: false, categories: {}, sankeyData: null, dataRefresher: false, refresher: false, numChecked: 0, cachedSankey: {}, currCacheKey: null, maxLink: 0},
+  state={displaySankey: false,
+         categories: {},
+         sankeyData: null,
+         dataRefresher: false,
+         refresher: false,
+         numChecked: 0,
+         cachedSankey: {},
+         currCacheKey: null,
+         maxLink: 0,
+         selectedCategories: []},
   action
 ) => {
   switch (action.type) {
     case "sankey: toggle": {
       const { category } = action;
+      const { selectedCategories: selectedCats} = state;
       const value = state?.categories?.[category] ?? false;
+      if (value) {
+        const index = selectedCats.indexOf(category)
+        if (index > -1){
+          selectedCats.splice(index,1)
+        }
+      } else {
+        selectedCats.push(category)
+      }
       state.categories[category] = !value;
       state.refresher = !state.refresher;
       const numCheckedNow = Object.values(state.categories).reduce((a, item) => a + item, 0);
@@ -15,6 +33,7 @@ const SankeySelection = (
         state.displaySankey = false;
       }
       state.numChecked = numCheckedNow
+      state.selectedCategories = selectedCats;
       return state;
     }
     case "sankey: set": {
@@ -76,7 +95,7 @@ const SankeySelection = (
       }
     }    
     case "sankey: reset": {
-      return state={dataRefresher: false, cachedSankey: state.cachedSankey, displaySankey: false, categories: {}, sankeyData: null, refresher: false, numChecked: 0, currCacheKey: null};
+      return state={selectedCategories: [],dataRefresher: false, cachedSankey: state.cachedSankey, displaySankey: false, categories: {}, sankeyData: null, refresher: false, numChecked: 0, currCacheKey: null};
     }    
     default:
       return state;

@@ -414,33 +414,35 @@ class AnndataAdaptor(DataAdaptor):
         
         ps = []
         cs = []
-        for i,cl1 in enumerate(cl):
-            for cl2 in cl[(i+1):]:
-                xi,yi = nnm.nonzero()
-                di = nnm.data
-                px,py = xi,cl2[yi]
-                clu2 = np.unique(cl2)
-                clu1 = clu[i]
+        for i,cl1 in enumerate(cl[:-1]):
+            j = i+1
+            cl2 = cl[i+1]
 
-                p = px.astype('str').astype('object')+';'+py.astype('object')
+            xi,yi = nnm.nonzero()
+            di = nnm.data
+            px,py = xi,cl2[yi]
+            clu2 = clu[j]
+            clu1 = clu[i]
 
-                valdict = _to_dict(p,di)
-                cell_scores = [valdict[k].sum() for k in valdict.keys()]
-                ixer = pd.Series(data=np.arange(clu2.size),index=clu2)
-                xc,yc = np.vstack([k.split(';') for k in valdict.keys()]).T
-                xc = xc.astype('int')
-                yc=ixer[yc].values
-                cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu2.size)).A
-                
-                CSIM = np.zeros((clu1.size, clu2.size))
-                for k, c in enumerate(clu1):
-                    CSIM[k, :] = cell_cluster_scores[cl1==c].mean(0)
-                
-                x,y = CSIM.nonzero()
-                d = CSIM[x,y]
-                x,y = clu1[x],clu2[y]
-                ps.append(np.vstack((x,y)).T)
-                cs.append(d)
+            p = px.astype('str').astype('object')+';'+py.astype('object')
+
+            valdict = _to_dict(p,di)
+            cell_scores = [valdict[k].sum() for k in valdict.keys()]
+            ixer = pd.Series(data=np.arange(clu2.size),index=clu2)
+            xc,yc = np.vstack([k.split(';') for k in valdict.keys()]).T
+            xc = xc.astype('int')
+            yc=ixer[yc].values
+            cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu2.size)).A
+            
+            CSIM = np.zeros((clu1.size, clu2.size))
+            for k, c in enumerate(clu1):
+                CSIM[k, :] = cell_cluster_scores[cl1==c].mean(0)
+            
+            x,y = CSIM.nonzero()
+            d = CSIM[x,y]
+            x,y = clu1[x],clu2[y]
+            ps.append(np.vstack((x,y)).T)
+            cs.append(d)
 
         ps = np.vstack(ps)
         cs = np.concatenate(cs)

@@ -11,7 +11,6 @@ import {
 import { Flipper, Flipped } from "react-flip-toolkit";
 import Async from "react-async";
 import memoize from "memoize-one";
-import * as d3 from "d3";
 import Value from "../value";
 import AnnoMenu from "./annoMenuCategory";
 import AnnoDialogEditCategoryName from "./annoDialogEditCategoryName";
@@ -47,7 +46,9 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
     layoutChoiceSankey: state.layoutChoice.sankey,
     genesets: state.genesets.genesets,
     sankeySelected: state.sankeySelection.categories?.[metadataField] ?? false,
-    displaySankey: state.sankeySelection.displaySankey
+    displaySankey: state.sankeySelection.displaySankey,
+    selectedCategories: state.sankeySelection.selectedCategories,
+    numChecked: state.sankeySelection.numChecked
   };
 })
 class Category extends React.PureComponent {
@@ -55,7 +56,8 @@ class Category extends React.PureComponent {
     super(props);
     this.state = {
       sortDirection: null,
-      removeHistZeros: false      
+      removeHistZeros: false,
+      indexOfSankeyCategory: -1   
     }
   }
   static getSelectionState(
@@ -112,7 +114,7 @@ class Category extends React.PureComponent {
     }
   }
   componentDidUpdate = (prevProps) => {
-    const { colors, isExpanded, annoMatrix } = this.props;
+    const { colors, isExpanded, annoMatrix, selectedCategories, metadataField } = this.props;
     const { colorMode, colorAccessor } = colors;
     const { colors: colorsPrev } = prevProps;
     const { colorMode: colorModePrev, colorAccessor: colorAccessorPrev } = colorsPrev;
@@ -156,9 +158,17 @@ class Category extends React.PureComponent {
             }
           }
           this.setState({
+            ...this.state,
             continuousAverages: averages
           })
         }
+      })
+    }
+
+    if (this.props.numChecked !== prevProps.numChecked) {
+      this.setState({
+        ...this.state,
+        indexOfSankeyCategory: selectedCategories.indexOf(metadataField)
       })
     }
     
@@ -316,7 +326,7 @@ class Category extends React.PureComponent {
     const continuousColoring = (colorMode === "color by continuous metadata" || colorMode === "color by geneset mean expression" || colorMode =="color by expression")
     const checkboxID = `category-select-${metadataField}`;
     const sankeyCheckboxID = `sankey-select-${metadataField}`;
-    const { sortDirection, continuousAverages, removeHistZeros } = this.state;
+    const { sortDirection, continuousAverages, removeHistZeros, indexOfSankeyCategory } = this.state;
 
     return (
       <CategoryCrossfilterContext.Provider value={crossfilter}>
@@ -386,7 +396,8 @@ class Category extends React.PureComponent {
                       ...this.state,
                       removeHistZeros: !removeHistZeros
                     })
-                  }}                    
+                  }}               
+                  indexOfSankeyCategory={indexOfSankeyCategory}    
                 />
               );
             }}
@@ -489,13 +500,15 @@ const CategoryHeader = React.memo(
     onSortCategoryLabels,
     sortDirection,
     removeHistZeros,
-    histToggler
+    histToggler,
+    indexOfSankeyCategory
   }) => {
     /*
     Render category name and controls (eg, color-by button).
     */
     const checkboxRef = useRef(null);
     const checkboxSankeyRef = useRef(null);
+
     useEffect(() => {
       checkboxRef.current.indeterminate = selectionState === "some";
     }, [checkboxRef.current, selectionState]);
@@ -640,8 +653,9 @@ const CategoryHeader = React.memo(
                 checked={sankeySelected}
                 type="checkbox"
                 disabled={layoutChoiceSankey}
-              />     
+            />  
           </Tooltip>     
+          {indexOfSankeyCategory > -1 ? indexOfSankeyCategory+1 : null}
         </div>
       </>
     );
@@ -675,7 +689,8 @@ const CategoryRender = React.memo(
     sortDirection,
     continuousAverages,
     removeHistZeros,
-    histToggler
+    histToggler,
+    indexOfSankeyCategory
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -730,6 +745,7 @@ const CategoryRender = React.memo(
             isEpxanded={isExpanded}
             removeHistZeros={removeHistZeros}
             histToggler={histToggler}
+            indexOfSankeyCategory={indexOfSankeyCategory}
           />
         </div>
         <div style={{ marginLeft: 26 }}>
