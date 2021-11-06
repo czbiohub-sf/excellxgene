@@ -14,7 +14,6 @@ import Reembedding from "./reembedding";
 import Preprocessing from "./preprocessing";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
-import { dispatch } from "d3-dispatch";
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -67,7 +66,6 @@ function HotkeysDialog(props) {
     outputController: state.outputController,
     sankeyController: state.sankeyController,
     currCacheKey: state.sankeySelection.currCacheKey,
-    cachedSankey: state.sankeySelection.cachedSankey,
     maxLink: state.sankeySelection.maxLink,
     alignmentThreshold: state.sankeySelection.alignmentThreshold
   };
@@ -230,6 +228,7 @@ class MenuBar extends React.PureComponent {
     });
   };
   onSliderChange = ( value ) => {
+    const { dispatch } = this.props;
     dispatch({type: "sankey: set alignment score threshold", threshold: value})
     this.setState({
       ...this.state,
@@ -238,6 +237,7 @@ class MenuBar extends React.PureComponent {
   }
 
   onRelease = (value) => {
+    const { dispatch } = this.props;
     dispatch({type: "sankey: set alignment score threshold", threshold: value})
     this.handleSankey(value,false)
     this.setState({
@@ -327,7 +327,6 @@ class MenuBar extends React.PureComponent {
       outputController,
       sankeyController,
       currCacheKey,
-      cachedSankey,
       maxLink
     } = this.props;
     const { pendingClipPercentiles, saveName, threshold } = this.state;
@@ -557,11 +556,14 @@ class MenuBar extends React.PureComponent {
         }}>
           <AnchorButton
           type="button"
-          onClick={()=>{dispatch({type: "sankey: clear cached result",key: currCacheKey})}}
+          onClick={()=>{
+            dispatch({type: "sankey: clear cached result",key: currCacheKey})
+            this.handleSankey(threshold,false)
+          }}
           intent="primary"
-          disabled={!(currCacheKey in cachedSankey)}
+          disabled={loadingSankey}
         >
-          Remove from cache
+          Recalculate sankey
         </AnchorButton> </div> : null} 
         {layoutChoice.sankey ? 
         <div style={{

@@ -449,7 +449,30 @@ class AnndataAdaptor(DataAdaptor):
             CSIM = np.zeros((clu1.size, clu2.size))
             for k, c in enumerate(clu1):
                 CSIM[k, :] = cell_cluster_scores[cl1==c].mean(0)
+
+
+            xi,yi = nnm.nonzero()
+            di = nnm.data
+            px,py = xi,cl1[yi]
+            clu2 = clu[j]
+            clu1 = clu[i]
+
+            p = px.astype('str').astype('object')+';'+py.astype('object')
+
+            valdict = _to_dict(p,di)
+            cell_scores = [valdict[k].sum() for k in valdict.keys()]
+            ixer = pd.Series(data=np.arange(clu1.size),index=clu1)
+            xc,yc = np.vstack([k.split(';') for k in valdict.keys()]).T
+            xc = xc.astype('int')
+            yc=ixer[yc].values
+            cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu1.size)).A
             
+            CSIM2 = np.zeros((clu2.size, clu1.size))
+            for k, c in enumerate(clu2):
+                CSIM2[k, :] = cell_cluster_scores[cl2==c].mean(0)
+
+
+            CSIM = np.stack((CSIM,CSIM2.T),axis=2).min(2)
             x,y = CSIM.nonzero()
             d = CSIM[x,y]
             x,y = clu1[x],clu2[y]

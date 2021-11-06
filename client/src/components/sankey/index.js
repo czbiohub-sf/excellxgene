@@ -10,7 +10,9 @@ import { width } from "../scatterplot/util";
     displaySankey: state.sankeySelection.displaySankey,
     sankeyData: state.sankeySelection.sankeyData,
     refresher: state.sankeySelection.dataRefresher,
-    alignmentThreshold: state.sankeySelection.alignmentThreshold
+    alignmentThreshold: state.sankeySelection.alignmentThreshold,
+    numCells: state.annoMatrix.nObs,
+    currCacheKey: state.sankeySelection.currCacheKey
 }))
 class Sankey extends React.Component {
   constructor(props) {
@@ -322,11 +324,14 @@ class Sankey extends React.Component {
     this.constructSankey()
   };
   componentDidUpdate(prevProps) {
-    const { layoutChoice, refresher } = this.props
+    const { dispatch, layoutChoice, refresher, numCells, currCacheKey } = this.props
     if (layoutChoice.current !== prevProps.layoutChoice.current){
       this.handleSankey()
     } else if(refresher !== prevProps.refresher) {
       this.constructSankey()
+    } else if (numCells !== prevProps.numCells){
+      dispatch({type: "sankey: clear cached result",key: currCacheKey})
+      this.handleSankey()
     }
   }
   componentDidMount() {
