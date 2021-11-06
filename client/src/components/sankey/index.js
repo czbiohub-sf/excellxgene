@@ -223,7 +223,8 @@ class Sankey extends React.Component {
                      .nodeId(d => d.id)
                      .nodeWidth(nodeWidth)
                      .nodePadding(nodePadding)
-                     .nodeAlign(nodeAlignment);
+                     .nodeAlign((n,tn)=>parseFloat(n.id.split('_').at(0).slice(-1)));
+
     let graph = sankey(data);
     
     // Loop through the nodes. Set additional properties to make a few things
@@ -234,7 +235,6 @@ class Sankey extends React.Component {
         node.strokeColor = darkenColor(fillColor, nodeDarkenFactor);
         node.width = node.x1 - node.x0;
         node.height = node.y1 - node.y0;
-        node.depth = parseInt(node.id.split('_').at(0).slice(-1))
     });
     
     // Build the links.
