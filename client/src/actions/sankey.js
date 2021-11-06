@@ -39,7 +39,9 @@ async function doSankeyFetch(dispatch, getState) {
     if (catNames.length === 2){
       catNames.sort()
     }
-
+    
+    let cells = annoMatrix.rowIndex.labels();
+    cells = Array.isArray(cells) ? cells : Array.from(cells);
     dispatch({type: "sankey: set current cache key", key: `${catNames.join(";")}_${layoutChoice.current}`})
     if (`${catNames.join(";")}_${layoutChoice.current}` in cachedSankey) {
       return [cachedSankey[`${catNames.join(";")}_${layoutChoice.current}`],catNames]
@@ -55,7 +57,8 @@ async function doSankeyFetch(dispatch, getState) {
         }),
         body: JSON.stringify({
           name: layoutChoice.current,
-          labels: labels
+          labels: labels,
+          filter: { obs: { index: cells } }
         }),
         credentials: "include",
       },

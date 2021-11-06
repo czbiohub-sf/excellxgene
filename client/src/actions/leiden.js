@@ -23,9 +23,13 @@ function abortableFetch(request, opts, timeout = 0) {
 async function doLeidenFetch(dispatch, getState) {
     const state = getState();
     // get current embedding
-    const { layoutChoice, Leiden } = state;
+    
+    const { layoutChoice, Leiden, annoMatrix } = state;
     const { res } = Leiden;
-    const name = `leiden_${layoutChoice.current}_res${Math.round((res+Number.EPSILON)*1000)/1000.0}`
+    let cells = annoMatrix.rowIndex.labels();
+    cells = Array.isArray(cells) ? cells : Array.from(cells);          
+    
+    const name = `leiden_${Math.round(new Date().getTime() / 1000).toString(16)}_r${Math.round((res+Number.EPSILON)*1000)/1000.0}`
     const af = abortableFetch(
       `${API.prefix}${API.version}leiden`,
       {
@@ -38,6 +42,7 @@ async function doLeidenFetch(dispatch, getState) {
           name: layoutChoice.current,
           cName: name,
           resolution: res,
+          filter: { obs: { index: cells } }    
         }),
         credentials: "include",
       },
@@ -50,7 +55,7 @@ async function doLeidenFetch(dispatch, getState) {
     const result = await af.ready();
   
     if (result.ok && result.headers.get("Content-Type").includes("application/json")) {
-      return result;
+      return [result,name];
     }
   
     // else an error
@@ -65,13 +70,13 @@ async function doLeidenFetch(dispatch, getState) {
 export function requestLeiden() {
     return async (dispatch, getState) => {
       try {
-        const res = await doLeidenFetch(dispatch, getState);
+        const [res,name] = await doLeidenFetch(dispatch, getState);
         const leiden = await res.json();
         dispatch({
           type: "leiden: request completed",
         });
 
-        return leiden      
+        return [leiden,name]
       } catch (error) {
         dispatch({
           type: "leiden: request aborted",

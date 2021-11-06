@@ -323,13 +323,14 @@ def sankey_data_put(request, data_adaptor):
     args = request.get_json()
     labels = args.get("labels", None)
     name = args.get("name", None)
+    filter = args.get("filter",None)
 
     if not labels:
         return make_response(jsonify({"edges":[],"weights":[]}),HTTPStatus.OK, {"Content-Type": "application/json"})
     
 
     try:
-        edges,weights = data_adaptor.compute_sankey_df(labels,name)
+        edges,weights = data_adaptor.compute_sankey_df(labels,name,filter)
         edges = [list(x) for x in edges]
         weights = list(weights)
         return make_response(jsonify({"edges": edges, "weights": weights}), HTTPStatus.OK, {"Content-Type": "application/json"})
@@ -665,10 +666,10 @@ def leiden_put(request, data_adaptor):
     args = request.get_json()
     name = args.get("name", None)
     cName = args.get("cName", None)
-    resolution = args.get('resolution')
-
+    resolution = args.get('resolution',1.0)
+    filter = args.get('filter',None)
     try:
-        cl = list(data_adaptor.compute_leiden(name,cName,resolution))
+        cl = list(data_adaptor.compute_leiden(name,cName,resolution,filter))
         return make_response(jsonify({"clusters": cl}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))

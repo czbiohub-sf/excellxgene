@@ -360,14 +360,20 @@ class AnndataAdaptor(DataAdaptor):
         full_embedding = self.data.obsm[f"X_{ename}"]
         return full_embedding[:, 0:dims]
     
-    def compute_leiden(self,name,cName,resolution):
+    def compute_leiden(self,name,cName,resolution,obsFilter):
         nnm = self.data.uns.get('N_'+name,None)
+        try:
+            shape = self.get_shape()
+            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
+        except (KeyError, IndexError):
+            raise FilterError("Error parsing filter")          
         if nnm is None:
-            nnm = self.data.obsp['connectivities']
-            mask = np.array([True]*nnm.shape[0])
+            nnm = self.data.obsp['connectivities']          
+            nnm = nnm[obs_mask][:,obs_mask]
+            
         else:
-            mask = self.data.uns['N_'+name+'_mask']
-            nnm = nnm[mask][:,mask]        
+            nnm = nnm[obs_mask][:,obs_mask]
+   
         X = nnm
 
         import igraph as ig
@@ -390,21 +396,27 @@ class AnndataAdaptor(DataAdaptor):
             g, leidenalg.RBConfigurationVertexPartition, resolution_parameter=resolution,seed=0
         )
         result = np.array(cl.membership)
-        clusters = np.array(["unassigned"]*mask.size,dtype='object')
-        clusters[mask] = result.astype('str')
+        clusters = np.array(["unassigned"]*obs_mask.size,dtype='object')
+        clusters[obs_mask] = result.astype('str')
         
         self.data.obs[cName] = pd.Categorical(clusters)  
         self._save_orig_data(action = "obs", key = cName)
         return result      
 
-    def compute_sankey_df(self, labels, name):
+    def compute_sankey_df(self, labels, name,obsFilter):
         nnm = self.data.uns.get('N_'+name,None)
+        try:
+            shape = self.get_shape()
+            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
+        except (KeyError, IndexError):
+            raise FilterError("Error parsing filter")          
         if nnm is None:
-            nnm = self.data.obsp['connectivities']
+            nnm = self.data.obsp['connectivities']          
+            nnm = nnm[obs_mask][:,obs_mask]
+            
         else:
-            mask = self.data.uns['N_'+name+'_mask']
-            nnm = nnm[mask][:,mask]
-        nnm = (nnm+nnm.T)/2
+            nnm = nnm[obs_mask][:,obs_mask]
+
         
         cl=[]
         clu = []

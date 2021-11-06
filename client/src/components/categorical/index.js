@@ -71,9 +71,9 @@ class Categories extends React.Component {
     this.setState({ createAnnoModeActive: true });
   };
   handleLeidenClustering = () => {
-    const { dispatch, layoutChoice, resolution, obsCrossfilter: prevObsCF } = this.props
-    dispatch(actions.requestLeiden()).then(val => {
-      const name = `leiden_${layoutChoice.current}_res${Math.round((resolution+Number.EPSILON)*1000)/1000.0}`
+    const { dispatch, obsCrossfilter: prevObsCF } = this.props
+    dispatch(actions.requestLeiden()).then(item => {
+      const [val,name] = item;
       let prevObsCrossfilter;
       if (prevObsCF.annoMatrix.schema.annotations.obsByName[name]) {
         prevObsCrossfilter = prevObsCF.dropObsColumn(name);
