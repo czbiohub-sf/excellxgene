@@ -41,7 +41,6 @@ def diffexp_ttest(adaptor, maskA, maskB, top_n=8, diffexp_lfc_cutoff=0.01):
 
 
 def diffexp_ttest_from_mean_var(meanA, varA, nA, meanB, varB, nB, top_n, diffexp_lfc_cutoff):
-    print(np.sort(meanA.flatten())[-100:].mean(),np.sort(varA.flatten())[-100:].mean(),nA,np.sort(meanB.flatten())[-100:].mean(),np.sort(varB.flatten())[-100:].mean(),nB)
     n_var = meanA.shape[0]
     top_n = min(top_n, n_var)
 
