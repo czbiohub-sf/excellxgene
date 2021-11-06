@@ -404,6 +404,11 @@ class AnndataAdaptor(DataAdaptor):
         return result      
 
     def compute_sankey_df(self, labels, name,obsFilter):
+        def reducer(a, b):
+            result_a, inv_ndx = np.unique(a, return_inverse=True)
+            result_b = np.bincount(inv_ndx, weights=b)
+            return result_a, result_b        
+
         nnm = self.data.uns.get('N_'+name,None)
         try:
             shape = self.get_shape()
@@ -417,66 +422,59 @@ class AnndataAdaptor(DataAdaptor):
         else:
             nnm = nnm[obs_mask][:,obs_mask]
 
-        
+            
         cl=[]
         clu = []
         for i,c in enumerate(labels):
             cl.append(np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c]))
-            clu.append(np.unique(cl[-1],return_counts=True))
-        
+            clu.append(np.unique(cl[-1]))
+
         ps = []
         cs = []
         for i,cl1 in enumerate(cl[:-1]):
             j = i+1
             cl2 = cl[i+1]
-            clu1,cluc1 = clu[i]
-            clu2,cluc2 = clu[j]
-            ac = pd.Series(index=clu1,data=cluc1)
-            bc = pd.Series(index=clu2,data=cluc2)
-
-            ixer1 = pd.Series(data=np.arange(clu1.size),index=clu1)
-            ixer2 = pd.Series(data=np.arange(clu2.size),index=clu2)
 
             xi,yi = nnm.nonzero()
             di = nnm.data
-
-            px,py = cl1[xi],cl2[yi]
-            filt = np.logical_and(px != "unassigned",py != "unassigned")
-            px = px[filt]
-            py = py[filt]
-            dif = di[filt]
-
-            p = px.astype('str').astype('object')+';'+py.astype('str').astype('object')
-
-            valdict = _to_dict(p,dif)
-            cluster_scores = [valdict[k].sum()/ac[k.split(';')[0]] for k in valdict.keys()]
-
-            xc,yc = np.vstack([k.split(';') for k in valdict.keys()]).T
-            xc=ixer1[xc].values
-            yc=ixer2[yc].values
+            px,py = xi,cl2[yi]
+            clu2 = clu[j]
+            clu1 = clu[i]
             
-            CSIM = sp.sparse.coo_matrix((cluster_scores,(xc,yc)),shape=(clu1.size,clu2.size)).A
+            
+            p = px.astype('str').astype('object')+';'+py.astype('object')
+            keys,cell_scores = reducer(p,di)
+            
+            ixer = pd.Series(data=np.arange(clu2.size),index=clu2)
+            xc,yc = np.vstack([k.split(';') for k in keys]).T
+            xc = xc.astype('int')
+            yc=ixer[yc].values
+            cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu2.size)).A
+
+            CSIM = np.zeros((clu1.size, clu2.size))
+            for k, c in enumerate(clu1):
+                CSIM[k, :] = cell_cluster_scores[cl1==c].mean(0)
 
 
             xi,yi = nnm.nonzero()
             di = nnm.data
+            px,py = xi,cl1[yi]
+            clu2 = clu[j]
+            clu1 = clu[i]
 
-            px,py = cl2[xi],cl1[yi]
-            filt = np.logical_and(px != "unassigned",py != "unassigned")
-            px = px[filt]
-            py = py[filt]
-            dif = di[filt]
-
-            p = px.astype('str').astype('object')+';'+py.astype('str').astype('object')
-
-            valdict = _to_dict(p,dif)
-            cluster_scores = [valdict[k].sum()/bc[k.split(';')[0]] for k in valdict.keys()]
-
-            xc,yc = np.vstack([k.split(';') for k in valdict.keys()]).T
-            xc=ixer2[xc].values
-            yc=ixer1[yc].values
+            p = px.astype('str').astype('object')+';'+py.astype('object')
             
-            CSIM2 = sp.sparse.coo_matrix((cluster_scores,(xc,yc)),shape=(clu2.size,clu1.size)).A
+            keys,cell_scores = reducer(p,di)
+            
+            ixer = pd.Series(data=np.arange(clu1.size),index=clu1)
+            xc,yc = np.vstack([k.split(';') for k in keys]).T
+            xc = xc.astype('int')
+            yc=ixer[yc].values
+            cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu1.size)).A
+
+            CSIM2 = np.zeros((clu2.size, clu1.size))
+            for k, c in enumerate(clu2):
+                CSIM2[k, :] = cell_cluster_scores[cl2==c].mean(0)
 
 
             CSIM = np.stack((CSIM,CSIM2.T),axis=2).min(2)
@@ -488,8 +486,7 @@ class AnndataAdaptor(DataAdaptor):
 
         ps = np.vstack(ps)
         cs = np.concatenate(cs)
-        return ps,cs
-    
+        return ps,cs    
     
     def compute_preprocess(self, reembedParams):
         self.data.obsm["X_root"] = np.zeros(self.data.obsm["X_root"].shape)+0.5
@@ -923,17 +920,3 @@ class AnndataAdaptor(DataAdaptor):
     def get_var_keys(self):
         # return list of keys
         return self.data.var.keys().to_list()
-
-def _to_dict(index,vals):
-    a = np.array(list(index))
-    b = np.array(list(vals))
-    idx = np.argsort(a)
-    a = a[idx]
-    b = b[idx]
-    bounds = np.where(a[:-1] != a[1:])[0] + 1
-    bounds = np.append(np.append(0, bounds), a.size)
-    bounds_left = bounds[:-1]
-    bounds_right = bounds[1:]
-    slists = [b[bounds_left[i] : bounds_right[i]] for i in range(bounds_left.size)]
-    d = dict(zip(np.unique(a), slists))
-    return d
