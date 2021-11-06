@@ -234,6 +234,7 @@ class Sankey extends React.Component {
         node.strokeColor = darkenColor(fillColor, nodeDarkenFactor);
         node.width = node.x1 - node.x0;
         node.height = node.y1 - node.y0;
+        node.depth = parseInt(node.id.split('_').at(0).slice(-1))
     });
     
     // Build the links.
