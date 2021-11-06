@@ -658,6 +658,7 @@ function fetchJson(pathAndQuery) {
 }
 
 export default {
+  prefetchEmbeddings,
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,
   doInitialDataLoad,

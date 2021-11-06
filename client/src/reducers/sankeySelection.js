@@ -8,7 +8,8 @@ const SankeySelection = (
          cachedSankey: {},
          currCacheKey: null,
          maxLink: 0,
-         selectedCategories: []},
+         selectedCategories: [],
+        alignmentThreshold: 0},
   action
 ) => {
   switch (action.type) {
@@ -61,6 +62,13 @@ const SankeySelection = (
       state.numChecked = numCheckedNow
       return state;
     }    
+    case "sankey: set alignment score threshold": {
+      const { threshold } = action;
+      return {
+        ...state,
+        alignmentThreshold: threshold
+      }
+    }
     case "sankey: set data": {
       const { data } = action;
       state.sankeyData = data;
@@ -107,7 +115,15 @@ const SankeySelection = (
       }
     }    
     case "sankey: reset": {
-      return state={selectedCategories: [],dataRefresher: false, cachedSankey: state.cachedSankey, displaySankey: false, categories: {}, sankeyData: null, refresher: false, numChecked: 0, currCacheKey: null};
+      return state={selectedCategories: [],
+                    dataRefresher: false,
+                    cachedSankey: state.cachedSankey,
+                    alignmentThreshold: 0,
+                    displaySankey: false, categories: {},
+                    sankeyData: null,
+                    refresher: false,
+                    numChecked: 0,
+                    currCacheKey: null};
     }    
     default:
       return state;

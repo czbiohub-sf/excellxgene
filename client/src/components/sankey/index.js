@@ -10,6 +10,7 @@ import { width } from "../scatterplot/util";
     displaySankey: state.sankeySelection.displaySankey,
     sankeyData: state.sankeySelection.sankeyData,
     refresher: state.sankeySelection.dataRefresher,
+    alignmentThreshold: state.sankeySelection.alignmentThreshold
 }))
 class Sankey extends React.Component {
   constructor(props) {
@@ -25,20 +26,22 @@ class Sankey extends React.Component {
   }
 
   handleSankey = () => {
-    const { dispatch } = this.props;
+    const { dispatch, alignmentThreshold: threshold } = this.props;
     const prom = dispatch(requestSankey());
     const links = []
     const nodes = []
     prom.then((res) => {
       let n = []
       res.edges.forEach(function (item, index) {
-        links.push({
-          source: item[0],
-          target: item[1],
-          value: res.weights[index]
-        })
-        n.push(item[0])
-        n.push(item[1])
+        if (res.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
+          links.push({
+            source: item[0],
+            target: item[1],
+            value: res.weights[index]
+          })
+          n.push(item[0])
+          n.push(item[1])
+        }
       });   
       n = n.filter((item, i, ar) => ar.indexOf(item) === i);
 
@@ -47,7 +50,6 @@ class Sankey extends React.Component {
           id: item
         })
       })
-      
       const data = {links: links, nodes: nodes}
       dispatch({type: "sankey: set data",data: data})
       this.constructSankey()
@@ -256,7 +258,7 @@ class Sankey extends React.Component {
     
     // Add hover effect to links.
     svgLinks.append("title")
-            .text(d => `${d.source.id.substring(3)} ${arrow} ${d.target.id.substring(3)}\n${d.value}`);
+            .text(d => `${d.source.id.split('_').slice(1).join('_')} ${arrow} ${d.target.id.split('_').slice(1).join('_')}\n${d.value}`);
 
     let svgNodes = svg.append("g")
                       .classed("nodes", true)
@@ -305,7 +307,7 @@ class Sankey extends React.Component {
     .attr("y", d => (d.y1 + d.y0) / 2)
     .attr("dy", "0.35em")
     .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
-    .text(d => d.id.substring(3))
+    .text(d => d.id.split('_').slice(1).join('_'))
   }
 
   handleResize = () => {
@@ -321,8 +323,9 @@ class Sankey extends React.Component {
   };
   componentDidUpdate(prevProps) {
     const { layoutChoice, refresher } = this.props
-    if (layoutChoice.current !== prevProps.layoutChoice.current ||
-        refresher !== prevProps.refresher) {
+    if (layoutChoice.current !== prevProps.layoutChoice.current){
+      this.handleSankey()
+    } else if(refresher !== prevProps.refresher) {
       this.constructSankey()
     }
   }

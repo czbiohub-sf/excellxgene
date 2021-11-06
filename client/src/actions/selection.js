@@ -248,7 +248,15 @@ export const setCellsFromSelectionAndInverseAction = () => async (
   const arr = new Array(annoMatrix.nObs);
   prevObsCrossfilter.fillByIsSelected(arr, false, true);
 
-  const unselected = [...arr.keys()].filter((i) => arr[i]);
+  let cells = annoMatrix.rowIndex.labels();
+  cells = Array.isArray(cells) ? cells : Array.from(cells);
+  
+  const unselected = []
+  for (const [i,val] of arr.entries()){
+    if (val){
+      unselected.push(cells[i])
+    }
+  }
   dispatch(setCellSetFromSelection(1));
   dispatch(setCellSetFromInputArray(2, unselected));
 };
@@ -259,7 +267,6 @@ Differential expression set selection
 export const setCellSetFromSelection = (cellSetId) => (dispatch, getState) => {
   const { obsCrossfilter } = getState();
   const selected = obsCrossfilter.allSelectedLabels();
-
   dispatch({
     type: `store current cell selection as differential set ${cellSetId}`,
     data: selected.length > 0 ? selected : null,

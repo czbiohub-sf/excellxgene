@@ -716,7 +716,6 @@ def reembed_parameters_get(request, data_adaptor):
     try:
         annotations = data_adaptor.dataset_config.user_annotations
         (reembedParams) = annotations.read_reembed_parameters(data_adaptor)
-
         return make_response(
             jsonify({"reembedParams": reembedParams}), HTTPStatus.OK
         )
@@ -732,9 +731,24 @@ def reembed_parameters_obsm_put(request, data_adaptor):
             del reembedParams['parentParams']
         except:
             pass
+        try:
+            del reembedParams['sample_ids']
+        except:
+            pass
+        try:
+            del reembedParams['feature_ids']
+        except:
+            pass
+        try:
+            del reembedParams['feature_weights']
+        except:
+            pass
 
     try:
         if reembedParams is not None:
+            for k in reembedParams.keys():
+                if type(reembedParams[k]).__module__ == 'numpy':
+                    reembedParams[k] = reembedParams[k].item()
             return make_response(
                 jsonify({"reembedParams": reembedParams}), HTTPStatus.OK
             )

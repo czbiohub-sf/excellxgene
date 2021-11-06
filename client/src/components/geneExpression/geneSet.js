@@ -12,13 +12,11 @@ import GenesetMenus from "./menus/genesetMenus";
 import EditGenesetNameDialogue from "./menus/editGenesetNameDialogue";
 import HistogramBrush from "../brushableHistogram";
 
-@connect((state, ownProps) => {
+@connect((state) => {
   return {
-    colorAccessor: state.colors.colorAccessor,
     world: state.world,
     userDefinedGenes: state.controls.userDefinedGenes,
     userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
-    isColorAccessor: state.colors.colorAccessor === ownProps.setName,
   };
 })
 class GeneSet extends React.Component {
@@ -31,7 +29,7 @@ class GeneSet extends React.Component {
       genePage: 0,
       maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1,
       removeHistZeros: false,
-      queryGene: ""
+      queryGene: "",
     };
   }
 
@@ -108,11 +106,6 @@ class GeneSet extends React.Component {
     this.setState({ isOpen: !isOpen });
   };
 
-  onColorChangeClick = () => {
-    const { dispatch } = this.props;
-    const { queryGene } = this.state;
-    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(queryGene));
-  };
 
   renderGenes() {
     const { setName, setGenes, setGenesWithDescriptions } = this.props;
@@ -134,11 +127,10 @@ class GeneSet extends React.Component {
   }
 
   render() {
-    const { setName, setGenes, genesetDescription, displayLabel, colorAccessor } = this.props;
+    const { setName, setGenes, genesetDescription, displayLabel } = this.props;
     const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
-    const isColorAccessor = queryGene === colorAccessor;
 
     return (
       <div style={{ marginBottom: 3 }}>
@@ -255,16 +247,6 @@ class GeneSet extends React.Component {
             geneComplete
             popoverProps={null}
           />          
-
-          <Button
-            minimal
-            small
-            onClick={this.onColorChangeClick}
-            active={isColorAccessor}
-            intent={isColorAccessor ? "primary" : "none"}
-            icon={<Icon icon="tint" iconSize={12} />}
-          />   
-
           </div>    
           <hr/>
           </div>                               

@@ -14,6 +14,7 @@ import Reembedding from "./reembedding";
 import Preprocessing from "./preprocessing";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
+import { dispatch } from "d3-dispatch";
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -112,7 +113,7 @@ class MenuBar extends React.PureComponent {
       prom.then((res) => {
         let n = []
         res.edges.forEach(function (item, index) {
-          if (res.weights[index] > threshold){
+          if (res.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
             links.push({
               source: item[0],
               target: item[1],
@@ -222,7 +223,9 @@ class MenuBar extends React.PureComponent {
     })
   }
   onRelease = (value) => {
+    dispatch({type: "sankey: set alignment score threshold", threshold: value})
     this.handleSankey(value,false)
+    
   }
   handleClipPercentileMaxValueChange = (v) => {
     /*

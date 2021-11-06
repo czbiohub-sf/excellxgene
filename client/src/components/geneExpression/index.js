@@ -9,7 +9,7 @@ import actions from "../../actions";
 import Truncate from "../util/truncate"
 import CreateGenesetDialogue from "./menus/createGenesetDialogue";
 import * as globals from "../../globals";
-import { AnnoMatrixLoader } from "../../annoMatrix";
+import { AnnoMatrixLoader, AnnoMatrixObsCrossfilter } from "../../annoMatrix";
 import QuickGene from "./quickGene";
 
 @connect((state) => {
@@ -24,7 +24,7 @@ import QuickGene from "./quickGene";
 class GeneExpression extends React.Component {
   constructor(props){
     super(props);
-    this.state={geneSetsExpanded: false};
+    this.state={geneSetsExpanded: true};
   }
 
   renderGeneSets = () => {
@@ -102,9 +102,12 @@ class GeneExpression extends React.Component {
       dispatch(actions.requestDataLayerChange(reembedParams.dataLayerExpr)).then(()=>{
         const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
         const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
+        const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
+        actions.prefetchEmbeddings(annoMatrixNew);
         dispatch({
-          type: "",
-          annoMatrix: annoMatrixNew
+          type: "annoMatrix: init complete",
+          annoMatrix: annoMatrixNew,
+          obsCrossfilter: obsCrossfilterNew
         });      
       })
     }
@@ -143,7 +146,6 @@ class GeneExpression extends React.Component {
               role="menuitem"
               tabIndex="0"
               data-testclass="geneset-heading-expand"
-              onKeyPress={this.handleExpandGeneSets}
               style={{
                 cursor: "pointer",
               }}

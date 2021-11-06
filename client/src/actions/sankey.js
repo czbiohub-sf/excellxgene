@@ -39,8 +39,8 @@ async function doSankeyFetch(dispatch, getState) {
     if (catNames.length === 2){
       catNames.sort()
     }
-    
-    dispatch({type: "sankey: set current cache key", key: catNames.join(";")})
+
+    dispatch({type: "sankey: set current cache key", key: `${catNames.join(";")}_${layoutChoice.current}`})
     if (catNames.join(";") in cachedSankey) {
       return [cachedSankey[catNames.join(";")],catNames]
     }
@@ -84,7 +84,7 @@ async function doSankeyFetch(dispatch, getState) {
 export function requestSankey() {
     return async (dispatch, getState) => {
       try {
-
+        const { layoutChoice } = getState();
         const [sankey,catNames] = await doSankeyFetch(dispatch, getState);
         dispatch({
           type: "sankey: request completed",
@@ -92,7 +92,7 @@ export function requestSankey() {
         dispatch({
           type: "sankey: cache results",
           sankey,
-          key: catNames.join(";")
+          key: `${catNames.join(";")}_${layoutChoice.current}`
         })
         return sankey      
       } catch (error) {

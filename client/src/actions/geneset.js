@@ -16,7 +16,7 @@ The behavior manifest in these action creators:
     Add a gene to a gene set, will:
       * drop index & clear selection state on the gene set summary
       * will NOT touch the selection state for the gene
-  
+  d
 Note that crossfilter indices are lazy created, as needed.
 */
 export const genesetDelete = (genesetName) => (dispatch, getState) => {
@@ -25,6 +25,9 @@ export const genesetDelete = (genesetName) => (dispatch, getState) => {
   const gs = genesets?.genesets?.get(genesetName) ?? {};
   const geneSymbols = Array.from(gs.genes.keys());
   const obsCrossfilter = dropGeneset(dispatch, state, genesetName, geneSymbols);
+  dispatch({
+    type: "color by nothing"
+  });  
   dispatch({
     type: "geneset: delete",
     genesetName,
@@ -44,7 +47,9 @@ export const genesetDeleteGroup = (genesetGroup) => (dispatch, getState) => {
     }
   }
   const obsCrossfilter = dropGenesets(dispatch, state, keys, geneSymbolsAll);
-  
+  dispatch({
+    type: "color by nothing"
+  });  
   dispatch({
     type: "geneset: batch delete",
     genesetNames: keys,

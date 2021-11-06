@@ -48,7 +48,8 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
     sankeySelected: state.sankeySelection.categories?.[metadataField] ?? false,
     displaySankey: state.sankeySelection.displaySankey,
     selectedCategories: state.sankeySelection.selectedCategories,
-    numChecked: state.sankeySelection.numChecked
+    numChecked: state.sankeySelection.numChecked,
+    sankeyController: state.sankeyController
   };
 })
 class Category extends React.PureComponent {
@@ -320,8 +321,12 @@ class Category extends React.PureComponent {
       annoMatrix,
       isUserAnno,
       sankeySelected,
-      layoutChoiceSankey
+      layoutChoiceSankey,
+      sankeyController
     } = this.props;
+    
+    const sankeyLoading = !!sankeyController?.pendingFetch;
+    
     const { colorMode } = colors;
     const continuousColoring = (colorMode === "color by continuous metadata" || colorMode === "color by geneset mean expression" || colorMode =="color by expression")
     const checkboxID = `category-select-${metadataField}`;
@@ -397,7 +402,8 @@ class Category extends React.PureComponent {
                       removeHistZeros: !removeHistZeros
                     })
                   }}               
-                  indexOfSankeyCategory={indexOfSankeyCategory}    
+                  indexOfSankeyCategory={indexOfSankeyCategory}
+                  sankeyLoading={sankeyLoading}    
                 />
               );
             }}
@@ -501,7 +507,8 @@ const CategoryHeader = React.memo(
     sortDirection,
     removeHistZeros,
     histToggler,
-    indexOfSankeyCategory
+    indexOfSankeyCategory,
+    sankeyLoading
   }) => {
     /*
     Render category name and controls (eg, color-by button).
@@ -652,7 +659,7 @@ const CategoryHeader = React.memo(
                 ref={checkboxSankeyRef}
                 checked={sankeySelected}
                 type="checkbox"
-                disabled={layoutChoiceSankey}
+                disabled={layoutChoiceSankey || sankeyLoading}
             />  
           </Tooltip>     
           {indexOfSankeyCategory > -1 ? indexOfSankeyCategory+1 : null}
@@ -690,7 +697,8 @@ const CategoryRender = React.memo(
     continuousAverages,
     removeHistZeros,
     histToggler,
-    indexOfSankeyCategory
+    indexOfSankeyCategory,
+    sankeyLoading
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -746,6 +754,7 @@ const CategoryRender = React.memo(
             removeHistZeros={removeHistZeros}
             histToggler={histToggler}
             indexOfSankeyCategory={indexOfSankeyCategory}
+            sankeyLoading={sankeyLoading}
           />
         </div>
         <div style={{ marginLeft: 26 }}>
