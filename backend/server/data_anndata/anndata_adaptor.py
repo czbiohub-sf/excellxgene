@@ -408,7 +408,15 @@ class AnndataAdaptor(DataAdaptor):
             result_a, inv_ndx = np.unique(a, return_inverse=True)
             result_b = np.bincount(inv_ndx, weights=b)
             return result_a, result_b        
-
+        def cantor(a,b):
+            return ((a+b)*(a+b+1)/2+b).astype('int')
+        def inv_cantor(z):
+            w = np.floor((np.sqrt(8*z + 1) - 1)/2)
+            t = (w**2 + w)/2
+            y = (z-t).astype('int')
+            x = (w-y).astype('int')
+            return x,y
+        
         nnm = self.data.uns.get('N_'+name,None)
         try:
             shape = self.get_shape()
@@ -418,76 +426,102 @@ class AnndataAdaptor(DataAdaptor):
         if nnm is None:
             nnm = self.data.obsp['connectivities']          
             nnm = nnm[obs_mask][:,obs_mask]
-            
+
         else:
             nnm = nnm[obs_mask][:,obs_mask]
 
-            
         cl=[]
         clu = []
+        rixers=[]
+        unassigned_ints=[];
         for i,c in enumerate(labels):
-            cl.append(np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c]))
-            clu.append(np.unique(cl[-1]))
+            cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])
+            clu0,cluc0 = np.unique(cl0,return_counts=True)
+            ix = pd.Series(index=clu0,data=np.arange(clu0.size))
+            cl0 = ix[cl0].values
+            ll = np.arange(clu0.size)[clu0=="A"+str(i)+"_unassigned"]
+            if ll.size > 0:
+                unassigned_ints.append(ll[0])
+            else:
+                unassigned_ints.append(-1)
+                
+            rixers.append(pd.Series(data=clu0,index=np.arange(clu0.size)))                     
+            clu0 = np.arange(clu0.size)
+            clu.append((clu0,cluc0))
+            cl.append(cl0)
 
         ps = []
         cs = []
         for i,cl1 in enumerate(cl[:-1]):
             j = i+1
             cl2 = cl[i+1]
+            clu1,cluc1 = clu[i]
+            clu2,cluc2 = clu[j]
+            uint1 = unassigned_ints[i]
+            uint2 = unassigned_ints[j]
+            rixer1 = rixers[i]
+            rixer2 = rixers[j]        
+            
+            ac = pd.Series(index=clu1,data=cluc1)
+            bc = pd.Series(index=clu2,data=cluc2)
+
+            ixer1 = pd.Series(data=np.arange(clu1.size),index=clu1)
+            ixer2 = pd.Series(data=np.arange(clu2.size),index=clu2)
 
             xi,yi = nnm.nonzero()
             di = nnm.data
-            px,py = xi,cl2[yi]
-            clu2 = clu[j]
-            clu1 = clu[i]
-            
-            
-            p = px.astype('str').astype('object')+';'+py.astype('object')
-            keys,cell_scores = reducer(p,di)
-            
-            ixer = pd.Series(data=np.arange(clu2.size),index=clu2)
-            xc,yc = np.vstack([k.split(';') for k in keys]).T
-            xc = xc.astype('int')
-            yc=ixer[yc].values
-            cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu2.size)).A
 
-            CSIM = np.zeros((clu1.size, clu2.size))
-            for k, c in enumerate(clu1):
-                CSIM[k, :] = cell_cluster_scores[cl1==c].mean(0)
+            px,py = cl1[xi],cl2[yi]
+            filt = np.logical_and(px != uint1,py != uint2)
+            px = px[filt]
+            py = py[filt]
+            dif = di[filt]
+
+            p = cantor(px,py)
+
+            keys,cluster_scores = reducer(p,dif)
+            xc,yc = inv_cantor(keys)
+            cluster_scores = cluster_scores / ac[xc].values
+
+            xc=ixer1[xc].values
+            yc=ixer2[yc].values
+
+            CSIM = sp.sparse.coo_matrix((cluster_scores,(xc,yc)),shape=(clu1.size,clu2.size)).A
 
 
             xi,yi = nnm.nonzero()
             di = nnm.data
-            px,py = xi,cl1[yi]
-            clu2 = clu[j]
-            clu1 = clu[i]
 
-            p = px.astype('str').astype('object')+';'+py.astype('object')
-            
-            keys,cell_scores = reducer(p,di)
-            
-            ixer = pd.Series(data=np.arange(clu1.size),index=clu1)
-            xc,yc = np.vstack([k.split(';') for k in keys]).T
-            xc = xc.astype('int')
-            yc=ixer[yc].values
-            cell_cluster_scores = sp.sparse.coo_matrix((cell_scores,(xc,yc)),shape=(nnm.shape[0],clu1.size)).A
+            px,py = cl2[xi],cl1[yi]
+            filt = np.logical_and(px != uint2,py != uint1)
+            px = px[filt]
+            py = py[filt]
+            dif = di[filt]
 
-            CSIM2 = np.zeros((clu2.size, clu1.size))
-            for k, c in enumerate(clu2):
-                CSIM2[k, :] = cell_cluster_scores[cl2==c].mean(0)
+            p = cantor(px,py)
+
+            keys,cluster_scores = reducer(p,dif)
+            xc,yc = inv_cantor(keys)
+            cluster_scores = cluster_scores / bc[xc].values
+
+
+            xc=ixer2[xc].values
+            yc=ixer1[yc].values
+
+            CSIM2 = sp.sparse.coo_matrix((cluster_scores,(xc,yc)),shape=(clu2.size,clu1.size)).A
 
 
             CSIM = np.stack((CSIM,CSIM2.T),axis=2).min(2)
             x,y = CSIM.nonzero()
             d = CSIM[x,y]
-            x,y = clu1[x],clu2[y]
+            x,y = rixer1[clu1[x]].values,rixer2[clu2[y]].values
             ps.append(np.vstack((x,y)).T)
             cs.append(d)
 
         ps = np.vstack(ps)
         cs = np.concatenate(cs)
-        return ps,cs    
-    
+        return ps,cs
+        
     def compute_preprocess(self, reembedParams):
         self.data.obsm["X_root"] = np.zeros(self.data.obsm["X_root"].shape)+0.5
         
