@@ -41,8 +41,8 @@ async function doSankeyFetch(dispatch, getState) {
     }
 
     dispatch({type: "sankey: set current cache key", key: `${catNames.join(";")}_${layoutChoice.current}`})
-    if (catNames.join(";") in cachedSankey) {
-      return [cachedSankey[catNames.join(";")],catNames]
+    if (`${catNames.join(";")}_${layoutChoice.current}` in cachedSankey) {
+      return [cachedSankey[`${catNames.join(";")}_${layoutChoice.current}`],catNames]
     }
 
     const af = abortableFetch(

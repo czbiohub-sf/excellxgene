@@ -116,7 +116,7 @@ class Embedding extends React.PureComponent {
       })
       dispatch(actions.reembedParamsObsmFetch(e.currentTarget.value));
       dispatch(actions.layoutChoiceAction(e.currentTarget.value));
-      
+      dispatch({type: "sankey: set alignment score threshold", threshold: 0})
     } 
   };
 

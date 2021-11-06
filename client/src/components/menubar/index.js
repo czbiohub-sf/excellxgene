@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, InputGroup, Text, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, InputGroup, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -68,7 +68,8 @@ function HotkeysDialog(props) {
     sankeyController: state.sankeyController,
     currCacheKey: state.sankeySelection.currCacheKey,
     cachedSankey: state.sankeySelection.cachedSankey,
-    maxLink: state.sankeySelection.maxLink
+    maxLink: state.sankeySelection.maxLink,
+    alignmentThreshold: state.sankeySelection.alignmentThreshold
   };
 })
 class MenuBar extends React.PureComponent {
@@ -100,7 +101,8 @@ class MenuBar extends React.PureComponent {
     super(props);
     this.state = {
       pendingClipPercentiles: null,
-      saveName: ""
+      saveName: "",
+      threshold: 0,
     };
   }
 
@@ -135,22 +137,32 @@ class MenuBar extends React.PureComponent {
         dispatch({type: "sankey: set data",data: data})
         if (reset){
           dispatch({type: "toggle sankey"})
+          dispatch({type: "sankey: set alignment score threshold", threshold: 0})   
           this.setState({
             ...this.state,
-            alignmentThreshold: 0
-          })          
+            threshold: 0
+          })
         }
       })      
     } else {
       dispatch({type: "sankey: reset"})
       dispatch({type: "toggle sankey"})
+      dispatch({type: "sankey: set alignment score threshold", threshold: 0})
       this.setState({
         ...this.state,
-        alignmentThreshold: 0
-      })
+        threshold: 0
+      })      
     }
 
   };
+  componentDidUpdate = (prevProps) => {
+    if (this.props.layoutChoice.current !== prevProps.layoutChoice.current){
+      this.setState({
+        ...this.state,
+        threshold: 0
+      })
+    }
+  }
   handleSaveData = () => {
     const { dispatch } = this.props;
     const { saveName } = this.state;
@@ -217,15 +229,21 @@ class MenuBar extends React.PureComponent {
       pendingClipPercentiles: { clipPercentileMin, clipPercentileMax },
     });
   };
-  getChangeHandler = ( key ) => {
-    return ((value) => {
-      this.setState({ [key]: value})
-    })
+  onSliderChange = ( value ) => {
+    dispatch({type: "sankey: set alignment score threshold", threshold: value})
+    this.setState({
+      ...this.state,
+      threshold: value
+    })    
   }
+
   onRelease = (value) => {
     dispatch({type: "sankey: set alignment score threshold", threshold: value})
     this.handleSankey(value,false)
-    
+    this.setState({
+      ...this.state,
+      threshold: value
+    })    
   }
   handleClipPercentileMaxValueChange = (v) => {
     /*
@@ -312,7 +330,7 @@ class MenuBar extends React.PureComponent {
       cachedSankey,
       maxLink
     } = this.props;
-    const { pendingClipPercentiles, saveName } = this.state;
+    const { pendingClipPercentiles, saveName, threshold } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
     const loading = !!outputController?.pendingFetch;
     const loadingSankey = !!sankeyController?.pendingFetch;
@@ -567,8 +585,8 @@ class MenuBar extends React.PureComponent {
             labelStepSize={maxLink}
             showTrackFill={false}
             onRelease={this.onRelease}
-            onChange={this.getChangeHandler("alignmentThreshold")}
-            value={this.state?.alignmentThreshold ?? 0}
+            onChange={this.onSliderChange}
+            value={threshold}
           /> </div></div>: null}         
       </div>
     );

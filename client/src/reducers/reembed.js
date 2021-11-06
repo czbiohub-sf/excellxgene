@@ -104,8 +104,9 @@ export const reembedParameters = (state = defaultReembedParams, action) => {
   switch (action.type) {
     case "reembed: load": {
       const { dataLayerExpr: layerExpr } = state;
-      const { dataLayerExpr: _, ...params} = action;
-      return {...params, dataLayerExpr: layerExpr};
+      const { params} = action;
+      const {dataLayerExpr: _, ...newParams} = params;
+      return {...newParams, dataLayerExpr: layerExpr};
     }
     case "reembed: set parameter": {
       const { batchPrepParams, batchPrepKey, batchPrepLabel } = state;
