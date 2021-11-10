@@ -3,7 +3,7 @@ from scipy import sparse, stats
 import sklearn.utils.sparsefuncs as sf
 
 
-def diffexp_ttest(adaptor, maskA, maskB, top_n=8, diffexp_lfc_cutoff=0.01):
+def diffexp_ttest(dataA,dataB, top_n=8, diffexp_lfc_cutoff=0.01):
     """
     Return differential expression statistics for top N variables.
 
@@ -29,9 +29,6 @@ def diffexp_ttest(adaptor, maskA, maskB, top_n=8, diffexp_lfc_cutoff=0.01):
     absolute value returning [ varindex, logfoldchange, pval, pval_adj ] for top N genes
     :return:  for top N genes, {"positive": for top N genes, [ varindex, logfoldchange, pval, pval_adj ], "negative": for top N genes, [ varindex, logfoldchange, pval, pval_adj ]}
     """
-    dataA = adaptor.get_X_array(maskA, None)
-    dataB = adaptor.get_X_array(maskB, None)
-
     # mean, variance, N - calculate for both selections
     meanA, vA, nA = mean_var_n(dataA)
     meanB, vB, nB = mean_var_n(dataB)

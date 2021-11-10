@@ -44,6 +44,12 @@ const Controls = (
         allGenes: action.allGenes ?? null
       };
     }
+    case "init: set up websockets": {
+      return {
+        ...state,
+        [action.name]: action.ws
+      };
+    }    
     case "reset subset": {
       return {
         ...state,

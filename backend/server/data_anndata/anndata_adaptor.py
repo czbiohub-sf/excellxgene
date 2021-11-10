@@ -13,6 +13,7 @@ import time
 import os
 from glob import glob
 import backend.common.compute.diffexp_generic as diffexp_generic
+from flask import jsonify, request
 from backend.common.colors import convert_anndata_category_colors_to_cxg_category_colors
 from backend.common.constants import Axis, MAX_LAYOUTS
 from backend.server.common.corpora import corpora_get_props_from_anndata
@@ -21,6 +22,11 @@ from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_a
 from backend.server.compute.scanpy import get_scanpy_external_module, AnnData, get_samalg_module, get_scanpy_module
 from backend.server.data_common.data_adaptor import DataAdaptor
 from backend.common.fbs.matrix import encode_matrix_fbs
+from multiprocessing import Pool
+from functools import partial
+import backend.server.common.rest as common_rest
+import json
+from backend.common.utils.utils import jsonify_numpy
 
 anndata_version = version.parse(str(anndata.__version__)).release
 
@@ -30,8 +36,42 @@ def anndata_version_is_pre_070():
     minor = anndata_version[1] if len(anndata_version) > 1 else 0
     return major == 0 and minor < 7
 
+def _callback_fn(res,ws,cfn,data):
+    d = {"response": res,"cfn": cfn}
+    d.update(data)
+    ws.send(jsonify_numpy(d))
+
+def _multiprocessing_wrapper(ws,fn,cfn,data,*args):
+    _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data)
+    AnndataAdaptor.pool.apply_async(fn,args=args, callback=_new_callback_fn)
+
+def compute_diffexp_ttest(XA, XB, top_n, lfc_cutoff):
+    return diffexp_generic.diffexp_ttest(XA,XB,top_n, lfc_cutoff)
+
+
+def initialize_socket(da):
+    sock = da.socket
+    @sock.route("/diffexp")
+    def diffexp(ws):
+        while True:
+            data = ws.receive()
+            if data is not None:  
+                data = json.loads(data)
+                obsFilterA = data.get("set1", {"filter": {}})["filter"]
+                obsFilterB = data.get("set2", {"filter": {}})["filter"]
+                top_n = data.get("count", 100)
+                lfc_cutoff = 0.01
+                shape = da.get_shape()
+
+                obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
+                obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])    
+                XA = da.data.X[obs_mask_A]
+                XB = da.data.X[obs_mask_B]            
+                _multiprocessing_wrapper(ws,compute_diffexp_ttest, "diffexp",data,XA,XB,top_n,lfc_cutoff)
 
 class AnndataAdaptor(DataAdaptor):
+    pool = Pool(os.cpu_count(),maxtasksperchild=1)
+
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
@@ -521,7 +561,7 @@ class AnndataAdaptor(DataAdaptor):
         ps = np.vstack(ps)
         cs = np.concatenate(cs)
         return ps,cs
-        
+
     def compute_preprocess(self, reembedParams):
         self.data.obsm["X_root"] = np.zeros(self.data.obsm["X_root"].shape)+0.5
         
@@ -954,3 +994,4 @@ class AnndataAdaptor(DataAdaptor):
     def get_var_keys(self):
         # return list of keys
         return self.data.var.keys().to_list()
+

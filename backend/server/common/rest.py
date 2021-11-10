@@ -25,7 +25,7 @@ from backend.common.errors import (
 )
 from backend.common.genesets import summarizeQueryHash
 from backend.common.fbs.matrix import decode_matrix_fbs
-
+import dill
 
 def abort_and_log(code, logmsg, loglevel=logging.DEBUG, include_exc_info=False):
     """
@@ -259,11 +259,11 @@ def colors_get(data_adaptor):
         return abort_and_log(HTTPStatus.NOT_FOUND, str(e), include_exc_info=True)
 
 
-def diffexp_obs_post(request, data_adaptor):
+def diffexp_obs_post(data, data_adaptor):
     if not data_adaptor.dataset_config.diffexp__enable:
         return abort(HTTPStatus.NOT_IMPLEMENTED)
 
-    args = request.get_json()
+    args = data.get_json()
     try:
         # TODO: implement varfilter mode
         mode = DiffExpMode(args["mode"])

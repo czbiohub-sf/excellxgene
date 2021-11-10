@@ -373,13 +373,59 @@ export function requestReloadFullBackend() {
     }
   }
 }
-/*
-Application bootstrap
-*/
-const doInitialDataLoad = () =>
-  catchErrorsWrap(async (dispatch) => {
-    dispatch({ type: "initial data load start" });
 
+const setupWebSockets = (dispatch,getState) => {
+  const onMessage = (event) => {
+    const data = JSON.parse(event.data)
+
+    if (data.cfn === "diffexp"){
+      const { annoMatrix, genesets } = getState();
+      const { diffExpListsLists } = genesets;
+      const n = data?.nameList?.length-1 ?? -1
+      const varIndexName = annoMatrix.schema.annotations.var.index;
+
+      annoMatrix.fetch("var", varIndexName).then((varIndex)=>{
+        const diffexpLists = { negative: [], positive: [] };
+        for (const polarity of Object.keys(diffexpLists)) {
+          diffexpLists[polarity] = data.response[polarity].map((v) => [
+            varIndex.at(v[0], varIndexName),
+            ...v.slice(1),
+          ]);
+        }
+        if (!data?.multiplex) {
+          dispatch({
+            type: "request differential expression success",
+            data: diffexpLists,
+          });      
+        } else if (data?.multiplex && (diffExpListsLists.length+1) === n) {
+          diffExpListsLists.push(diffexpLists)
+          dispatch({
+            type: "request differential expression all success",
+            dataList: diffExpListsLists,
+            nameList: data.nameList,
+            dateString: new Date().toLocaleString(),
+            grouping: data.grouping,
+          });    
+          dispatch({type: "request differential expression all completed"})      
+        } else {
+          dispatch({
+            type: "request differential expression push list",
+            data: diffexpLists,
+          });              
+        }
+      });  
+    }
+  }   
+  const wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
+  wsDiffExp.onmessage = onMessage
+
+  dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})
+}
+
+const doInitialDataLoad = () =>
+  catchErrorsWrap(async (dispatch, getState) => {
+    dispatch({ type: "initial data load start" });
+    
     try {
       const [config, schema] = await Promise.all([
         configFetch(dispatch),
@@ -389,8 +435,10 @@ const doInitialDataLoad = () =>
       ]);
       genesetsFetch(dispatch, config);
       reembedParamsFetch(dispatch);
+      
       await dispatch(requestDataLayerChange("X"));
-      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
+      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
+      
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
       const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
       prefetchEmbeddings(annoMatrix);
@@ -430,7 +478,8 @@ const doInitialDataLoad = () =>
         dispatch(embActions.layoutChoiceAction(defaultEmbedding));
       }
 
- 
+      setupWebSockets(dispatch,getState)      
+
     } catch (error) {
       dispatch({ type: "initial data load error", error });
     }
@@ -477,71 +526,30 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
   dispatch,
   getState
 ) => {
-  dispatch({ type: "request differential expression started" });
-  try {
-    /*
-    Steps:
-    1. get the most differentially expressed genes
-    2. get expression data for each
-    */
-    const { annoMatrix } = getState();
-    const varIndexName = annoMatrix.schema.annotations.var.index;
+  try{
+    dispatch({ type: "request differential expression started" });
+  
+    const { controls } = getState();
+    const { wsDiffExp } = controls;
 
-    // Legal values are null, Array or TypedArray.  Null is initial state.
     if (!set1) set1 = [];
     if (!set2) set2 = [];
-
-    // These lines ensure that we convert any TypedArray to an Array.
-    // This is necessary because JSON.stringify() does some very strange
-    // things with TypedArrays (they are marshalled to JSON objects, rather
-    // than being marshalled as a JSON array).
     set1 = Array.isArray(set1) ? set1 : Array.from(set1);
     set2 = Array.isArray(set2) ? set2 : Array.from(set2);
-
-    const res = await fetch(
-      `${globals.API.prefix}${globals.API.version}diffexp/obs`,
-      {
-        method: "POST",
-        headers: new Headers({
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          mode: "topN",
-          count: num_genes,
-          set1: { filter: { obs: { index: set1 } } },
-          set2: { filter: { obs: { index: set2 } } },
-        }),
-        credentials: "include",
-      }
-    );
-
-    if (!res.ok || res.headers.get("Content-Type") !== "application/json") {
-      return dispatchDiffExpErrors(dispatch, res);
-    }
-
-    const response = await res.json();
-    const varIndex = await annoMatrix.fetch("var", varIndexName);
-    const diffexpLists = { negative: [], positive: [] };
-    for (const polarity of Object.keys(diffexpLists)) {
-      diffexpLists[polarity] = response[polarity].map((v) => [
-        varIndex.at(v[0], varIndexName),
-        ...v.slice(1),
-      ]);
-    }
-
-    /* then send the success case action through */
-    return dispatch({
-      type: "request differential expression success",
-      data: diffexpLists,
-    });
+    wsDiffExp.send(JSON.stringify({
+      mode: "topN",
+      count: num_genes,
+      set1: { filter: { obs: { index: set1 } } },
+      set2: { filter: { obs: { index: set2 } } },
+      multiplex: false
+    }))
   } catch (error) {
     return dispatch({
       type: "request differential expression error",
       error,
     });
   }
-};
+}
 
 const requestDifferentialExpressionAll = (num_genes = 100) => async (
   dispatch,
@@ -556,8 +564,9 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     2. get the most differentially expressed genes
     3. get expression data for each
     */
-    const { annoMatrix, sankeySelection } = getState();
+    const { annoMatrix, sankeySelection, controls } = getState();
     const { categories } = sankeySelection;
+    const { wsDiffExp } = controls;
 
     let labels;
     let categoryName;
@@ -569,7 +578,6 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     }    
     labels = labels.__columns[0];
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
-    const diffexpListsLists = [];
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
         let set1 = []
@@ -581,52 +589,19 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
             set2.push(i)
           }
         }
-        const varIndexName = annoMatrix.schema.annotations.var.index;
         set1 = Array.isArray(set1) ? set1 : Array.from(set1);
         set2 = Array.isArray(set2) ? set2 : Array.from(set2);
-    
-        const res = await fetch(
-          `${globals.API.prefix}${globals.API.version}diffexp/obs`,
-          {
-            method: "POST",
-            headers: new Headers({
-              Accept: "application/json",
-              "Content-Type": "application/json",
-            }),
-            body: JSON.stringify({
-              mode: "topN",
-              count: num_genes,
-              set1: { filter: { obs: { index: set1 } } },
-              set2: { filter: { obs: { index: set2 } } },
-            }),
-            credentials: "include",
-          }
-        );
-    
-        if (!res.ok || res.headers.get("Content-Type") !== "application/json") {
-          return dispatchDiffExpErrors(dispatch, res);
-        }
-    
-        const response = await res.json();
-        const varIndex = await annoMatrix.fetch("var", varIndexName);
-        const diffexpLists = { positive: [] };
-        for (const polarity of Object.keys(diffexpLists)) {
-          diffexpLists[polarity] = response[polarity].map((v) => [
-            varIndex.at(v[0], varIndexName),
-            ...v.slice(1),
-          ]);
-        }
-        diffexpListsLists.push(diffexpLists);
+        wsDiffExp.send(JSON.stringify({
+          mode: "topN",
+          count: num_genes,
+          set1: { filter: { obs: { index: set1 } } },
+          set2: { filter: { obs: { index: set2 } } },
+          multiplex: true,
+          grouping: categoryName,
+          nameList: allCategories
+        }))
       } 
     }
-    dispatch({
-      type: "request differential expression all success",
-      dataList: diffexpListsLists,
-      nameList: allCategories,
-      dateString: new Date().toLocaleString(),
-      grouping: categoryName,
-    });         
-    dispatch({type: "request differential expression all completed"})      
   } catch (error) {
     return dispatch({
       type: "request differential expression error",

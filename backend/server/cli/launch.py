@@ -13,7 +13,9 @@ from backend.server.app.app import Server
 from backend.server.common.config.app_config import AppConfig
 from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
-
+from flask_sock import Sock
+import multiprocessing
+from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 
 
@@ -424,12 +426,16 @@ def launch(
 
     # create the server
     server = CliLaunchServer(app_config)
+    sock = Sock(server.app)
+    app_config.server_config.data_adaptor.socket = sock
 
+    cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
+    initialize_socket(app_config.server_config.data_adaptor)
+    
     if not server_config.app__verbose:
         log = logging.getLogger("werkzeug")
         log.setLevel(logging.ERROR)
 
-    cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
     if server_config.app__open_browser:
         click.echo(f"[cellxgene] Launching! Opening your browser to {cellxgene_url} now.")
         webbrowser.open(cellxgene_url)
@@ -447,7 +453,7 @@ def launch(
             host=server_config.app__host,
             debug=server_config.app__debug,
             port=server_config.app__port,
-            threaded=not server_config.app__debug,
+            threaded=True,
             use_debugger=False,
             use_reloader=False,
         )
