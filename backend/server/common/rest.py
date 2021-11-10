@@ -25,7 +25,6 @@ from backend.common.errors import (
 )
 from backend.common.genesets import summarizeQueryHash
 from backend.common.fbs.matrix import decode_matrix_fbs
-import dill
 
 def abort_and_log(code, logmsg, loglevel=logging.DEBUG, include_exc_info=False):
     """
