@@ -858,6 +858,7 @@ class AnndataAdaptor(DataAdaptor):
                 X = adata.X
                 if scaleData:
                     sc.pp.scale(adata,max_value=10)
+
                 sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
                 adata.X = X
             else:
@@ -892,7 +893,7 @@ class AnndataAdaptor(DataAdaptor):
             if not doSAM or doSAM and batchMethod == "BBKNN":
                 if not doBatch or doBatch and batchMethod != "BBKNN":
                     sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric)    
-                sc.tl.umap(adata, min_dist=umapMinDist)
+                sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
             else:
                 sam.run_umap(metric=distanceMetric,min_dist=umapMinDist)
                 adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
