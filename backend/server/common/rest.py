@@ -248,15 +248,16 @@ def data_var_get(request, data_adaptor):
     except (FilterError, ValueError, ExceedsLimitError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-
 def colors_get(data_adaptor):
+    """
     if not data_adaptor.dataset_config.presentation__custom_colors:
         return make_response(jsonify({}), HTTPStatus.OK)
     try:
         return make_response(jsonify(data_adaptor.get_colors()), HTTPStatus.OK)
     except ColorFormatException as e:
         return abort_and_log(HTTPStatus.NOT_FOUND, str(e), include_exc_info=True)
-
+    """
+    return make_response(jsonify({}), HTTPStatus.OK)
 
 def diffexp_obs_post(data, data_adaptor):
     if not data_adaptor.dataset_config.diffexp__enable:
