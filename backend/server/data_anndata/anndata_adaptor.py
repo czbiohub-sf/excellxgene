@@ -27,6 +27,7 @@ from functools import partial
 import backend.server.common.rest as common_rest
 import json
 from backend.common.utils.utils import jsonify_numpy
+import signal
 
 anndata_version = version.parse(str(anndata.__version__)).release
 
@@ -70,7 +71,7 @@ def initialize_socket(da):
                 _multiprocessing_wrapper(ws,compute_diffexp_ttest, "diffexp",data,XA,XB,top_n,lfc_cutoff)
 
 class AnndataAdaptor(DataAdaptor):
-    pool = Pool(os.cpu_count(),maxtasksperchild=1)
+    pool = Pool(os.cpu_count(), initializer=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN), maxtasksperchild=1)
 
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)

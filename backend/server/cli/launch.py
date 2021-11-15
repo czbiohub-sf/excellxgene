@@ -15,6 +15,9 @@ from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
 from flask_sock import Sock
 import multiprocessing
+import sys
+import signal
+from backend.server.data_anndata.anndata_adaptor import AnndataAdaptor
 from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 
@@ -431,6 +434,14 @@ def launch(
 
     cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
     initialize_socket(app_config.server_config.data_adaptor)
+
+    def handler(signal, frame):
+        print('\nShutting down cellxgene.')
+        AnndataAdaptor.pool.terminate()
+        AnndataAdaptor.pool.join()        
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handler)
     
     if not server_config.app__verbose:
         log = logging.getLogger("werkzeug")
