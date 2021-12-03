@@ -220,24 +220,20 @@ class AnnotationsLocalFile(Annotations):
         if self.label_output_file:
             return self.label_output_file
 
-        return self._get_filename(data_adaptor, "cell-labels")
+        return self._get_filename(data_adaptor, "cell-labels")+".csv"
 
     def _get_genesets_filename(self, data_adaptor):
         """ return the current gene sets file name """
         if self.gene_sets_output_file:
             return self.gene_sets_output_file
 
-        return self._get_filename(data_adaptor, "gene-sets")
+        return self._get_filename(data_adaptor, "gene-sets")+".csv"
 
     def _get_reembed_parameters_filename(self, data_adaptor):
         """ return the current reembed parameters file name """
         if self.reembed_parameters_output_file:
             return self.reembed_parameters_output_file
-        x = self._get_filename(data_adaptor, "reembed-parameters")
-        if x is not None:
-            return '.csv'.join(x.split('.csv')[:-1])+'.json'
-        else:
-            return ''
+        return self._get_filename(data_adaptor, "reembed-parameters")+".json"
 
     def _get_filename(self, data_adaptor, anno_name):
         # we need to generate a file name, which we can only do if we have a UID and collection name
@@ -252,7 +248,7 @@ class AnnotationsLocalFile(Annotations):
             raise AnnotationsError("unable to determine file name for annotations")
 
         idhash = self._get_userdata_idhash(data_adaptor)
-        return os.path.join(self._get_output_dir(), f"{collection}-{anno_name}-{idhash}.csv")
+        return os.path.join(self._get_output_dir(), f"{collection}-{idhash}/{anno_name}")
 
     def _backup(self, fname, max_backups=9):
         """

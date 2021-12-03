@@ -28,6 +28,12 @@ import backend.server.common.rest as common_rest
 import json
 from backend.common.utils.utils import jsonify_numpy
 import signal
+import pickle
+from os.path import exists
+import sklearn.utils.sparsefuncs as sf
+from numba import njit, prange
+from numba.core import types
+from numba.typed import Dict
 
 anndata_version = version.parse(str(anndata.__version__)).release
 
@@ -46,8 +52,8 @@ def _multiprocessing_wrapper(ws,fn,cfn,data,*args):
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data)
     AnndataAdaptor.pool.apply_async(fn,args=args, callback=_new_callback_fn)
 
-def compute_diffexp_ttest(XA, XB, top_n, lfc_cutoff):
-    return diffexp_generic.diffexp_ttest(XA,XB,top_n, lfc_cutoff)
+def compute_diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff):
+    return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
 
 
 def initialize_socket(da):
@@ -60,15 +66,89 @@ def initialize_socket(da):
                 data = json.loads(data)
                 obsFilterA = data.get("set1", {"filter": {}})["filter"]
                 obsFilterB = data.get("set2", {"filter": {}})["filter"]
+                layer = data.get("layer","X")
                 top_n = data.get("count", 100)
                 lfc_cutoff = 0.01
                 shape = da.get_shape()
 
                 obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
-                obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])    
-                XA = da.data.X[obs_mask_A]
-                XB = da.data.X[obs_mask_B]            
-                _multiprocessing_wrapper(ws,compute_diffexp_ttest, "diffexp",data,XA,XB,top_n,lfc_cutoff)
+                obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])   
+
+                XI = da.data.layers[layer] 
+
+                iA = np.where(obs_mask_A)[0]
+                iB = np.where(obs_mask_B)[0]
+                niA = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iA)))[0]
+                niB = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iB)))[0]
+                nA = iA.size
+                nB = iB.size
+                if (iA.size + iB.size) == XI.shape[0]:
+                    n = XI.shape[0]
+                    tMean = da.data.var[f'{layer};;tMean'].values
+                    tMeanSq = da.data.var[f'{layer};;tMeanSq'].values
+
+                    if iA.size < iB.size:
+                        meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iA,niA)
+                        meanA/=nA
+                        meanAsq/=nA
+                        vA = meanAsq - meanA**2
+                        vA[vA<0]=0
+                        meanB = (tMean*n - meanA*nA) / nB
+                        meanBsq = (tMeanSq*n - meanAsq*nA) / nB
+                        vB = meanBsq - meanB**2                          
+                    else:
+                        meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iB,niB)
+                        meanB/=nB
+                        meanBsq/=nB
+                        vB = meanBsq - meanB**2
+                        vB[vB<0]=0
+                        meanA = (tMean*n - meanB*nB) / nA
+                        meanAsq = (tMeanSq*n - meanBsq*nB) / nA
+                        vA = meanAsq - meanA**2  
+                else:
+                    meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iA,niA)
+                    meanA/=nA
+                    meanAsq/=nA
+                    vA = meanAsq - meanA**2
+                    vA[vA<0]=0
+
+                    meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iB,niB)
+                    meanB/=nB
+                    meanBsq/=nB
+                    vB = meanBsq - meanB**2
+                    vB[vB<0]=0
+
+                _multiprocessing_wrapper(ws,compute_diffexp_ttest, "diffexp",data,meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
+
+@njit(parallel=True)
+def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True):
+    htable = Dict.empty(
+        key_type=types.int64,
+        value_type=types.boolean,
+    )    
+    for i in inc:
+        htable[i] = True
+    
+    for i in ninc:
+        htable[i] = False
+        
+    res = np.zeros(m)
+    res2 = np.zeros(m)
+    for i in prange(m):
+        di = d[ptr[i] : ptr[i+1]]
+        xi = x[ptr[i] : ptr[i+1]]
+        s=0
+        if calculate_sq:
+            s2 = 0
+        for j in prange(xi.size):
+            s += di[j] if htable[xi[j]] else 0
+            if calculate_sq:
+                s2 += di[j]**2 if htable[xi[j]] else 0
+                
+        res[i] = s
+        if calculate_sq:
+            res2[i] = s2
+    return res,res2
 
 class AnndataAdaptor(DataAdaptor):
     pool = Pool(os.cpu_count(), initializer=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN), maxtasksperchild=1)
@@ -76,8 +156,9 @@ class AnndataAdaptor(DataAdaptor):
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
-        self._load_data(data_locator)
+        self._load_data(data_locator)    
         self._validate_and_initialize()
+
 
     def cleanup(self):
         pass
@@ -175,7 +256,13 @@ class AnndataAdaptor(DataAdaptor):
         
         if "X" not in layers:
             layers = ["X"] + layers
-
+        
+        ln = []
+        for k in layers:
+            if ";;csr" not in k:
+                ln.append(k)
+        layers = ln
+        
         self.schema = {
             "dataframe": {"nObs": self.cell_count, "nVar": self.gene_count, "type": str(self.data.X.dtype)},
             "annotations": {
@@ -196,12 +283,6 @@ class AnndataAdaptor(DataAdaptor):
         for layout in self.get_embedding_names():
             layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
             self.schema["layout"]["obs"].append(layout_schema)
-
-    def _refresh_layout_schema(self):
-        self.schema["layout"]["obs"] = []
-        for layout in self.get_embedding_names():
-            layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
-            self.schema["layout"]["obs"].append(layout_schema)            
 
     def get_schema(self):
         return self.schema
@@ -256,11 +337,39 @@ class AnndataAdaptor(DataAdaptor):
                 adata.obsm["X_root"] = np.zeros((adata.shape[0],2))
                 adata.obs_names_make_unique()
                 
+                adata.X=adata.X.tocsc()
+                adata.layers["X"] = adata.X
+
+                print("Loading and precomputing layers necessary for fast differential expression...")
+                for k in adata.layers.keys():  
+                    if sparse.issparse(adata.layers[k]):
+                        if adata.layers[k].getformat() != "csc":
+                            adata.layers[k] = adata.layers[k].tocsc()
+                
+                for key in list(adata.layers.keys()):
+                    X = adata.layers[key]
+                    
+                    X2 = X.tocsr()
+                    adata.layers[key+";;csr"] = X2
+                    if sparse.issparse(X):
+                        mean,v = sf.mean_variance_axis(X,axis=0)
+                        meansq = v-mean**2
+                        adata.var[f"{key};;tMean"] = mean
+                        adata.var[f"{key};;tMeanSq"] = meansq
+                    else:
+                        adata.var[f"{key};;tMean"] = X.mean(0)
+                        adata.var[f"{key};;tMeanSq"] = (X**2).mean(0)
+                
                 if 'orig.exprs' not in adata.layers.keys(): 
-                    adata.layers['orig.exprs'] = adata.X     
+                    adata.layers['orig.exprs'] = adata.X   
+                    adata.layers['orig.exprs;;csr'] = adata.layers['X;;csr']
+                    adata.var['orig.exprs;;tMean'] = adata.var['X;;tMean']
+                    adata.var['orig.exprs;;tMeanSq'] = adata.var['X;;tMeanSq']
+                
+                if adata.raw is not None:
+                    adata.raw.X = adata.raw.X.tocsr()
 
                 self.data = adata
-                self.data_orig = adata
 
         except ValueError:
             raise DatasetAccessError(
@@ -272,11 +381,28 @@ class AnndataAdaptor(DataAdaptor):
             )
         except MemoryError:
             raise DatasetAccessError("Out of memory - file is too large for available memory.")
-        except Exception:
+        except Exception as e:
+            print(e)
             raise DatasetAccessError(
                 "File not found or is inaccessible. File must be an .h5ad object. "
                 "Please check your input and try again."
             )
+
+    def _initialize_user_folders(self,userID):
+        if not os.path.exists(f"{userID}/"):
+            os.makedirs(f"{userID}/nnm/")
+            os.makedirs(f"{userID}/emb/")
+            os.makedirs(f"{userID}/params/")
+
+            pickle.dump(self._obs_init,open(f"{userID}/obs.p",'wb'))
+            for k in self._obsm_init.keys():
+                if k != "X_root":
+                    k2 = "X_".join(k.split("X_")[1:])
+                    pickle.dump(self._obsm_init[k],open(f"{userID}/emb/{k2}.p",'wb'))
+                    r = self.data.uns.get("N_"+k2,self.data.obsp.get("connectivities",None))
+                    if r is not None:
+                        pickle.dump(r,open(f"{userID}/nnm/{k2}.p",'wb'))
+            del self.data.uns
 
     def _validate_and_initialize(self):
         if anndata_version_is_pre_070():
@@ -294,6 +420,14 @@ class AnndataAdaptor(DataAdaptor):
         self.cell_count = self.data.shape[0]
         self.gene_count = self.data.shape[1]
         self._create_schema()
+
+        self._obsm_init = self.data.obsm
+        self._obs_init = self.data.obs
+        del self.data.obs
+        del self.data.obsm
+        self.data.obsm['X_root'] = self._obsm_init['X_root']
+        self.data.obs["name_0"] = self._obs_init["name_0"]
+        self._obs_init = self._obs_init.set_index("name_0")
 
         # heuristic
         n_values = self.data.shape[0] * self.data.shape[1]
@@ -356,9 +490,8 @@ class AnndataAdaptor(DataAdaptor):
     def annotation_to_fbs_matrix(self, axis, fields=None, labels=None):
         if axis == Axis.OBS:
             if labels is not None and not labels.empty:
-                df = self.data.obs.copy()
-                for c in labels.columns:
-                    df[c] = np.array(list(labels[c]))
+                labels["name_0"] = self.data.obs["name_0"]
+                df = labels
             else:
                 df = self.data.obs
         else:
@@ -398,22 +531,27 @@ class AnndataAdaptor(DataAdaptor):
         return valid_layouts[0:MAX_LAYOUTS]
 
     def get_embedding_array(self, ename, dims=2):
-        full_embedding = self.data.obsm[f"X_{ename}"]
+        annotations = self.dataset_config.user_annotations        
+        userID = f"{annotations.get_collection()}-{annotations._get_userdata_idhash(self)}"
+        try:
+            full_embedding = pickle.load(open(f"{userID}/emb/{ename}.p",'rb'))
+        except:
+            full_embedding = self.data.obsm[f"X_{ename}"]
         return full_embedding[:, 0:dims]
     
-    def compute_leiden(self,name,cName,resolution,obsFilter):
-        nnm = self.data.uns.get('N_'+name,None)
+    def compute_leiden(self,name,cName,resolution,obsFilter,userID):
+        try:
+            nnm = pickle.load(open(f"{userID}/nnm/{name}.p","rb"))            
+        except:
+            nnm = self.data.obsp['connectivities'] 
+
         try:
             shape = self.get_shape()
             obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
         except (KeyError, IndexError):
             raise FilterError("Error parsing filter")          
-        if nnm is None:
-            nnm = self.data.obsp['connectivities']          
-            nnm = nnm[obs_mask][:,obs_mask]
-            
-        else:
-            nnm = nnm[obs_mask][:,obs_mask]
+
+        nnm = nnm[obs_mask][:,obs_mask]
    
         X = nnm
 
@@ -439,12 +577,9 @@ class AnndataAdaptor(DataAdaptor):
         result = np.array(cl.membership)
         clusters = np.array(["unassigned"]*obs_mask.size,dtype='object')
         clusters[obs_mask] = result.astype('str')
-        
-        self.data.obs[cName] = pd.Categorical(clusters)  
-        self._save_orig_data(action = "obs", key = cName)
         return result      
 
-    def compute_sankey_df(self, labels, name,obsFilter):
+    def compute_sankey_df(self, labels, name,obsFilter, userID):
         def reducer(a, b):
             result_a, inv_ndx = np.unique(a, return_inverse=True)
             result_b = np.bincount(inv_ndx, weights=b)
@@ -458,18 +593,17 @@ class AnndataAdaptor(DataAdaptor):
             x = (w-y).astype('int')
             return x,y
         
-        nnm = self.data.uns.get('N_'+name,None)
         try:
             shape = self.get_shape()
             obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
         except (KeyError, IndexError):
             raise FilterError("Error parsing filter")          
-        if nnm is None:
-            nnm = self.data.obsp['connectivities']          
-            nnm = nnm[obs_mask][:,obs_mask]
 
-        else:
-            nnm = nnm[obs_mask][:,obs_mask]
+        try:
+            nnm = pickle.load(open(f"{userID}/nnm/{name}.p","rb"))            
+        except:
+            nnm = self.data.obsp['connectivities']          
+        nnm = nnm[obs_mask][:,obs_mask]
 
         cl=[]
         clu = []
@@ -563,22 +697,33 @@ class AnndataAdaptor(DataAdaptor):
         cs = np.concatenate(cs)
         return ps,cs
 
-    def compute_preprocess(self, reembedParams):
+    def compute_preprocess(self, reembedParams, obsFilter, userID, hosted=False):
         self.data.obsm["X_root"] = np.zeros(self.data.obsm["X_root"].shape)+0.5
+
+        try:
+            shape = self.get_shape()
+            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
+        except (KeyError, IndexError):
+            raise FilterError("Error parsing filter")
+
+        # this should create a viewer of "X" and not copy the whole matrix.
+        # i am creating an AnnData view with csr matrices for fast subsetting.
+        adata = AnnData(X=self.data.layers["X;;csr"])
+        for k in self.data.layers.keys():
+            if ";;csr" in k:
+                adata.layers[k.split(";;csr")[0]] = self.data.layers[k]
+
+        adata.obs = self.data.obs
+        adata.var = self.data.var
+        adata.obsm = self.data.obsm
+        adata.varm = self.data.varm
+        obs_mask = np.array([True]*adata.shape[0]) if obs_mask is None else obs_mask
         
-        adata = self.data
-
-        if adata.isbacked:
-            raise NotImplementedError("Backed mode is incompatible with preprocessing.")
-
         # safely get scanpy module, which may not be present.
         sc = get_scanpy_module()
 
         cn = np.array(list(adata.obs["name_0"]))
-        uns = adata.uns.copy()
-        for k in list(adata.uns.keys()):
-            del adata.uns[k]
-        
+
         doBatchPrep = reembedParams.get("doBatchPrep",False)
         batchPrepParams = reembedParams.get("batchPrepParams",{})
         batchPrepKey = reembedParams.get("batchPrepKey","")
@@ -666,7 +811,7 @@ class AnndataAdaptor(DataAdaptor):
 
                 adatas.append(adata_sub_raw)
             adata_raw = anndata.concat(adatas,axis=0,join="inner")
-            filt = np.in1d(np.array(list(cn)),np.array(cns))
+            filt = np.logical_and(np.in1d(np.array(list(cn)),np.array(cns)),obs_mask)
             temp = adata_raw.obs_names.copy()
             adata_raw.obs_names = adata_raw.obs["name_0"]
             adata_raw = adata_raw[cn]
@@ -697,7 +842,7 @@ class AnndataAdaptor(DataAdaptor):
             if doPreprocess:
                 filt1,_ = sc.pp.filter_cells(adata_raw,min_counts=minCountsCF, inplace=False)
                 filt2,_ = sc.pp.filter_cells(adata_raw,min_genes=minGenesCF, inplace=False)
-                filt = np.logical_and(filt1,filt2)
+                filt = np.logical_and(np.logical_and(filt1,filt2),obs_mask)
                 target_sum = np.median(np.array(adata_raw.X[filt].sum(1)).flatten())
                 a1,_=sc.pp.filter_genes(adata_raw, min_counts=minCountsGF,inplace=False)
                 a2,_=sc.pp.filter_genes(adata_raw, min_cells=minCellsGF/100*adata_raw.shape[0],inplace=False)
@@ -716,15 +861,30 @@ class AnndataAdaptor(DataAdaptor):
                     except:
                         pass
 
-        self.data.X = adata_raw.X
-        self.data.layers['X'] = adata_raw.X
-        self.data.uns=uns
-        
-        for k in self.data.obsm.keys():
-            umap = self.data.obsm[k]
-            result = np.full((filt.size, umap.shape[1]), np.NaN)
-            result[filt] = umap[filt]
-            self.data.obsm[k] = result
+        if not hosted: 
+            self.data.layers['X;;csr'] = adata_raw.X
+            self.data.X = adata_raw.X.tocsc()
+            self.data.layers['X'] = self.data.X
+            
+            X = self.data.X
+            if sparse.issparse(X):
+                mean,v = sf.mean_variance_axis(X,axis=0)
+                meansq = v-mean**2
+                self.data.var[f"{key};;tMean"] = mean
+                self.data.var[f"{key};;tMeanSq"] = meansq
+            else:
+                self.data.var[f"{key};;tMean"] = X.mean(0)
+                self.data.var[f"{key};;tMeanSq"] = (X**2).mean(0)         
+            
+            layouts = glob(f"{userID}/emb/*.p")
+            for k in layouts:
+                umap = pickle.load(open(k,"rb"))
+                result = np.full((filt.size, umap.shape[1]), np.NaN)
+                result[filt] = umap[filt]
+                pickle.dump(result,open(k,"wb"))
+        else:
+            adata_raw.layers['X'] = adata_raw.X            
+            return adata_raw
         
         doBatchPrep = reembedParams.get("doBatchPrep",False)
         batchPrepParams = reembedParams.get("batchPrepParams",{})
@@ -756,51 +916,10 @@ class AnndataAdaptor(DataAdaptor):
             "dataLayer":dataLayer,
             "sumNormalizeCells":sumNormalizeCells,        
         }        
-        self.data.uns['latestPreParams'] = prepParams
-        self.data_orig.uns['latestPreParams'] = prepParams
-
-        self._save_orig_data()
-        self._create_schema()
+        pickle.dump(prepParams, open(f"{userID}/params/latest.p","wb"))
         return self.get_schema()
 
-    def _save_orig_data(self, action=None, key = None):
-        if self.data_orig.shape[0] == self.data.shape[0]:
-            self.data_orig = self.data
-        else:
-            if action is not None and key is not None:
-                cnf = np.array(list(self.data_orig.obs["name_0"]))
-                cn = np.array(list(self.data.obs["name_0"]))
-                ix = pd.Series(data = np.arange(self.data_orig.shape[0]),index = cnf)[cn].values
-                if action == "obs":
-                    if key != "name_0":
-                        if key in self.data_orig.obs.keys():
-                            cl = np.array(list(self.data_orig.obs[key])).astype('str').astype('object')
-                        else:
-                            cl = np.array(["unassigned"]*self.data_orig.shape[0],dtype='object')
-                        cl[ix] = np.array(list(self.data.obs[key].values)).astype('str')
-                        self.data_orig.obs[key] = pd.Categorical(cl)
-
-                elif action == "emb":
-                    rixer = pd.Series(index =np.arange(self.data.shape[0]), data = ix)
-                    if "X_"+key not in self.data_orig.obsm.keys(): 
-                        obsm = self.data.obsm["X_"+key]
-                        result = np.full((self.data_orig.shape[0], obsm.shape[1]), np.NaN)
-                        result[ix] = obsm
-                        self.data_orig.obsm["X_"+key] = result                   
-
-                        nnm = self.data.uns["N_"+key]
-                        x,y = nnm.nonzero()
-                        d = nnm.data
-                        nnm = sp.sparse.coo_matrix((d,(rixer[x].values,rixer[y].values)),shape=(self.data_orig.shape[0],)*2).tocsr()                    
-                        self.data_orig.uns["N_"+key] = nnm
-                    
-                        mask = self.data.uns["N_"+key+"_mask"]
-                        cl = np.array([False]*self.data_orig.shape[0],dtype='bool')
-                        cl[ix] = mask
-                        self.data_orig.uns["N_"+key+"_mask"] = cl                              
-                
-
-    def compute_embedding(self, method, obsFilter, reembedParams, parentName, embName):
+    def compute_embedding(self, method, obsFilter, reembedParams, parentName, embName, userID, hosted=False):
         if Axis.VAR in obsFilter:
             raise FilterError("Observation filters may not contain variable conditions")
         if method != "umap":
@@ -810,8 +929,20 @@ class AnndataAdaptor(DataAdaptor):
             obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
         except (KeyError, IndexError):
             raise FilterError("Error parsing filter")
-        with ServerTiming.time("layout.compute"):            
-            adata = self.data
+        with ServerTiming.time("layout.compute"):  
+            
+            if hosted:
+                adata = self.compute_preprocess(reembedParams, userID, hosted=True)                      
+            else:
+                adata = AnnData(X=self.data.layers["X;;csr"])
+                for k in self.data.layers.keys():
+                    if ";;csr" in k:
+                        adata.layers[k.split(";;csr")[0]] = self.data.layers[k]
+
+                adata.obs = self.data.obs
+                adata.var = self.data.var
+                adata.obsm = self.data.obsm
+                adata.varm = self.data.varm
 
             if adata.isbacked:
                 raise NotImplementedError("Backed mode is incompatible with re-embedding")
@@ -821,12 +952,11 @@ class AnndataAdaptor(DataAdaptor):
 
             # https://github.com/theislab/anndata/issues/311
             obs_mask = slice(None) if obs_mask is None else obs_mask
+
             adata = adata[obs_mask, :].copy()
 
             for k in list(adata.obsm.keys()):
                 del adata.obsm[k]
-            for k in list(adata.uns.keys()):
-                del adata.uns[k]
             
             doSAM = reembedParams.get("doSAM",False)
             nTopGenesHVG = reembedParams.get("nTopGenesHVG",2000)
@@ -905,8 +1035,6 @@ class AnndataAdaptor(DataAdaptor):
             result[obs_mask] = umap
             X_umap,nnm = result, adata.obsp['connectivities']            
 
-        # Server picks reemedding name, which must not collide with any other
-        # embedding name generated by this backend.
         if embName == "":
             embName = f"{method}_{str(hex(int(time.time())))[2:]}"
 
@@ -926,13 +1054,16 @@ class AnndataAdaptor(DataAdaptor):
         d = nnm.data
         nnm = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(self.data.shape[0],)*2).tocsr()
 
-        self.data.obsm[f"X_{name}"] = X_umap
-        self.data.obsp["connectivities"] = nnm
-        self.data.uns[f"N_{name}"] = nnm
-        self.data.uns[f"N_{name}_mask"] = np.array(list(obs_mask)).flatten()
-        
-        parentParams = self.data.uns.get(f"N_{parentName}_params",None)
-        latestPreParams = self.data.uns.get(f"latestPreParams",None)
+        if exists(f"{userID}/params/latest.p"):
+            latestPreParams = pickle.load(open(f"{userID}/params/latest.p","rb"))
+        else:
+            latestPreParams = None
+
+        if exists(f"{userID}/params/{parentName}.p"):
+            parentParams = pickle.load(open(f"{userID}/params/{parentName}.p","rb"))
+        else:
+            parentParams = None
+
         if latestPreParams is not None:
             for k in latestPreParams.keys():
                 reembedParams[k] = latestPreParams[k]
@@ -945,10 +1076,10 @@ class AnndataAdaptor(DataAdaptor):
         if doSAM:
             reembedParams['feature_weights']=np.array(list(sam.adata.var['weights']))
             
-        self.data.uns[f"N_{name}_params"]=reembedParams
-        self.data_orig.uns[f"N_{name}_params"]=reembedParams
-        
-        self._save_orig_data(action="emb",key=name)
+        pickle.dump(nnm, open(f"{userID}/nnm/{name}.p","wb"))
+        pickle.dump(X_umap, open(f"{userID}/emb/{name}.p","wb"))
+        pickle.dump(reembedParams, open(f"{userID}/params/{name}.p","wb"))
+
         return layout_schema
 
     
@@ -962,13 +1093,28 @@ class AnndataAdaptor(DataAdaptor):
     def get_colors(self):
         return convert_anndata_category_colors_to_cxg_category_colors(self.data)
 
-    def get_X_array(self, obs_mask=None, var_mask=None):
-        if obs_mask is None:
-            obs_mask = slice(None)
-        if var_mask is None:
-            var_mask = slice(None)
-        X = self.data.X[obs_mask, var_mask]
-        return X
+    def get_X_array(self, col_idx, layer="X"):
+        #if row_idx is None:
+        #    row_idx = np.arange(self.data.shape[0])
+        if layer == "X":
+            XI = self.data.X
+        else:
+            XI = self.data.layers[layer]
+
+        if col_idx is None:
+            col_idx = np.arange(self.data.shape[1])        
+        if sp.sparse.issparse(XI) and col_idx.size == 1:
+            i1 = col_idx[0]
+                            
+            d = XI.data[XI.indptr[i1] : XI.indptr[i1 + 1]]
+            i = XI.indices[XI.indptr[i1] : XI.indptr[i1 + 1]]
+            x = np.zeros(XI.shape[0])
+            x[i] = d
+            x=x[:,None]
+            #x=x[row_idx][:,None]                
+        else:
+            x = XI[:,col_idx]
+        return x
 
     def get_shape(self):
         return self.data.shape

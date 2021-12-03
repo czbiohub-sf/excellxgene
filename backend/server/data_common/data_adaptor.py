@@ -78,7 +78,7 @@ class DataAdaptor(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_X_array(self, obs_mask=None, var_mask=None):
+    def get_X_array(self, col_idx):
         """return the X array, possibly filtered by obs_mask or var_mask.
         the return type is either ndarray or scipy.sparse.spmatrix."""
         pass
@@ -264,7 +264,7 @@ class DataAdaptor(metaclass=ABCMeta):
         var_names = set(self.query_var_array(self.parameters.get("var_names")))
         return validate_gene_sets(genesets, var_names)
 
-    def data_frame_to_fbs_matrix(self, filter, axis):
+    def data_frame_to_fbs_matrix(self, filter, axis, layer="X"):
         """
         Retrieves data 'X' and returns in a flatbuffer Matrix.
         :param filter: filter: dictionary with filter params
@@ -277,21 +277,16 @@ class DataAdaptor(metaclass=ABCMeta):
         """
         if axis != Axis.VAR:
             raise ValueError("Only VAR dimension access is supported")
-
         try:
-            obs_selector, var_selector = self._filter_to_mask(filter)
+            d = filter['var']['annotation_value'][0]
+            col = d['name']
+            vals = d['values']
+            var_selector = np.in1d(np.array(list(self.data.var[col])),vals)
         except (KeyError, IndexError, TypeError, AttributeError):
             raise FilterError("Error parsing filter")
 
-        if obs_selector is not None:
-            raise FilterError("filtering on obs unsupported")
-
-        num_columns = self.get_shape()[1] if var_selector is None else np.count_nonzero(var_selector)
-        if self.server_config.exceeds_limit("column_request_max", num_columns):
-            raise ExceedsLimitError("Requested dataframe columns exceed column request limit")
-
-        X = self.get_X_array(obs_selector, var_selector)
         col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
+        X = self.get_X_array(col_idx,layer=layer)
         return encode_matrix_fbs(X, col_idx=col_idx, row_idx=None)
 
     def diffexp_topN(self, obsFilterA, obsFilterB, top_n=None):
@@ -403,21 +398,19 @@ class DataAdaptor(metaclass=ABCMeta):
             lastmod = None
         return lastmod
 
-    def summarize_var(self, method, filter, query_hash):
+    def summarize_var(self, method, filter, query_hash,layer="X"):
         if method != "mean":
             raise UnsupportedSummaryMethod("Unknown gene set summary method.")
 
-        obs_selector, var_selector = self._filter_to_mask(filter)
-        if obs_selector is not None:
-            raise FilterError("filtering on obs unsupported")
-
-        # if no filter, just return zeros.  We don't have a use case
-        # for summarizing the entire X without a filter, and it would
-        # potentially be quite compute / memory intensive.
+        d = filter['var']['annotation_value'][0]
+        col = d['name']
+        vals = d['values']
+        var_selector = np.in1d(np.array(list(self.data.var[col])),vals)
         if var_selector is None or np.count_nonzero(var_selector) == 0:
             mean = np.zeros((self.get_shape()[0], 1), dtype=np.float32)
         else:
-            X = self.get_X_array(obs_selector, var_selector)
+            col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
+            X = self.get_X_array(col_idx,layer=layer)
             if sparse.issparse(X):
                 mean = X.mean(axis=1)
             else:

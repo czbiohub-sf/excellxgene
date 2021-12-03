@@ -127,7 +127,7 @@ class GenesetMenus extends React.PureComponent {
               />
             </Popover>
             <Tooltip2
-              content={`Color by gene set ${geneset} mean`}
+              content={`Color by gene set ${geneset} mean of the top 50 genes.`}
               position={Position.BOTTOM}
               hoverOpenDelay={globals.tooltipHoverOpenDelay}
             >

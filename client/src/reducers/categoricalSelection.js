@@ -67,6 +67,7 @@ const CategoricalSelection = (state, action, nextSharedState) => {
       return {
         ...partialState,
         ...CH.createCategoricalSelection([name]),
+        refresher: !(state?.refresher ?? false)
       };
     }
 

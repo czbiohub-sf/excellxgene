@@ -163,17 +163,9 @@ class MenuBar extends React.PureComponent {
   }
   handleSaveData = () => {
     const { dispatch } = this.props;
-    const { saveName } = this.state;
-    dispatch(actions.requestSaveAnndataToFile(saveName))
+    dispatch(actions.downloadData())
   }
-  handleReload = () => {
-    const { dispatch } = this.props;
-    dispatch(actions.requestReloadBackend())
-  }
-  handleReloadFull = () => {
-    const { dispatch } = this.props;
-    dispatch(actions.requestReloadFullBackend())
-  }
+
   isClipDisabled = () => {
     /*
     return true if clip button should be disabled.
@@ -495,55 +487,19 @@ class MenuBar extends React.PureComponent {
         <HotkeysDialog open={this.state.hotkeysDialogOpen}/>
         <ButtonGroup className={styles.menubarButton}>   
           <Tooltip
-            content="Reset backend to the full dataset."
+            content="Save current subset to an `.h5ad` file."
             position="bottom"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          >   
-            <AnchorButton
-                type="button"
-                icon="reset"
-                loading={loading}
-                onClick={() => {
-                  this.handleReloadFull()
-                }}
-              /> 
-          </Tooltip>             
-          <Tooltip
-            content="Write current subset into the backend."
-            position="bottom"
-            hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          >   
-          <AnchorButton
-              type="button"
-              icon="refresh"
-              loading={loading}
-              onClick={() => {
-                this.handleReload()
-              }}
-            /> 
-            </Tooltip> 
-            <Tooltip
-              content="Save current subset to an `.h5ad` file."
-              position="bottom"
-              hoverOpenDelay={globals.tooltipHoverOpenDelay}
-            >                                              
+          >                                              
             <AnchorButton
                 type="button"
                 icon="floppy-disk"
                 loading={loading}
-                disabled={saveName===""}
                 onClick={() => {
                   this.handleSaveData()
                 }}
               /> 
-            </Tooltip>
-
-            <InputGroup
-                id="save-output-name"
-                placeholder="Enter an output path to save the data to an h5ad file..."
-                value={saveName}
-                onChange={this.handleSaveChange}
-            />                       
+            </Tooltip>               
           </ButtonGroup>
 
           {layoutChoice.sankey ? 

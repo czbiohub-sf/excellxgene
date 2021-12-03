@@ -99,17 +99,17 @@ class GeneExpression extends React.Component {
     const { dispatch, reembedParams, annoMatrix } = this.props;
     if(prevProps.reembedParams.dataLayerExpr !== reembedParams.dataLayerExpr){
       // Trigger new data layer.
-      dispatch(actions.requestDataLayerChange(reembedParams.dataLayerExpr)).then(()=>{
-        const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
-        const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
-        const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
-        actions.prefetchEmbeddings(annoMatrixNew);
-        dispatch({
-          type: "annoMatrix: init complete",
-          annoMatrix: annoMatrixNew,
-          obsCrossfilter: obsCrossfilterNew
-        });      
-      })
+      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
+      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
+      annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
+      const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
+      actions.prefetchEmbeddings(annoMatrixNew);
+
+      dispatch({
+        type: "annoMatrix: init complete",
+        annoMatrix: annoMatrixNew,
+        obsCrossfilter: obsCrossfilterNew
+      });      
     }
   }
 

@@ -114,12 +114,16 @@ class HealthAPI(Resource):
 
 
 class SchemaAPI(Resource):
-    # TODO @mdunitz separate dataset schema and user schema
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
     def get(self, data_adaptor):
         return common_rest.schema_get(data_adaptor)
 
+class InitializeUserAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.initialize_user(data_adaptor)
 
 class ConfigAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -204,41 +208,23 @@ class SankeyPlotAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.sankey_data_put(request, data_adaptor)
 
-class LayerAPI(Resource):
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.change_layer_put(request, data_adaptor)
-
-class ReloadAPI(Resource):
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.reload_put(request, data_adaptor)
-
-class ReloadFullAPI(Resource):
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.reload_full_put(request, data_adaptor)
-
 class OutputAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
     def put(self, data_adaptor):
         return common_rest.output_data_put(request, data_adaptor)
 
-class RenameObsAPI(Resource):
+class DownloadAnndataAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
     def put(self, data_adaptor):
-        return common_rest.rename_obs_put(request, data_adaptor)
+        return common_rest.save_data_put(request, data_adaptor)
 
-class DeleteObsAPI(Resource):
+class DownloadMetadataAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
     def put(self, data_adaptor):
-        return common_rest.delete_obs_put(request, data_adaptor)
+        return common_rest.save_metadata_put(request, data_adaptor)
 
 class DeleteObsmAPI(Resource):
     @cache_control(no_store=True)
@@ -320,6 +306,7 @@ def get_api_dataroot_resources(bp_dataroot):
 
     # Initialization routes
     add_resource(SchemaAPI, "/schema")
+    add_resource(InitializeUserAPI, "/initialize")
     add_resource(ConfigAPI, "/config")
     add_resource(UserInfoAPI, "/userinfo")
     # Data routes
@@ -332,16 +319,13 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(ReembedParametersObsmAPI, "/reembed-parameters-obsm")
 
     add_resource(SankeyPlotAPI, "/sankey")
-    add_resource(LayerAPI, "/layer")
-    add_resource(RenameObsAPI, "/renameObs")
-    add_resource(DeleteObsAPI, "/deleteObs")
     add_resource(OutputAPI, "/output")
+    add_resource(DownloadAnndataAPI, "/downloadAnndata")
+    add_resource(DownloadMetadataAPI, "/downloadMetadata")
     add_resource(LeidenClusterAPI, "/leiden")
     add_resource(DeleteObsmAPI, "/layout/obsm")
     add_resource(RenameObsmAPI, "/layout/rename")
     add_resource(PreprocessAPI, "/preprocess")
-    add_resource(ReloadAPI, "/reload")
-    add_resource(ReloadFullAPI, "/reloadFull")
     add_resource(SummarizeVarAPI, "/summarize/var")
     # Display routes
     add_resource(ColorsAPI, "/colors")

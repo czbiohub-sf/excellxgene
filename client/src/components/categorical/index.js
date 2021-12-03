@@ -192,6 +192,10 @@ class Categories extends React.Component {
       this.setState({ expandedCats: _expandedCats });
     }
   };
+  handleSaveMetadata = () => {
+    const { dispatch } = this.props;
+    dispatch(actions.downloadMetadata())
+  }  
 
   render() {
     const {
@@ -266,13 +270,31 @@ class Categories extends React.Component {
           
           {writableCategoriesEnabled ? (
             <div style={{display: "flex", flexDirection: "column"}}>
+              <div style={{
+                paddingBottom: "10px"
+              }}>
+                <Tooltip
+                content="Save selected metadata categories to a `.csv` file."
+                position="bottom"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              >                                              
+                <AnchorButton
+                    type="button"
+                    icon="floppy-disk"
+                    loading={loading}
+                    onClick={() => {
+                      this.handleSaveMetadata()
+                    }}
+                  /> 
+                </Tooltip>  
+                </div>               
               <div  style={{
                 display: 'inline-flex',
                 justifyContent: 'space-between',
                 margin: '0 0',
                 marginBottom: 10,
                 columnGap: "5px"
-              }}>
+              }}>               
                 <Tooltip
                   content={
                     userInfo.is_authenticated

@@ -43,6 +43,9 @@ async function userColorsFetchAndLoad(dispatch) {
 async function schemaFetch() {
   return fetchJson("schema");
 }
+async function initializeFetch() {
+  return fetchJson("initialize");
+}
 
 async function configFetch(dispatch) {
   return fetchJson("config").then((response) => {
@@ -138,7 +141,6 @@ export const reembedParamsObsmFetch = (embName) => async (
   }
 }
 
-
 function prefetchEmbeddings(annoMatrix) {
   /*
   prefetch requests for all embeddings
@@ -163,6 +165,123 @@ function abortableFetch(request, opts, timeout = 0) {
     },
   };
 }
+
+export const downloadData = () => async (
+  dispatch,
+  getState
+) => {
+
+    const state = getState();
+    const { annoMatrix, layoutChoice } = state;
+    
+    let cells = annoMatrix.rowIndex.labels();  
+    cells = Array.isArray(cells) ? cells : Array.from(cells);
+
+    const annos = []
+    const annoNames = []
+    
+    for (const item of annoMatrix.schema.annotations?.obs?.columns) {
+      if(item?.categories){
+        let labels = await annoMatrix.fetch("obs",item.name)
+        annos.push(labels)
+        annoNames.push(item.name)
+      }
+    }
+
+    const af = abortableFetch(
+      `${API.prefix}${API.version}downloadAnndata`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          labelNames: annoNames,
+          labels: annos,
+          currentLayout: layoutChoice.current,
+          filter: { obs: { index: cells } }
+        }),
+        credentials: "include",
+        },
+        600000000
+    );
+    dispatch({
+      type: "output data: request start",
+      abortableFetch: af,
+    });    
+    const res = await af.ready()
+    dispatch({
+      type: "output data: request completed",
+    });
+
+    const blob = await res.blob()
+
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    var url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+export const downloadMetadata = () => async (
+  _dispatch,
+  getState
+) => {
+    const state = getState();
+    // get current embedding
+    const { layoutChoice, sankeySelection, annoMatrix } = state;
+    const { selectedCategories } = sankeySelection;
+
+    let catNames;
+    if (selectedCategories.length === 0) {
+      catNames = [];
+      for (const item of annoMatrix.schema.annotations?.obs?.columns) {
+        if(item?.categories){
+          if (item.name !== "name_0"){
+            catNames.push(item.name)
+          }
+        }
+      }      
+    } else {
+      catNames = selectedCategories;
+    }
+    let cells = annoMatrix.rowIndex.labels();  
+    cells = Array.isArray(cells) ? cells : Array.from(cells);
+
+    const res = await fetch(
+      `${API.prefix}${API.version}downloadMetadata`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          labelNames: catNames,
+          filter: { obs: { index: cells } }
+        }),
+        credentials: "include",
+        }
+    );
+
+    const blob = await res.blob()
+
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    var url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = `${layoutChoice.current}_obs.csv`.split(";").join("_");
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
 export const requestSaveAnndataToFile = (saveName) => async (
   dispatch,
   getState
@@ -234,145 +353,6 @@ export const requestSaveAnndataToFile = (saveName) => async (
     }
   }
 }
-export function requestDataLayerChange(dataLayer) {
-  return async (_dispatch, _getState) => {
-    const res = await fetch(
-      `${API.prefix}${API.version}layer`,
-      {
-        method: "PUT",
-        headers: new Headers({
-          Accept: "application/octet-stream",
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          dataLayer: dataLayer,
-        }),
-        credentials: "include",
-        }
-    );
-    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
-      return res;
-    }
-  }
-}
-export function requestReloadBackend() {
-  return async (dispatch, getState) => {
-    try{
-      const { annoMatrix, layoutChoice } = getState()
-
-      let cells = annoMatrix.rowIndex.labels();  
-      cells = Array.isArray(cells) ? cells : Array.from(cells);
-
-      const af = abortableFetch(
-        `${API.prefix}${API.version}reload`,
-        {
-          method: "PUT",
-          headers: new Headers({
-            Accept: "application/octet-stream",
-            "Content-Type": "application/json",
-          }),
-          body: JSON.stringify({
-            currentLayout: layoutChoice.current,
-            filter: { obs: { index: cells } }
-          }),        
-          credentials: "include",
-          },
-          6000000
-      );
-      dispatch({
-        type: "output data: request start",
-        abortableFetch: af,
-      });
-      const res = await af.ready();      
-      
-      dispatch({
-        type: "app: refresh"
-      })
-
-      dispatch({
-        type: "output data: request completed",
-      });
-
-      postAsyncSuccessToast("Data has successfuly overwritten the backend.");
-
-      if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
-        return true;
-      }
-
-      // else an error
-      let msg = `Unexpected HTTP response ${res.status}, ${res.statusText}`;
-      const body = await res.text();
-      if (body && body.length > 0) {
-        msg = `${msg} -- ${body}`;
-      }
-      throw new Error(msg);
-    } catch (error) {
-      dispatch({
-        type: "ouput data: request aborted",
-      });
-      if (error.name === "AbortError") {
-        postAsyncFailureToast("Data output was aborted.");
-      } else {
-        postNetworkErrorToast(`Data output: ${error.message}`);
-      }
-    }
-  }
-}
-
-export function requestReloadFullBackend() {
-  return async (dispatch, _getState) => {
-    try{
-      const af = abortableFetch(
-        `${API.prefix}${API.version}reloadFull`,
-        {
-          method: "PUT",
-          headers: new Headers({
-            Accept: "application/octet-stream",
-            "Content-Type": "application/json",
-          }),     
-          credentials: "include",
-          },
-          6000000
-      );
-      dispatch({
-        type: "output data: request start",
-        abortableFetch: af,
-      });
-      const res = await af.ready();      
-      
-      dispatch({
-        type: "app: refresh"
-      })
-
-      dispatch({
-        type: "output data: request completed",
-      });
-
-      postAsyncSuccessToast("Data has successfuly overwritten the backend.");
-
-      if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
-        return true;
-      }
-
-      // else an error
-      let msg = `Unexpected HTTP response ${res.status}, ${res.statusText}`;
-      const body = await res.text();
-      if (body && body.length > 0) {
-        msg = `${msg} -- ${body}`;
-      }
-      throw new Error(msg);
-    } catch (error) {
-      dispatch({
-        type: "ouput data: request aborted",
-      });
-      if (error.name === "AbortError") {
-        postAsyncFailureToast("Data output was aborted.");
-      } else {
-        postNetworkErrorToast(`Data output: ${error.message}`);
-      }
-    }
-  }
-}
 
 const setupWebSockets = (dispatch,getState) => {
   const onMessage = (event) => {
@@ -425,7 +405,7 @@ const setupWebSockets = (dispatch,getState) => {
 const doInitialDataLoad = () =>
   catchErrorsWrap(async (dispatch, getState) => {
     dispatch({ type: "initial data load start" });
-    
+    await initializeFetch(dispatch);
     try {
       const [config, schema] = await Promise.all([
         configFetch(dispatch),
@@ -435,8 +415,6 @@ const doInitialDataLoad = () =>
       ]);
       genesetsFetch(dispatch, config);
       reembedParamsFetch(dispatch);
-      
-      await dispatch(requestDataLayerChange("X"));
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
@@ -445,7 +423,11 @@ const doInitialDataLoad = () =>
       const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
       if(layoutSchema.length > 0){
-        const name = layoutSchema[0].name
+        const preferredNames = ["umap", "tsne", "pca"];
+        const f = layoutSchema.filter((i) => {
+          return preferredNames.includes(i.name)
+        })
+        const name = f[0].name
         const base = annoMatrix.base();
 
         const [annoMatrixNew, obsCrossfilterNew] = await _switchEmbedding(
@@ -454,6 +436,8 @@ const doInitialDataLoad = () =>
           name,
           name
         ); 
+        prefetchEmbeddings(annoMatrixNew);
+
         dispatch({
           type: "annoMatrix: init complete",
           annoMatrix: annoMatrixNew,
@@ -529,7 +513,7 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
   try{
     dispatch({ type: "request differential expression started" });
   
-    const { controls } = getState();
+    const { annoMatrix, controls } = getState();
     const { wsDiffExp } = controls;
 
     if (!set1) set1 = [];
@@ -541,7 +525,8 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
       count: num_genes,
       set1: { filter: { obs: { index: set1 } } },
       set2: { filter: { obs: { index: set2 } } },
-      multiplex: false
+      multiplex: false,
+      layer: annoMatrix.layer
     }))
   } catch (error) {
     return dispatch({
@@ -577,6 +562,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
       }
     }    
     labels = labels.__columns[0];
+    const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
@@ -584,9 +570,9 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
         let set2 = []
         for (let i = 0; i < labels.length; i++){
           if(labels[i] === cat){
-            set1.push(i)
+            set1.push(ix[i])
           } else {
-            set2.push(i)
+            set2.push(ix[i])
           }
         }
         set1 = Array.isArray(set1) ? set1 : Array.from(set1);
@@ -598,7 +584,8 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
           set2: { filter: { obs: { index: set2 } } },
           multiplex: true,
           grouping: categoryName,
-          nameList: allCategories
+          nameList: allCategories,
+          layer: annoMatrix.layer
         }))
       } 
     }
@@ -637,9 +624,6 @@ export default {
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,
   doInitialDataLoad,
-  requestDataLayerChange,
-  requestReloadBackend,
-  requestReloadFullBackend,
   selectAll,
   requestDifferentialExpression,
   requestSingleGeneExpressionCountsForColoringPOST,
@@ -648,6 +632,8 @@ export default {
   requestPreprocessing,
   requestSankey,
   requestLeiden,
+  downloadData,
+  downloadMetadata,
   requestSaveAnndataToFile,
   setCellsFromSelectionAndInverseAction:
     selnActions.setCellsFromSelectionAndInverseAction,

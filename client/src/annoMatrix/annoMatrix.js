@@ -104,8 +104,12 @@ export default class AnnoMatrix {
     };
     this._whereCache = {};
     this._gcInfo = new Map();
+    this.layer = "X";
+    
   }
-
+  setLayer(layer) {
+    this.layer = layer;
+  }
   /**
    ** Schema helper/accessors
    **/
@@ -436,6 +440,8 @@ export default class AnnoMatrix {
   }
 
   async _fetch(field, q) {
+    const layer = this?.layer ?? "X";
+
     if (!AnnoMatrix.fields().includes(field)) return undefined;
     const queries = Array.isArray(q) ? q : [q];
     queries.forEach(_queryValidate);
@@ -458,7 +464,8 @@ export default class AnnoMatrix {
         uncachedQueries.map((query) =>
           this._getPendingLoad(field, query, async (_field, _query) => {
             /* fetch, then index.  _doLoad is subclass interface */
-            const [whereCacheUpdate, df] = await this._doLoad(_field, _query);
+            const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer);
+            
             this._cache[_field] = this._cache[_field].withColsFrom(df);
             this._whereCache = _whereCacheMerge(
               this._whereCache,

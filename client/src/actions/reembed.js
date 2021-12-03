@@ -8,7 +8,7 @@ import {
 import { _switchEmbedding } from "./embedding";
 import { subsetAction } from "./viewStack";
 import { AnnoMatrixLoader } from "../annoMatrix";
-
+import actions from ".";
 
 function abortableFetch(request, opts, timeout = 0) {
   const controller = new AbortController();
@@ -123,7 +123,10 @@ export function requestReembed(reembedParams,parentName,embName) {
 }
 
 
-async function doPreprocessingFetch(dispatch, _getState, reembedParams) {
+async function doPreprocessingFetch(dispatch, getState, reembedParams) {
+  const state = getState();
+  let cells = state.annoMatrix.rowIndex.labels();  
+  cells = Array.isArray(cells) ? cells : Array.from(cells);
   const af = abortableFetch(
     `${API.prefix}${API.version}preprocess`,
     {
@@ -133,7 +136,8 @@ async function doPreprocessingFetch(dispatch, _getState, reembedParams) {
         "Content-Type": "application/json",
       }),
       body: JSON.stringify({
-        params: reembedParams
+        params: reembedParams,
+        filter: { obs: { index: cells } }
       }),
       credentials: "include",
     },
@@ -177,9 +181,12 @@ export function requestPreprocessing(reembedParams) {
 
       const baseDataUrl = `${API.prefix}${API.version}`;
       const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, schema);
+      actions.prefetchEmbeddings(annoMatrixNew);
+
       dispatch({
         type: "reset subset"
       })
+
       const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
         annoMatrixNew,
         prevCrossfilter,

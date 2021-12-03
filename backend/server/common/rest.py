@@ -6,9 +6,11 @@ import zlib
 import json
 import pandas as pd
 import numpy as np
-from flask import make_response, jsonify, current_app, abort
+from glob import glob
+from flask import make_response, jsonify, current_app, abort, send_file, after_this_request
 from werkzeug.urls import url_unquote
-
+import pickle
+from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
 from backend.server.common.config.client_config import get_client_config, get_client_userinfo
 from backend.common.constants import Axis, DiffExpMode, JSON_NaN_to_num_warning_msg
 from backend.common.errors import (
@@ -25,6 +27,7 @@ from backend.common.errors import (
 )
 from backend.common.genesets import summarizeQueryHash
 from backend.common.fbs.matrix import decode_matrix_fbs
+import os 
 
 def abort_and_log(code, logmsg, loglevel=logging.DEBUG, include_exc_info=False):
     """
@@ -101,27 +104,66 @@ def _query_parameter_to_filter(args):
 
     return result
 
-
 def schema_get_helper(data_adaptor):
-    """helper function to gather the schema from the data source and annotations"""
-    schema = data_adaptor.get_schema()
-    schema = copy.deepcopy(schema)
+    if data_adaptor.data.raw is not None:
+        layers = [".raw"]+list(data_adaptor.data.layers.keys())
+    else:
+        layers = list(data_adaptor.data.layers.keys())
+    
+    if "X" not in layers:
+        layers = ["X"] + layers
+    
+    ln = []
+    for k in layers:
+        if ";;csr" not in k:
+            ln.append(k)
+    layers = ln
+            
+    schema = {
+        "dataframe": {"nObs": data_adaptor.cell_count, "nVar": data_adaptor.gene_count, "type": str(data_adaptor.data.X.dtype)},
+        "annotations": {
+            "obs": {"index": data_adaptor.parameters.get("obs_names"), "columns": []},
+            "var": {"index": data_adaptor.parameters.get("var_names"), "columns": []},
+        },
+        "layout": {"obs": []},
+        "layers": layers
+    }
+    userID = _get_user_id(data_adaptor)   
+    
+    for ax in Axis:
+        if str(ax) == "var":
+            curr_axis = getattr(data_adaptor.data, "var")
+            for ann in curr_axis:
+                ann_schema = {"name": ann, "writable": True}
+                ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
+                if ann_schema['type']!='categorical':
+                    ann_schema['writable']=False
+                schema["annotations"]["var"]["columns"].append(ann_schema)
+        elif str(ax) == "obs":
+            curr_axis = pickle.load(open(f"{userID}/obs.p","rb"))
+            for ann in curr_axis:
+                ann_schema = {"name": ann, "writable": True}
+                ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
+                if ann_schema['type']!='categorical':
+                    ann_schema['writable']=False
+                schema["annotations"][ax]["columns"].append(ann_schema)
+            
+            ann = "name_0"
+            curr_axis = data_adaptor.data.obs
+            ann_schema = {"name": ann, "writable": True}
+            ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
+            if ann_schema['type']!='categorical':
+                ann_schema['writable']=False
+            schema["annotations"][ax]["columns"].append(ann_schema)
 
-    # add label obs annotations as needed
-    annotations = data_adaptor.dataset_config.user_annotations
-    if annotations.user_annotations_enabled():
-        label_schema = annotations.get_schema(data_adaptor)
-        curr_schema = schema["annotations"]["obs"]["columns"]
-        keys = []
-        vals = []
-        for i in (label_schema + curr_schema):
-            if i['name'] not in keys:
-                keys.append(i['name'])
-                vals.append(i)
-        schema["annotations"]["obs"]["columns"] = vals
-
+    
+    for layout in [x.split(f"{userID}/emb/")[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
+        layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
+        schema["layout"]["obs"].append(layout_schema)
+    schema["layout"]["obs"].append(
+        {"name": "root", "type": "float32", "dims": [f"root_0", f"root_1"]}
+    )
     return schema
-
 
 def schema_get(data_adaptor):
     schema = schema_get_helper(data_adaptor)
@@ -149,7 +191,10 @@ def annotations_obs_get(request, data_adaptor):
 
     try:
         labels = None
-        labels = data_adaptor.data.obs[fields]
+        annotations = data_adaptor.dataset_config.user_annotations
+        if annotations.user_annotations_enabled():
+            userID = _get_user_id(data_adaptor)
+            labels = pickle.load(open(f"{userID}/obs.p","rb"))
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.OBS, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
@@ -165,14 +210,13 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
     new_label_df = decode_matrix_fbs(fbs)
     if not new_label_df.empty:
         new_label_df = data_adaptor.check_new_labels(new_label_df)
-
-    for k in new_label_df.columns:
-        data_adaptor.data.obs[k] = pd.Categorical(np.array(list(new_label_df[k])).astype('str'))
-        data_adaptor._save_orig_data(action="obs",key = k)
+    userID = _get_user_id(data_adaptor)
+    pickle.dump(new_label_df,open(f"{userID}/obs.p","wb"))
 
 
 def inflate(data):
     return zlib.decompress(data)
+
 
 def annotations_obs_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
@@ -190,11 +234,9 @@ def annotations_obs_put(request, data_adaptor):
     try:
         annotations_put_fbs_helper(data_adaptor, fbs)
         res = json.dumps({"status": "OK"})
-        data_adaptor._create_schema()
         return make_response(res, HTTPStatus.OK, {"Content-Type": "application/json"})
     except (ValueError, DisabledFeatureError, KeyError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
-
 
 def annotations_var_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
@@ -221,11 +263,13 @@ def data_var_put(request, data_adaptor):
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
 
-    filter_json = request.get_json()
-    filter = filter_json["filter"] if filter_json else None
+    args = request.get_json()
+    filter = args.get("filter",None)
+    layer = args.get("layer","X")
+
     try:
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -239,9 +283,12 @@ def data_var_get(request, data_adaptor):
         return abort(HTTPStatus.NOT_ACCEPTABLE)
 
     try:
-        filter = _query_parameter_to_filter(request.args)
+        layer = request.values.get("layer", default="X")
+        args_filter_only = request.args.copy()
+        args_filter_only.poplist("layer")        
+        filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -330,7 +377,8 @@ def sankey_data_put(request, data_adaptor):
     
 
     try:
-        edges,weights = data_adaptor.compute_sankey_df(labels,name,filter)
+        userID = _get_user_id(data_adaptor)          
+        edges,weights = data_adaptor.compute_sankey_df(labels,name,filter, userID)
         edges = [list(x) for x in edges]
         weights = list(weights)
         return make_response(jsonify({"edges": edges, "weights": weights}), HTTPStatus.OK, {"Content-Type": "application/json"})
@@ -353,24 +401,24 @@ def output_data_put(request, data_adaptor):
     except (KeyError, IndexError):
         raise FilterError("Error parsing filter")
 
+    userID = _get_user_id(data_adaptor)        
+    fnames = glob(f"{userID}/emb/*.p")
+    embs = {}
+    nnms = {}
+    params={}
+    for f in fnames:
+        n = f.split('/')[-1][:-2]
+        embs[n] = pickle.load(open(f,'rb'))
+        nnms[n] = pickle.load(open(f"{userID}/nnm/{n}.p",'rb'))
+        params[n] = pickle.load(open(f"{userID}/params/{n}.p",'rb'))
+    
     fail=False
     if saveName != "":
-        X = data_adaptor.data.obsm["X_"+currentLayout]
+        X = embs[currentLayout]
         f = np.isnan(X).sum(1)==0    
         filt = np.logical_and(f,obs_mask)
 
-        temp = {}
-        for key in data_adaptor.data.uns.keys():
-            if key[:2] == "N_" and "_mask" not in key and "_params" not in key:
-                temp[key] = data_adaptor.data.uns[key][filt][:,filt]
-            elif key[:2] == "N_" and "_params" not in key:
-                temp[key] = data_adaptor.data.uns[key][filt]
-
-        adata = data_adaptor.data[filt].copy()
-
-        for key in temp.keys():
-            adata.uns[key] = temp[key]
-            
+        adata = data_adaptor.data[filt].copy()            
         name = currentLayout.split(';')[-1]
         
         if labels and labelNames:
@@ -378,24 +426,25 @@ def output_data_put(request, data_adaptor):
             for n,l in zip(labelNames,labels):
                 adata.obs[n] = pd.Categorical(l)        
         
-        keys = list(adata.obsm.keys())
+        keys = list(embs.keys())
         for k in keys:
-            if k[:2] == "X_":
-                k2 = k[2:]
-            else:
-                k2 = k
-            if name not in k2.split(';;'):
-                del adata.obsm[k]
+            if name not in k.split(';;'):
+                del embs[k]
+                del nnms[k]
+                del params[k]
         
-        keys = list(adata.uns.keys())
+        temp = {}
+        for key in nnms.keys():
+            temp[key] = nnms[key][filt][:,filt]
+        for key in temp.keys():
+            adata.obsp["N_"+key] = temp[key]
+            adata.obsm["X_"+key] = embs[key][filt]  
+            adata.uns["N_"+key+"_params"]=params[key]
+        
+        keys = list(adata.var.keys())
         for k in keys:
-            if k[:2] == "N_":
-                k2 = k[2:]
-            else:
-                k2 = k
-            k2 = k2.split('_mask')[0].split("_params")[0]
-            if name not in k2.split(';;') and k[:2] == "N_":          
-                del adata.uns[k]  
+            if ";;tMean" in k:
+                del adata.var[k]
 
         try:
             adata.obs_names = pd.Index(adata.obs["name_0"].astype('str'))
@@ -412,13 +461,17 @@ def output_data_put(request, data_adaptor):
             adata.X = adata.layers["X"]
             del adata.layers["X"]
         
+        for k in list(adata.layers.keys()):
+            if ";;csr" in k:
+                del adata.layers[k]
+
         try:
             del adata.obsm["X_root"]
         except:
             pass
 
         try:
-            adata.write_h5ad(saveName.split('.h5ad')[0]+'.h5ad')
+            adata.write_h5ad(f"{userID}/{saveName.split('.h5ad')[0]+'.h5ad'}")
         except:
             fail=True
 
@@ -429,8 +482,10 @@ def output_data_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
 
-def reload_put(request, data_adaptor):
+def save_data_put(request, data_adaptor):
     args = request.get_json()
+    labels = args.get("labels",None)
+    labelNames = args.get("labelNames",None)
     currentLayout = args.get("currentLayout",None)
     filter = args["filter"] if args else None
     
@@ -440,227 +495,179 @@ def reload_put(request, data_adaptor):
     except (KeyError, IndexError):
         raise FilterError("Error parsing filter")
 
-    fail=False
+    userID = _get_user_id(data_adaptor)        
+    fnames = glob(f"{userID}/emb/*.p")
+    embs = {}
+    nnms = {}
+    params={}
+    for f in fnames:
+        n = f.split('/')[-1][:-2]
+        embs[n] = pickle.load(open(f,'rb'))
+        nnms[n] = pickle.load(open(f"{userID}/nnm/{n}.p",'rb'))
+        params[n] = pickle.load(open(f"{userID}/params/{n}.p",'rb'))
     
-    X = data_adaptor.data.obsm["X_"+currentLayout]
+    X = embs[currentLayout]
     f = np.isnan(X).sum(1)==0    
     filt = np.logical_and(f,obs_mask)
-
+    adata = data_adaptor.data[filt].copy()     
+    name = currentLayout.split(';')[-1]
+    
+    if labels and labelNames:
+        labels = [x['__columns'][0] for x in labels]
+        for n,l in zip(labelNames,labels):
+            if n != "name_0":
+                adata.obs[n] = pd.Categorical(l)        
+    
+    keys = list(embs.keys())
+    for k in keys:
+        if name not in k.split(';;'):
+            del embs[k]
+            del nnms[k]
+            del params[k]
+    
     temp = {}
-    for key in data_adaptor.data.uns.keys():
-        if key[:2] == "N_" and "_mask" not in key and "_params" not in key:
-            temp[key] = data_adaptor.data.uns[key][filt][:,filt]
-        elif key[:2] == "N_" and "_params" not in key:
-            temp[key] = data_adaptor.data.uns[key][filt]
-
-    adata = data_adaptor.data[filt].copy()
-
+    for key in nnms.keys():
+        temp[key] = nnms[key][filt][:,filt]
     for key in temp.keys():
-        adata.uns[key] = temp[key]
-
-    data_adaptor.data = adata
+        adata.obsp["N_"+key] = temp[key]
+        adata.obsm["X_"+key] = embs[key][filt] 
+        adata.uns["N_"+key+"_params"]=params[key]
     
+    keys = list(adata.var.keys())
+    for k in keys:
+        if ";;tMean" in k:
+            del adata.var[k]
+                
     try:
-        data_adaptor.data.obs_names = pd.Index(data_adaptor.data.obs["name_0"].astype('str'))
-        del data_adaptor.data.obs["name_0"]
+        adata.obs_names = pd.Index(adata.obs["name_0"].astype('str'))
+        del adata.obs["name_0"]
     except:
         pass
     try:
-        data_adaptor.data.var_names = pd.Index(data_adaptor.data.var["name_0"].astype('str'))
-        del data_adaptor.data.var["name_0"]
+        adata.var_names = pd.Index(adata.var["name_0"].astype('str'))
+        del adata.var["name_0"]
     except:
         pass        
 
-    data_adaptor._validate_and_initialize()
+    if "X" in adata.layers.keys():
+        adata.X = adata.layers["X"]
+        del adata.layers["X"]
     
+    for k in list(adata.layers.keys()):
+        if ";;csr" in k:
+            del adata.layers[k]
+                
     try:
-        return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
-    except NotImplementedError as e:
-        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
-    except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
-
-def reload_full_put(request, data_adaptor):
-    data_adaptor.data = data_adaptor.data_orig
-    try:
-        data_adaptor.data.obs_names = pd.Index(data_adaptor.data.obs["name_0"].astype('str'))
-        del data_adaptor.data.obs["name_0"]
+        del adata.obsm["X_root"]
     except:
         pass
-    try:
-        data_adaptor.data.var_names = pd.Index(data_adaptor.data.var["name_0"].astype('str'))
-        del data_adaptor.data.var["name_0"]
-    except:
-        pass        
 
-    data_adaptor._validate_and_initialize()
-    data_adaptor.data_orig = data_adaptor.data
+    adata.write_h5ad(f"backend/server/app/{userID}_{currentLayout.replace(';','_')}.h5ad")
+    
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(f"backend/server/app/{userID}_{currentLayout.replace(';','_')}.h5ad")
+        except Exception as error:
+            print(error)
+        return response
+
+    try:
+        return send_file(f"{userID}_{currentLayout.replace(';','_')}.h5ad",as_attachment=True)
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+
+def save_metadata_put(request, data_adaptor):
+    args = request.get_json()
+    labelNames = args.get("labelNames",None)
+    filter = args["filter"] if args else None
     
     try:
-        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
-    except NotImplementedError as e:
-        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
-    except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+        shape = data_adaptor.get_shape()
+        obs_mask = data_adaptor._axis_filter_to_mask(Axis.OBS, filter["obs"], shape[0])
+    except (KeyError, IndexError):
+        raise FilterError("Error parsing filter")
 
-def rename_obs_put(request, data_adaptor):
-    args = request.get_json()
-    oldName = args.get("oldCategoryName","")
-    newName = args.get("newCategoryName","")
-    
+    userID = _get_user_id(data_adaptor)        
 
-    fail=False
-    if oldName != "" and newName != "":
+
+    labels = pickle.load(open(f"{userID}/obs.p","rb"))
+    labels = labels[labelNames]
+    labels = labels[obs_mask]
+    labels.to_csv(f"backend/server/app/{userID}_obs.csv")
+
+    @after_this_request
+    def remove_file(response):
         try:
-            data_adaptor.data.obs[newName] = data_adaptor.data.obs[oldName]
-            del data_adaptor.data.obs[oldName]         
-            data_adaptor._create_schema()
-        except:
-            fail=True
-        
-        try:
-            data_adaptor.data_orig.obs[newName] = data_adaptor.data_orig.obs[oldName]
-            del data_adaptor.data_orig.obs[oldName]         
-        except:
-            pass
+            os.remove(f"backend/server/app/{userID}_obs.csv")
+        except Exception as error:
+            print(error)
+        return response
 
     try:
-        return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return send_file(f"{userID}_obs.csv",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
 
-def delete_obs_put(request, data_adaptor):
-    args = request.get_json()
-    name = args.get("category","")
-
-    fail=False
-    if name != "":
-        try:
-            del data_adaptor.data.obs[name]
-            data_adaptor._create_schema()
-        except:
-            fail=True
-        
-        try:
-            del data_adaptor.data_orig.obs[name]
-        except:
-            fail=True    
-
-    try:
-        return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
-    except NotImplementedError as e:
-        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
-    except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+def _get_user_id(data_adaptor):
+    annotations = data_adaptor.dataset_config.user_annotations        
+    userID = f"{annotations.get_collection()}-{annotations._get_userdata_idhash(data_adaptor)}"       
+    return userID
 
 def delete_obsm_put(request, data_adaptor):
     args = request.get_json()
     embNames = args.get("embNames",None)
     fail=False
+    userID = _get_user_id(data_adaptor)
     if embNames is not None:
         for embName in embNames:
-            try:
-                del data_adaptor.data.obsm[f'X_{embName}']
-            except:
-                pass
-            try:
-                del data_adaptor.data.uns[f"N_{embName}"]
-                del data_adaptor.data.uns[f"N_{embName}_mask"]
-                del data_adaptor.data.uns[f"N_{embName}_params"]
-            except:
-                pass
-
-            try:
-                del data_adaptor.data_orig.obsm[f'X_{embName}']
-            except:
-                pass
-            try:
-                del data_adaptor.data_orig.uns[f"N_{embName}"]
-                del data_adaptor.data_orig.uns[f"N_{embName}_mask"]
-                del data_adaptor.data_orig.uns[f"N_{embName}_params"]
-            except:
-                pass            
-
-            data_adaptor._refresh_layout_schema()
-    
+            
+            if os.path.exists(f"{userID}/emb/{embName}.p"):
+                os.remove(f"{userID}/emb/{embName}.p")
+            if os.path.exists(f"{userID}/nnm/{embName}.p"):
+                os.remove(f"{userID}/nnm/{embName}.p")
+            if os.path.exists(f"{userID}/params/{embName}.p"):
+                os.remove(f"{userID}/params/{embName}.p")                
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+
+def initialize_user(data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    data_adaptor._initialize_user_folders(userID)           
+
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+
 
 def rename_obsm_put(request, data_adaptor):
     args = request.get_json()
     embNames = args.get("embNames",None)
     oldName = args.get("oldName",None)
     newName = args.get("newName",None)
-
+    userID = _get_user_id(data_adaptor)
     if embNames is not None and oldName is not None and newName is not None:
         for embName in embNames:
-            try:
-                X1 = data_adaptor.data.obsm[f'X_{embName}']
-                del data_adaptor.data.obsm[f'X_{embName}']
-                data_adaptor.data.obsm[f'X_{embName.replace(oldName,newName)}'] = X1
-            except:
-                pass
-            try:
-                X1 = data_adaptor.data.uns[f"N_{embName}"]
-                X2 = data_adaptor.data.uns[f"N_{embName}_mask"]
-                del data_adaptor.data.uns[f"N_{embName}"]
-                del data_adaptor.data.uns[f"N_{embName}_mask"]
-                data_adaptor.data.uns[f"N_{embName.replace(oldName,newName)}"] = X1
-                data_adaptor.data.uns[f"N_{embName.replace(oldName,newName)}_mask"] = X2
-            except:
-                pass
-
-            try:
-                X1 = data_adaptor.data_orig.obsm[f'X_{embName}']
-                del data_adaptor.data_orig.obsm[f'X_{embName}']
-                data_adaptor.data_orig.obsm[f'X_{embName.replace(oldName,newName)}'] = X1
-            except:
-                pass
-            try:
-                X1 = data_adaptor.data_orig.uns[f"N_{embName}"]
-                X2 = data_adaptor.data_orig.uns[f"N_{embName}_mask"]
-                del data_adaptor.data_orig.uns[f"N_{embName}"]
-                del data_adaptor.data_orig.uns[f"N_{embName}_mask"]
-                data_adaptor.data_orig.uns[f"N_{embName.replace(oldName,newName)}"] = X1
-                data_adaptor.data_orig.uns[f"N_{embName.replace(oldName,newName)}_mask"] = X2
-            except:
-                pass
-            data_adaptor._refresh_layout_schema()
-    
+            os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{embName.replace(oldName,newName)}.p")
+            os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{embName.replace(oldName,newName)}.p")
+            os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{embName.replace(oldName,newName)}.p")
     try:
-        return make_response(jsonify({"schema": data_adaptor.get_schema()}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
-
-
-def change_layer_put(request, data_adaptor):
-    args = request.get_json()
-    dataLayer = args.get("dataLayer",None)
-    fail=False
-    if dataLayer is not None:            
-        try:
-            if "X" not in data_adaptor.data.layers.keys():
-                data_adaptor.data.layers['X'] = data_adaptor.data.X
-            if dataLayer == ".raw":
-                data_adaptor.data.X = data_adaptor.data.raw.X
-            else:
-                data_adaptor.data.X = data_adaptor.data.layers[dataLayer]
-        except:
-            fail=True
-    try:
-        return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
-    except NotImplementedError as e:
-        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
-    except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
 
 def leiden_put(request, data_adaptor):
     args = request.get_json()
@@ -669,7 +676,8 @@ def leiden_put(request, data_adaptor):
     resolution = args.get('resolution',1.0)
     filter = args.get('filter',None)
     try:
-        cl = list(data_adaptor.compute_leiden(name,cName,resolution,filter))
+        userID = _get_user_id(data_adaptor)
+        cl = list(data_adaptor.compute_leiden(name,cName,resolution,filter,userID))
         return make_response(jsonify({"clusters": cl}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -688,7 +696,8 @@ def layout_obs_put(request, data_adaptor):
     embName = args["embName"] if args else None
 
     try:
-        schema = data_adaptor.compute_embedding(method, filter, reembedParams, parentName, embName)
+        userID = _get_user_id(data_adaptor)                 
+        schema = data_adaptor.compute_embedding(method, filter, reembedParams, parentName, embName, userID)
         return make_response(jsonify(schema), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -699,10 +708,14 @@ def layout_obs_put(request, data_adaptor):
 def preprocess_put(request, data_adaptor):
     args = request.get_json()
     reembedParams = args["params"] if args else {}
-
+    filter = args["filter"] if args else None
+    if not filter:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, "obs filter is required")
+        
     try:
-        schema = data_adaptor.compute_preprocess(reembedParams)
-        return make_response(jsonify(schema), HTTPStatus.OK, {"Content-Type": "application/json"})
+        userID = _get_user_id(data_adaptor)            
+        data_adaptor.compute_preprocess(reembedParams, filter, userID)
+        return make_response(jsonify(schema_get_helper(data_adaptor)), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -725,7 +738,12 @@ def reembed_parameters_get(request, data_adaptor):
 
 def reembed_parameters_obsm_put(request, data_adaptor):
     embName = request.get_json()["embName"]
-    reembedParams = data_adaptor.data.uns.get(f"N_{embName}_params",None)
+    userID = _get_user_id(data_adaptor)
+    try:
+        reembedParams = pickle.load(open(f"{userID}/params/{embName}","rb"))
+    except:
+        reembedParams = None
+
     if reembedParams is not None:
         reembedParams = reembedParams.copy()
         try:
@@ -847,11 +865,13 @@ def summarize_var_helper(request, data_adaptor, key, raw_query):
     args_filter_only = request.values.copy()
     args_filter_only.poplist("method")
     args_filter_only.poplist("key")
+    args_filter_only.poplist("layer")
 
     try:
+        layer = request.values.get("layer", default="X")        
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.summarize_var(summary_method, filter, query_hash),
+            data_adaptor.summarize_var(summary_method, filter, query_hash, layer),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )

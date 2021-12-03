@@ -35,6 +35,7 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
   const { metadataField } = ownProps;
   const isUserAnno = schema?.annotations?.obsByName[metadataField]?.writable;
   const categoricalSelection = state.categoricalSelection?.[metadataField];
+  const refresher = state.categoricalSelection?.refresher ?? false;
   return {
     colors: state.colors,
     categoricalSelection,
@@ -49,7 +50,8 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
     displaySankey: state.sankeySelection.displaySankey,
     selectedCategories: state.sankeySelection.selectedCategories,
     numChecked: state.sankeySelection.numChecked,
-    sankeyController: state.sankeyController
+    sankeyController: state.sankeyController,
+    refresher: refresher
   };
 })
 class Category extends React.PureComponent {
@@ -115,11 +117,10 @@ class Category extends React.PureComponent {
     }
   }
   componentDidUpdate = (prevProps) => {
-    const { colors, isExpanded, annoMatrix, selectedCategories, metadataField } = this.props;
+    const { colors, isExpanded, annoMatrix, selectedCategories, metadataField, refresher } = this.props;
     const { colorMode, colorAccessor } = colors;
     const { colors: colorsPrev } = prevProps;
     const { colorMode: colorModePrev, colorAccessor: colorAccessorPrev } = colorsPrev;
-
     const continuousColoring = (
       colorMode === "color by continuous metadata" || 
       colorMode === "color by geneset mean expression" || 
@@ -139,19 +140,21 @@ class Category extends React.PureComponent {
 
     if ((colorAccessor !== colorAccessorPrev && isExpanded) || 
         (isExpanded && (isExpanded !== prevProps.isExpanded) && continuousColoring) ||
-        (isExpanded && (annoMatrix.nObs !== prevProps.annoMatrix.nObs))) {
+        (isExpanded && (annoMatrix.nObs !== prevProps.annoMatrix.nObs)) ||
+        (isExpanded && (refresher !== prevProps.refresher))) {
       const { annoMatrix, metadataField, colors } = this.props;
       this.fetchData(annoMatrix, metadataField, colors).then((val) => {
         const [ categoryData, categorySummary, colorData ] = val;
         if (colorData && categoryData && categorySummary) {
           const col = colorData.col(colorData.colIndex.rindex[0]).asArray();
-          const cats = categoryData.col(categoryData.colIndex.rindex[0]).asArray();          
-          const averages = {}
+          const cats = categoryData.col(categoryData.colIndex.rindex[0]).asArray();   
+          const averages = new Map()
           for (const [i,value] of col.entries()){
-            averages[cats[i]] = ((averages[cats[i]] ?? 0) + value)
+            const num = averages.has(cats[i]) ? averages.get(cats[i]) : 0;
+            averages.set(cats[i],num + value)
           }
-          for (const key in averages){
-            averages[key] = averages[key] / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(key)]
+          for (const [key,value] of averages){
+            averages.set(key, value / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(key)])
           }
           for (const item of categorySummary.allCategoryValues){
             if (!(item in averages)) {
@@ -160,7 +163,8 @@ class Category extends React.PureComponent {
           }
           this.setState({
             ...this.state,
-            continuousAverages: averages
+            continuousAverages: averages,
+            categorySummary: categorySummary
           })
         }
       })
@@ -224,6 +228,10 @@ class Category extends React.PureComponent {
       metadataField,
       colors
     );
+    this.setState({
+      ...this.state,
+      categorySummary: categorySummary
+    })
 
     return {
       categoryData,
@@ -363,11 +371,12 @@ class Category extends React.PureComponent {
                 colorTable,
                 colorData,
                 categoryData,
-                categorySummary,
+                categorySummary: categorySummaryOrig,
                 isColorAccessor,
                 handleCategoryToggleAllClick,
               } = asyncProps;
               const isTruncated = !!categorySummary?.isTruncated;
+              const categorySummary = this.state?.categorySummary ?? categorySummaryOrig
               const selectionState = this.getSelectionState(categorySummary);
               return (
                 <CategoryRender
@@ -805,8 +814,10 @@ const CategoryValueList = React.memo(
     if (continuousAverages) {
       if (sortDirection){
         newTuples = [];
-        for (const item in continuousAverages) {
-          newTuples.push([item, continuousAverages[item]]);
+        for (const [item,value] of continuousAverages) {
+          if (item !== "unassigned") {
+            newTuples.push([item, value]);
+          }
         }
         
         newTuples.sort(function(a, b) {
@@ -821,9 +832,7 @@ const CategoryValueList = React.memo(
             newTuples[i][1] = i
           }                 
         }
-        if (!("unassigned" in continuousAverages)){
-          newTuples.push(["unassigned",newTuples.length])
-        }
+        newTuples.push(["unassigned",newTuples.length])
       } else {
         newTuples = tuples;
       }
@@ -848,7 +857,6 @@ const CategoryValueList = React.memo(
       categoryValueCounts: newCategoryValueCounts, 
       categoryValueIndices: newCategoryValueIndices
     }    
-
     if (!isUserAnno) {
       return (
         <>
