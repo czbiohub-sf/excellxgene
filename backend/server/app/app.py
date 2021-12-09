@@ -31,7 +31,7 @@ def auth0_token_required(f):
     def decorated(*args, **kwargs):
         token = 'profile' in session
         # return 401 if token is not passed
-        if not token:
+        if not token and current_app.hosted_mode:
             return jsonify({'message' : 'Authorization missing.'}), 401
   
         return  f(*args, **kwargs)

@@ -45,11 +45,12 @@ const Profile = (props) => {
 @connect((state) => ({
   scatterplotXXaccessor: state.controls.scatterplotXXaccessor,
   scatterplotYYaccessor: state.controls.scatterplotYYaccessor,
-  userInfo: state.controls.userInfo
+  userInfo: state.controls.userInfo,
+  hostedMode: state.controls.hostedMode
 }))
 class LeftSideBar extends React.Component {
   render() {
-    const { scatterplotXXaccessor, scatterplotYYaccessor, userInfo } = this.props;
+    const { scatterplotXXaccessor, scatterplotYYaccessor, userInfo, hostedMode } = this.props;
 
     return (
       <div
@@ -62,6 +63,7 @@ class LeftSideBar extends React.Component {
         }}
       >
         <TopLeftLogoAndTitle />
+        {hostedMode ? 
         <div style={{
           textAlign: "right",
           float: "right",
@@ -71,7 +73,7 @@ class LeftSideBar extends React.Component {
         }}>
           <Profile userInfo={userInfo}/>
           <UserButton userInfo={userInfo}/>
-        </div>
+        </div> : null}
         <div
           style={{
             height: "100%",

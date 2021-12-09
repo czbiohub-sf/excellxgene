@@ -428,7 +428,12 @@ const doInitialDataLoad = () =>
       reembedParamsFetch(dispatch);
       const { response: userInfo } = res;
       const { response: hostedMode } = res2;
-      dispatch({type: "set user info", userInfo})
+      if ( hostedMode ) {
+        dispatch({type: "set user info", userInfo})
+      } else {
+        dispatch({type: "set user info", userInfo: {desktopMode: true}})
+      }
+      
       dispatch({type: "set hosted mode", hostedMode})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       

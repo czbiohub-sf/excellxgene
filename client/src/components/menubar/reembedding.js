@@ -45,7 +45,15 @@ class Reembedding extends React.PureComponent {
       setReembedDialogActive: false,
     });
   };
-
+  handleRunAndDisablePreprocessingDialog = () => {
+    const { dispatch, reembedParams } = this.props;
+    
+    dispatch(actions.requestPreprocessing(reembedParams));
+    this.setState({
+      setReembedDialogActive: false,
+    });
+    // this is where you need to trigger subset if cells were filtered.
+  };
   handleRunAndDisableReembedDialog = () => {
     const { dispatch, reembedParams, layoutChoice, obsCrossfilter, isSubsetted } = this.props;
     const { embName } = this.state
@@ -123,7 +131,7 @@ class Reembedding extends React.PureComponent {
           }}>
             <PrepPanel idhash={idhash} />
             <ControlGroup style={{paddingTop: "15px"}} fill={true} vertical={false}>
-              <Button onClick={this.handleDisablePreprocessingDialog}>Close</Button>
+              <Button onClick={this.handleDisableReembedDialog}>Close</Button>
               {hostedMode ? null : <Button disabled={reembedParams.doBatchPrep && (reembedParams.batchPrepKey==="" || reembedParams.batchPrepLabel === "")}
                       onClick={this.handleRunAndDisablePreprocessingDialog} intent="primary"> Preprocess </Button>}
             </ControlGroup>            
