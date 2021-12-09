@@ -18,6 +18,7 @@ import actions from "../../../actions";
 
 @connect((state) => ({
   annotations: state.annotations,
+  userLoggedIn: state.controls.userInfo ? true : false
 }))
 class AnnoMenuCategory extends React.PureComponent {
   constructor(props) {
@@ -59,7 +60,8 @@ class AnnoMenuCategory extends React.PureComponent {
       toggleText,
       disableToggle,
       histToggler,
-      removeHistZeros
+      removeHistZeros,
+      userLoggedIn
     } = this.props;
 
     return (
@@ -89,7 +91,7 @@ class AnnoMenuCategory extends React.PureComponent {
                 <Menu>
                   <MenuItem
                     icon="edit"
-                    disabled={annotations.isEditingCategoryName}
+                    disabled={!userLoggedIn || annotations.isEditingCategoryName}
                     data-testclass="activateEditCategoryMode"
                     data-testid={`${metadataField}:edit-category-mode`}
                     onClick={this.activateEditCategoryMode}
@@ -111,7 +113,7 @@ class AnnoMenuCategory extends React.PureComponent {
                     data-testid={`${metadataField}:delete-category`}
                     onClick={this.handleDeleteCategory}
                     text={deleteText}
-                    disabled={disableDelete ?? false}
+                    disabled={(disableDelete ?? false )|| !userLoggedIn}
                   />               
                 </Menu>
               }
