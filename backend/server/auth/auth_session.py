@@ -28,7 +28,7 @@ class AuthTypeSession(AuthTypeBase):
             session[self.CXGUID] = uuid4().hex
             session.permanent = True
         return session[self.CXGUID]
-
+        
     def get_user_name(self):
         return "anonymous"
 

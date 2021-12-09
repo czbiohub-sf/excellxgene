@@ -7,22 +7,36 @@ from flask import (
     Flask,
     current_app,
     make_response,
+    jsonify,
     render_template,
     Blueprint,
     request,
     send_from_directory,
+    session
 )
 from flask_restful import Api, Resource
-
 import backend.server.common.rest as common_rest
 from backend.common.errors import DatasetAccessError, RequestException
 from backend.server.common.health import health_check
 from backend.common.utils.utils import Float32JSONEncoder
+import jwt
 
 webbp = Blueprint("webapp", "backend.server.common.web", template_folder="templates")
 
 ONE_WEEK = 7 * 24 * 60 * 60
 
+   
+def auth0_token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = 'profile' in session
+        # return 401 if token is not passed
+        if not token:
+            return jsonify({'message' : 'Authorization missing.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated
 
 def _cache_control(always, **cache_kwargs):
     """
@@ -147,9 +161,18 @@ class AnnotationsObsAPI(Resource):
 
     @requires_authentication
     @cache_control(no_store=True)
+    @auth0_token_required
     @rest_get_data_adaptor
     def put(self, data_adaptor):
         return common_rest.annotations_obs_put(request, data_adaptor)
+
+class UserInfoAuth0API(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    def get(self):
+        if 'profile' in session:
+            return make_response(jsonify({"response": session['profile']}), HTTPStatus.OK)
+        else:
+            return make_response(jsonify({"response": None}), HTTPStatus.OK)            
 
 
 class AnnotationsVarAPI(Resource):
@@ -162,6 +185,7 @@ class AnnotationsVarAPI(Resource):
 class DataVarAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.data_var_put(request, data_adaptor)
 
@@ -181,12 +205,14 @@ class ColorsAPI(Resource):
 class DiffExpObsAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def post(self, data_adaptor):
         return common_rest.diffexp_obs_post(request, data_adaptor)
 
 class PreprocessAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.preprocess_put(request, data_adaptor)
 
@@ -199,6 +225,7 @@ class LayoutObsAPI(Resource):
 
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.layout_obs_put(request, data_adaptor)
 
@@ -229,24 +256,28 @@ class DownloadMetadataAPI(Resource):
 class DeleteObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.delete_obsm_put(request, data_adaptor)
 
 class RenameObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.rename_obsm_put(request, data_adaptor)
 
 class LeidenClusterAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.leiden_put(request, data_adaptor)
 
 class ReembedParametersObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.reembed_parameters_obsm_put(request, data_adaptor)
 
@@ -259,6 +290,7 @@ class ReembedParametersAPI(Resource):
     @requires_authentication
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.reembed_parameters_put(request, data_adaptor)
 
@@ -271,6 +303,7 @@ class GenesetsAPI(Resource):
     @requires_authentication
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.genesets_put(request, data_adaptor)
 
@@ -283,6 +316,7 @@ class SummarizeVarAPI(Resource):
 
     @rest_get_data_adaptor
     @cache_control(no_store=True)
+    @auth0_token_required
     def post(self, data_adaptor):
         return common_rest.summarize_var_post(request, data_adaptor)
 
@@ -309,6 +343,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(InitializeUserAPI, "/initialize")
     add_resource(ConfigAPI, "/config")
     add_resource(UserInfoAPI, "/userinfo")
+    add_resource(UserInfoAuth0API, "/userInfo")
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")
     add_resource(AnnotationsVarAPI, "/annotations/var")

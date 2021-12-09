@@ -43,6 +43,9 @@ async function userColorsFetchAndLoad(dispatch) {
 async function schemaFetch() {
   return fetchJson("schema");
 }
+async function userInfoAuth0Fetch() {
+  return fetchJson("userInfo");
+}
 async function initializeFetch() {
   return fetchJson("initialize");
 }
@@ -113,8 +116,10 @@ export async function reembedParamsFetch(dispatch) {
 }
 export const reembedParamsObsmFetch = (embName) => async (
   dispatch,
-  _getState
+  getState
 ) => {
+  const { controls } = getState();
+  const { username } = controls;
   const defaultResponse = defaultReembedParams;
   const res = await fetch(
     `${API.prefix}${API.version}reembed-parameters-obsm`,
@@ -172,7 +177,7 @@ export const downloadData = () => async (
 ) => {
 
     const state = getState();
-    const { annoMatrix, layoutChoice } = state;
+    const { annoMatrix, layoutChoice, controls } = state;
     
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
@@ -211,9 +216,6 @@ export const downloadData = () => async (
       abortableFetch: af,
     });    
     const res = await af.ready()
-    dispatch({
-      type: "output data: request completed",
-    });
 
     const blob = await res.blob()
 
@@ -226,6 +228,10 @@ export const downloadData = () => async (
     a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
     a.click();
     window.URL.revokeObjectURL(url);
+
+    dispatch({
+      type: "output data: request completed",
+    });    
 }
 
 export const downloadMetadata = () => async (
@@ -234,7 +240,7 @@ export const downloadMetadata = () => async (
 ) => {
     const state = getState();
     // get current embedding
-    const { layoutChoice, sankeySelection, annoMatrix } = state;
+    const { layoutChoice, sankeySelection, annoMatrix, controls } = state;
     const { selectedCategories } = sankeySelection;
 
     let catNames;
@@ -288,7 +294,7 @@ export const requestSaveAnndataToFile = (saveName) => async (
 ) => {
   try{
     const state = getState();
-    const { annoMatrix, layoutChoice } = state;
+    const { annoMatrix, layoutChoice, controls } = state;
     
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
@@ -407,14 +413,17 @@ const doInitialDataLoad = () =>
     dispatch({ type: "initial data load start" });
     await initializeFetch(dispatch);
     try {
-      const [config, schema] = await Promise.all([
+      const [config, schema, res] = await Promise.all([
         configFetch(dispatch),
         schemaFetch(dispatch),
+        userInfoAuth0Fetch(dispatch),
         userColorsFetchAndLoad(dispatch),
         userInfoFetch(dispatch),
       ]);
       genesetsFetch(dispatch, config);
       reembedParamsFetch(dispatch);
+      const { response: userInfo } = res;
+      dispatch({type: "set user info", userInfo})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
@@ -427,7 +436,12 @@ const doInitialDataLoad = () =>
         const f = layoutSchema.filter((i) => {
           return preferredNames.includes(i.name)
         })
-        const name = f[0].name
+        let name;
+        if (f.length > 0) {
+          name = f[0].name
+        } else {
+          name = layoutSchema[0].name
+        }
         const base = annoMatrix.base();
 
         const [annoMatrixNew, obsCrossfilterNew] = await _switchEmbedding(

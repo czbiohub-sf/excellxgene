@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, InputGroup, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, Button, InputGroup, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -330,6 +330,7 @@ class MenuBar extends React.PureComponent {
       selectionTool === "brush"
         ? ["Brush selection", "Lasso selection"]
         : ["select", "polygon-filter"];
+
     return (
       <div
         style={{
@@ -344,7 +345,6 @@ class MenuBar extends React.PureComponent {
           zIndex: 3,
         }}
       >
-        <AuthButtons {...{ auth, userInfo }} />
         <UndoRedoReset
           dispatch={dispatch}
           undoDisabled={undoDisabled}

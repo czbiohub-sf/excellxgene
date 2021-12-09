@@ -7,7 +7,7 @@ from hashlib import blake2b
 import json
 
 import pandas as pd
-from flask import session, has_request_context, current_app
+from flask import session, has_request_context, current_app, request
 
 from backend.server import __version__ as cellxgene_version
 from backend.server.common.annotations.annotations import Annotations
@@ -200,9 +200,14 @@ class AnnotationsLocalFile(Annotations):
         Return a short hash that weakly identifies the user and dataset.
         Used to create safe annotations output file names.
         """
-        uid = current_app.auth.get_user_id() or ""
-        id = (uid + data_adaptor.get_location()).encode()
-        idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
+        if 'profile' not in session:
+            id = (data_adaptor.get_location()).encode()
+            guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")            
+            idhash = guest_idhash
+        else:
+            uid = session['profile']['sub']
+            id = (uid + data_adaptor.get_location()).encode()
+            idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
         return idhash
 
     def _get_output_dir(self):
@@ -240,15 +245,11 @@ class AnnotationsLocalFile(Annotations):
         if session is None:
             raise AnnotationsError("unable to determine file name for annotations")
 
-        collection = self.get_collection()
-        if collection is None:
-            return None
-
         if data_adaptor is None:
             raise AnnotationsError("unable to determine file name for annotations")
 
         idhash = self._get_userdata_idhash(data_adaptor)
-        return os.path.join(self._get_output_dir(), f"{collection}-{idhash}/{anno_name}")
+        return os.path.join(self._get_output_dir(), f"{idhash}/{anno_name}")
 
     def _backup(self, fname, max_backups=9):
         """

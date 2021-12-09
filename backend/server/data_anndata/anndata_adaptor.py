@@ -1,6 +1,5 @@
 import warnings
 from datetime import datetime
-
 import anndata
 import numpy as np
 from packaging import version
@@ -29,6 +28,9 @@ import json
 from backend.common.utils.utils import jsonify_numpy
 import signal
 import pickle
+import base64
+from hashlib import blake2b
+
 from os.path import exists
 import sklearn.utils.sparsefuncs as sf
 from numba import njit, prange
@@ -88,7 +90,7 @@ def initialize_socket(da):
                     tMeanSq = da.data.var[f'{layer};;tMeanSq'].values
 
                     if iA.size < iB.size:
-                        meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iA,niA)
+                        meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
                         meanA/=nA
                         meanAsq/=nA
                         vA = meanAsq - meanA**2
@@ -97,7 +99,7 @@ def initialize_socket(da):
                         meanBsq = (tMeanSq*n - meanAsq*nA) / nB
                         vB = meanBsq - meanB**2                          
                     else:
-                        meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iB,niB)
+                        meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
                         meanB/=nB
                         meanBsq/=nB
                         vB = meanBsq - meanB**2
@@ -106,13 +108,13 @@ def initialize_socket(da):
                         meanAsq = (tMeanSq*n - meanBsq*nB) / nA
                         vA = meanAsq - meanA**2  
                 else:
-                    meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iA,niA)
+                    meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
                     meanA/=nA
                     meanAsq/=nA
                     vA = meanAsq - meanA**2
                     vA[vA<0]=0
 
-                    meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[0],XI.shape[1],iB,niB)
+                    meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
                     meanB/=nB
                     meanBsq/=nB
                     vB = meanBsq - meanB**2
@@ -249,10 +251,7 @@ class AnndataAdaptor(DataAdaptor):
                 raise KeyError(f"Annotation name {name}, specified in --{ax_name}-name does not exist.")
 
     def _create_schema(self):
-        if self.data.raw is not None:
-            layers = [".raw"]+list(self.data.layers.keys())
-        else:
-            layers = list(self.data.layers.keys())
+        layers = list(self.data.layers.keys())
         
         if "X" not in layers:
             layers = ["X"] + layers
@@ -334,40 +333,82 @@ class AnndataAdaptor(DataAdaptor):
                     adata = anndata.read_h5ad(lh, backed=backed)
                 # as of AnnData 0.6.19, backed mode performs initial load fast, but at the
                 # cost of significantly slower access to X data.
+                if not sparse.issparse(adata.X):
+                    adata.X = sparse.csr_matrix(adata.X)
+                for k in adata.layers.keys():  
+                    if not sparse.issparse(adata.layers[k]):
+                        adata.layers[k] = sparse.csr_matrix(adata.layers[k])
+
                 adata.obsm["X_root"] = np.zeros((adata.shape[0],2))
                 adata.obs_names_make_unique()
                 
-                adata.X=adata.X.tocsc()
+                if adata.X.getformat() == "csr":
+                    adata.layers["X;;csr"] = adata.X
+                    adata.X=adata.X.tocsc()
+                elif adata.X.getformat() != "csc":
+                    adata.X=adata.X.tocsc()
+
                 adata.layers["X"] = adata.X
 
-                print("Loading and precomputing layers necessary for fast differential expression...")
-                for k in adata.layers.keys():  
-                    if sparse.issparse(adata.layers[k]):
-                        if adata.layers[k].getformat() != "csc":
+                print("Loading and precomputing layers necessary for fast differential expression and reembedding...")
+                for k in list(adata.layers.keys()):  
+                    if sparse.issparse(adata.layers[k]) and ';;csr' not in k:
+                        if adata.layers[k].getformat() == "csr":
+                            adata.layers[k+';;csr'] = adata.layers[k]
+                            adata.layers[k] = adata.layers[k].tocsc()
+                        elif adata.layers[k].getformat() != "csc":
                             adata.layers[k] = adata.layers[k].tocsc()
                 
+                l = list(adata.layers.keys())
                 for key in list(adata.layers.keys()):
-                    X = adata.layers[key]
+                    if ';;csr' not in key:
+                        X = adata.layers[key]
+                        if key + ';;csr' not in l:
+                            X2 = X.tocsr()
+                            adata.layers[key+";;csr"] = X2
+                        if sparse.issparse(X):
+                            mean,v = sf.mean_variance_axis(X,axis=0)
+                            meansq = v-mean**2
+                            adata.var[f"{key};;tMean"] = mean
+                            adata.var[f"{key};;tMeanSq"] = meansq
+                        else:
+                            adata.var[f"{key};;tMean"] = X.mean(0)
+                            adata.var[f"{key};;tMeanSq"] = (X**2).mean(0)
+                
+                if 'orig.X' not in adata.layers.keys(): 
+                    adata.layers['orig.X'] = adata.X   
+                    adata.layers['orig.X;;csr'] = adata.layers['X;;csr']
+                    adata.var['orig.X;;tMean'] = adata.var['X;;tMean']
+                    adata.var['orig.X;;tMeanSq'] = adata.var['X;;tMeanSq']
+                
+                if adata.raw is not None:
+                    X = adata.raw.X
                     
-                    X2 = X.tocsr()
-                    adata.layers[key+";;csr"] = X2
                     if sparse.issparse(X):
                         mean,v = sf.mean_variance_axis(X,axis=0)
                         meansq = v-mean**2
-                        adata.var[f"{key};;tMean"] = mean
-                        adata.var[f"{key};;tMeanSq"] = meansq
+                        adata.var[f".raw;;tMean"] = mean
+                        adata.var[f".raw;;tMeanSq"] = meansq
                     else:
-                        adata.var[f"{key};;tMean"] = X.mean(0)
-                        adata.var[f"{key};;tMeanSq"] = (X**2).mean(0)
-                
-                if 'orig.exprs' not in adata.layers.keys(): 
-                    adata.layers['orig.exprs'] = adata.X   
-                    adata.layers['orig.exprs;;csr'] = adata.layers['X;;csr']
-                    adata.var['orig.exprs;;tMean'] = adata.var['X;;tMean']
-                    adata.var['orig.exprs;;tMeanSq'] = adata.var['X;;tMeanSq']
-                
-                if adata.raw is not None:
-                    adata.raw.X = adata.raw.X.tocsr()
+                        adata.var[f".raw;;tMean"] = X.mean(0)
+                        adata.var[f".raw;;tMeanSq"] = (X**2).mean(0)   
+
+                    del adata.raw
+                    
+                    if sparse.issparse(X):
+                        if X.getformat() == "csc":
+                            X1 = X
+                            X2 = X.tocsr()
+                        elif X.getformat() == "csr":
+                            X1 = X.tocsc()
+                            X2 = X
+                        else:
+                            X1 = X.tocsc()
+                            X2 = X.tocsr()                        
+                        adata.layers[".raw"] = X1
+                        adata.layers[".raw;;csr"] = X2
+                    else:
+                        adata.layers[".raw"] = X
 
                 self.data = adata
 
@@ -399,10 +440,12 @@ class AnndataAdaptor(DataAdaptor):
                 if k != "X_root":
                     k2 = "X_".join(k.split("X_")[1:])
                     pickle.dump(self._obsm_init[k],open(f"{userID}/emb/{k2}.p",'wb'))
-                    r = self.data.uns.get("N_"+k2,self.data.obsp.get("connectivities",None))
+                    r = self._uns_init.get("N_"+k2,self._obsp_init.get("connectivities",None))
+                    p = self._uns_init.get("N_"+k2+"_params",{})
                     if r is not None:
                         pickle.dump(r,open(f"{userID}/nnm/{k2}.p",'wb'))
-            del self.data.uns
+                        pickle.dump(p,open(f"{userID}/params/{k2}.p",'wb'))
+            
 
     def _validate_and_initialize(self):
         if anndata_version_is_pre_070():
@@ -423,16 +466,29 @@ class AnndataAdaptor(DataAdaptor):
 
         self._obsm_init = self.data.obsm
         self._obs_init = self.data.obs
+        self._uns_init = self.data.uns
+        self._obsp_init = self.data.obsp
+
         del self.data.obs
         del self.data.obsm
+        del self.data.uns
+        del self.data.obsp
+
         self.data.obsm['X_root'] = self._obsm_init['X_root']
         self.data.obs["name_0"] = self._obs_init["name_0"]
+
         self._obs_init = self._obs_init.set_index("name_0")
+
 
         # heuristic
         n_values = self.data.shape[0] * self.data.shape[1]
         if (n_values > 1e8 and self.server_config.adaptor__anndata_adaptor__backed is True) or (n_values > 5e8):
             self.parameters.update({"diffexp_may_be_slow": True})
+
+
+        id = (self.get_location()).encode()
+        self.guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
+        self._initialize_user_folders(self.guest_idhash)
 
     def _is_valid_layout(self, arr):
         """return True if this layout data is a valid array for front-end presentation:
@@ -532,7 +588,7 @@ class AnndataAdaptor(DataAdaptor):
 
     def get_embedding_array(self, ename, dims=2):
         annotations = self.dataset_config.user_annotations        
-        userID = f"{annotations.get_collection()}-{annotations._get_userdata_idhash(self)}"
+        userID = f"{annotations._get_userdata_idhash(self)}"
         try:
             full_embedding = pickle.load(open(f"{userID}/emb/{ename}.p",'rb'))
         except:
@@ -543,7 +599,7 @@ class AnndataAdaptor(DataAdaptor):
         try:
             nnm = pickle.load(open(f"{userID}/nnm/{name}.p","rb"))            
         except:
-            nnm = self.data.obsp['connectivities'] 
+            nnm = self._obsp_init['connectivities'] 
 
         try:
             shape = self.get_shape()
@@ -602,7 +658,7 @@ class AnndataAdaptor(DataAdaptor):
         try:
             nnm = pickle.load(open(f"{userID}/nnm/{name}.p","rb"))            
         except:
-            nnm = self.data.obsp['connectivities']          
+            nnm = self._obsp_init['connectivities']          
         nnm = nnm[obs_mask][:,obs_mask]
 
         cl=[]
@@ -762,16 +818,7 @@ class AnndataAdaptor(DataAdaptor):
                 
                 adata_sub = adata[cl==k].copy()
                 adata_sub.obs_names = adata_sub.obs["name_0"]
-                if dataLayer == ".raw" and adata_sub.raw is not None:
-                    adata_sub_raw = AnnData(X=adata_sub.raw.X)
-                    adata_sub_raw.var_names = adata_sub.raw.var_names
-                    adata_sub_raw.obs_names = adata_sub.obs_names
-                    adata_sub_raw.obs = adata_sub.obs
-                    for key in adata_sub.var.keys():
-                        adata_sub_raw.var[key] = adata_sub.var[key]
-                elif dataLayer == ".raw":
-                    adata_sub_raw = adata_sub
-                elif dataLayer == "X":
+                if dataLayer == "X":
                     adata_sub_raw = adata_sub
                     if dataLayer == "X" and "X" not in adata_sub_raw.layers.keys():
                         adata_sub_raw.layers["X"] = adata_sub_raw.X    
@@ -817,16 +864,7 @@ class AnndataAdaptor(DataAdaptor):
             adata_raw = adata_raw[cn]
             adata_raw.obs_names = temp
         else:
-            if dataLayer == ".raw" and adata.raw is not None:
-                adata_raw = AnnData(X=adata.raw.X)
-                adata_raw.var_names = adata.raw.var_names
-                adata_raw.obs_names = adata.obs_names
-                adata_raw.obs = adata.obs
-                for key in adata.var.keys():
-                    adata_raw.var[key] = adata.var[key]
-            elif dataLayer == ".raw":
-                adata_raw = adata.copy()
-            elif dataLayer == "X":
+            if dataLayer == "X":
                 adata_raw = adata.copy()
                 if dataLayer == "X" and "X" not in adata_raw.layers.keys():
                     adata_raw.layers["X"] = adata_raw.X    

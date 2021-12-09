@@ -7,8 +7,9 @@ import json
 import pandas as pd
 import numpy as np
 from glob import glob
-from flask import make_response, jsonify, current_app, abort, send_file, after_this_request
+from flask import make_response, jsonify, current_app, abort, send_file, after_this_request, session
 from werkzeug.urls import url_unquote
+from anndata import AnnData
 import pickle
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
 from backend.server.common.config.client_config import get_client_config, get_client_userinfo
@@ -28,6 +29,7 @@ from backend.common.errors import (
 from backend.common.genesets import summarizeQueryHash
 from backend.common.fbs.matrix import decode_matrix_fbs
 import os 
+import pathlib
 
 def abort_and_log(code, logmsg, loglevel=logging.DEBUG, include_exc_info=False):
     """
@@ -339,8 +341,7 @@ def diffexp_obs_post(data, data_adaptor):
         # JSON encoding failure, usually due to bad data. Just let it ripple up
         # to default exception handler.
         current_app.logger.warning(JSON_NaN_to_num_warning_msg)
-        raise
-
+        raise  
 
 def layout_obs_get(request, data_adaptor):
     fields = request.args.getlist("layout-name", None)
@@ -387,101 +388,6 @@ def sankey_data_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-def output_data_put(request, data_adaptor):
-    args = request.get_json()
-    saveName = args.get("saveName","")
-    labels = args.get("labels",None)
-    labelNames = args.get("labelNames",None)
-    currentLayout = args.get("currentLayout",None)
-    filter = args["filter"] if args else None
-    
-    try:
-        shape = data_adaptor.get_shape()
-        obs_mask = data_adaptor._axis_filter_to_mask(Axis.OBS, filter["obs"], shape[0])
-    except (KeyError, IndexError):
-        raise FilterError("Error parsing filter")
-
-    userID = _get_user_id(data_adaptor)        
-    fnames = glob(f"{userID}/emb/*.p")
-    embs = {}
-    nnms = {}
-    params={}
-    for f in fnames:
-        n = f.split('/')[-1][:-2]
-        embs[n] = pickle.load(open(f,'rb'))
-        nnms[n] = pickle.load(open(f"{userID}/nnm/{n}.p",'rb'))
-        params[n] = pickle.load(open(f"{userID}/params/{n}.p",'rb'))
-    
-    fail=False
-    if saveName != "":
-        X = embs[currentLayout]
-        f = np.isnan(X).sum(1)==0    
-        filt = np.logical_and(f,obs_mask)
-
-        adata = data_adaptor.data[filt].copy()            
-        name = currentLayout.split(';')[-1]
-        
-        if labels and labelNames:
-            labels = [x['__columns'][0] for x in labels]
-            for n,l in zip(labelNames,labels):
-                adata.obs[n] = pd.Categorical(l)        
-        
-        keys = list(embs.keys())
-        for k in keys:
-            if name not in k.split(';;'):
-                del embs[k]
-                del nnms[k]
-                del params[k]
-        
-        temp = {}
-        for key in nnms.keys():
-            temp[key] = nnms[key][filt][:,filt]
-        for key in temp.keys():
-            adata.obsp["N_"+key] = temp[key]
-            adata.obsm["X_"+key] = embs[key][filt]  
-            adata.uns["N_"+key+"_params"]=params[key]
-        
-        keys = list(adata.var.keys())
-        for k in keys:
-            if ";;tMean" in k:
-                del adata.var[k]
-
-        try:
-            adata.obs_names = pd.Index(adata.obs["name_0"].astype('str'))
-            del adata.obs["name_0"]
-        except:
-            pass
-        try:
-            adata.var_names = pd.Index(adata.var["name_0"].astype('str'))
-            del adata.var["name_0"]
-        except:
-            pass        
-
-        if "X" in adata.layers.keys():
-            adata.X = adata.layers["X"]
-            del adata.layers["X"]
-        
-        for k in list(adata.layers.keys()):
-            if ";;csr" in k:
-                del adata.layers[k]
-
-        try:
-            del adata.obsm["X_root"]
-        except:
-            pass
-
-        try:
-            adata.write_h5ad(f"{userID}/{saveName.split('.h5ad')[0]+'.h5ad'}")
-        except:
-            fail=True
-
-    try:
-        return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
-    except NotImplementedError as e:
-        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
-    except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
-
 def save_data_put(request, data_adaptor):
     args = request.get_json()
     labels = args.get("labels",None)
@@ -509,7 +415,10 @@ def save_data_put(request, data_adaptor):
     X = embs[currentLayout]
     f = np.isnan(X).sum(1)==0    
     filt = np.logical_and(f,obs_mask)
-    adata = data_adaptor.data[filt].copy()     
+
+    adata = AnnData(X = data_adaptor.data.layers['X;;csr'][filt],
+            obs = data_adaptor.data.obs[filt],
+            var = data_adaptor.data.var)
     name = currentLayout.split(';')[-1]
     
     if labels and labelNames:
@@ -548,32 +457,26 @@ def save_data_put(request, data_adaptor):
         del adata.var["name_0"]
     except:
         pass        
-
-    if "X" in adata.layers.keys():
-        adata.X = adata.layers["X"]
-        del adata.layers["X"]
     
-    for k in list(adata.layers.keys()):
-        if ";;csr" in k:
-            del adata.layers[k]
-                
-    try:
-        del adata.obsm["X_root"]
-    except:
-        pass
 
-    adata.write_h5ad(f"backend/server/app/{userID}_{currentLayout.replace(';','_')}.h5ad")
+    
+    for k in list(data_adaptor.data.layers.keys()):
+        if ";;csr" in k and "X;;" not in k:
+            adata.layers[k.split(';;csr')[0]] = data_adaptor.data.layers[k][filt]
+
+    adata.write_h5ad(f"{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad")
     
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"backend/server/app/{userID}_{currentLayout.replace(';','_')}.h5ad")
+            os.remove(f"{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad")
         except Exception as error:
             print(error)
         return response
 
     try:
-        return send_file(f"{userID}_{currentLayout.replace(';','_')}.h5ad",as_attachment=True)
+        direc = pathlib.Path().absolute()        
+        return send_file(f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -596,18 +499,19 @@ def save_metadata_put(request, data_adaptor):
     labels = pickle.load(open(f"{userID}/obs.p","rb"))
     labels = labels[labelNames]
     labels = labels[obs_mask]
-    labels.to_csv(f"backend/server/app/{userID}_obs.csv")
+    labels.to_csv(f"{userID}/{userID}_obs.csv")
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"backend/server/app/{userID}_obs.csv")
+            os.remove(f"{userID}/{userID}_obs.csv")
         except Exception as error:
             print(error)
         return response
 
     try:
-        return send_file(f"{userID}_obs.csv",as_attachment=True)
+        direc = pathlib.Path().absolute()
+        return send_file(f"{direc}/{userID}/{userID}_obs.csv",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -615,7 +519,7 @@ def save_metadata_put(request, data_adaptor):
 
 def _get_user_id(data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations        
-    userID = f"{annotations.get_collection()}-{annotations._get_userdata_idhash(data_adaptor)}"       
+    userID = f"{annotations._get_userdata_idhash(data_adaptor)}"       
     return userID
 
 def delete_obsm_put(request, data_adaptor):

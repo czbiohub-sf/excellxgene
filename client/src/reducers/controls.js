@@ -19,6 +19,7 @@ const Controls = (
     graphRenderCounter: 0 /* integer as <Component key={graphRenderCounter} - a change in key forces a remount */,
     allGenes: null,
     datasetDrawer: false,
+    userInfo: null
   },
   action
 ) => {
@@ -64,6 +65,12 @@ const Controls = (
         error: null,
         isSubsetted: true,
       };
+    }
+    case "set user info": {
+      return {
+        ...state,
+        userInfo: action.userInfo
+      }
     }
     case "request user defined gene started": {
       return {

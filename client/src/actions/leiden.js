@@ -24,7 +24,7 @@ async function doLeidenFetch(dispatch, getState) {
     const state = getState();
     // get current embedding
     
-    const { layoutChoice, Leiden, annoMatrix } = state;
+    const { layoutChoice, Leiden, annoMatrix, controls } = state;
     const { res } = Leiden;
     let cells = annoMatrix.rowIndex.labels();
     cells = Array.isArray(cells) ? cells : Array.from(cells);          

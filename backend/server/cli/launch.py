@@ -5,22 +5,27 @@ import sys
 import webbrowser
 import os
 import click
+from http import HTTPStatus
 from flask_compress import Compress
 from flask_cors import CORS
-
 from backend.server.default_config import default_config
 from backend.server.app.app import Server
 from backend.server.common.config.app_config import AppConfig
+from flask import redirect, session, jsonify, make_response
+from six.moves.urllib.parse import urlencode
 from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
 from flask_sock import Sock
 import multiprocessing
+from authlib.integrations.flask_client import OAuth
 import sys
 import signal
 from backend.server.data_anndata.anndata_adaptor import AnndataAdaptor
 from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 
+from dotenv import load_dotenv
+load_dotenv()
 
 def annotation_args(func):
     @click.option(
@@ -458,6 +463,46 @@ def launch(
     if not server_config.app__verbose:
         f = open(os.devnull, "w")
         sys.stdout = f
+    
+    
+    oauth = OAuth(server.app)
+    auth0 = oauth.register(
+        'auth0',
+        client_id='YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB',
+        client_secret=os.environ.get('SECRET'),
+        api_base_url='https://dev-gbiqjhha.us.auth0.com',
+        access_token_url=f'https://dev-gbiqjhha.us.auth0.com/oauth/token',
+        authorize_url=f'https://dev-gbiqjhha.us.auth0.com/authorize',
+        client_kwargs={
+            'scope': 'openid profile email',
+        }
+    )
+
+    @server.app.route('/callback')
+    def callback_handling():
+        auth0.authorize_access_token()
+        resp = auth0.get('userinfo')
+        userinfo = resp.json()
+        # Store the user information in flask session.
+        session['jwt_payload'] = userinfo
+        session['profile'] = userinfo
+        
+        annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
+        app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
+        return redirect('http://localhost:3000/')
+    
+    @server.app.route('/login')
+    def login():
+        return auth0.authorize_redirect(redirect_uri='http://localhost:5005/callback') #TODO: CHANGE FOR SERVER
+    
+    @server.app.route('/logout')
+    def logout():
+        # Clear session stored data
+        session.clear()
+        # Redirect user to logout endpoint
+        params = {'returnTo': "http://localhost:3000/", 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
+        return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
 
     try:
         server.app.run(
