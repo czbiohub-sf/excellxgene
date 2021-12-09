@@ -263,6 +263,19 @@ def launch_args(func):
         show_default=True,
         help="Print default configuration settings and exit",
     )
+    @click.option(
+        "--hosted",
+        default=False,
+        is_flag=True,
+        show_default=True,
+        help="Runs ExCellxgene in hosted mode.",
+    ) 
+    @click.option(
+        "--root_embedding",
+        default=None,
+        show_default=True,
+        help="Choose the fixed, immutable embedding. If not set, the root embedding will contain all points in the center of the screen.",
+    )              
     @click.help_option("--help", "-h", help="Show this message and exit.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -344,6 +357,8 @@ def launch(
     experimental_annotations_ontology_obo,
     config_file,
     dump_default_config,
+    hosted,
+    root_embedding
 ):
     """Launch the cellxgene data viewer.
     This web app lets you explore single-cell expression data.
@@ -368,6 +383,7 @@ def launch(
 
     # app config
     app_config = AppConfig()
+    app_config.root_embedding = root_embedding
     server_config = app_config.server_config
 
     try:
@@ -433,9 +449,11 @@ def launch(
     handle_scripts(scripts)
 
     # create the server
+
     server = CliLaunchServer(app_config)
     sock = Sock(server.app)
     app_config.server_config.data_adaptor.socket = sock
+    server.app.hosted_mode = hosted
 
     cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
     initialize_socket(app_config.server_config.data_adaptor)

@@ -19,7 +19,8 @@ const Controls = (
     graphRenderCounter: 0 /* integer as <Component key={graphRenderCounter} - a change in key forces a remount */,
     allGenes: null,
     datasetDrawer: false,
-    userInfo: null
+    userInfo: null,
+    hostedMode: false
   },
   action
 ) => {
@@ -72,6 +73,12 @@ const Controls = (
         userInfo: action.userInfo
       }
     }
+    case "set hosted mode": {
+      return {
+        ...state,
+        hostedMode: action.hostedMode
+      }
+    }    
     case "request user defined gene started": {
       return {
         ...state,

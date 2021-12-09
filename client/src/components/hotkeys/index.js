@@ -9,26 +9,6 @@ export const GlobalHotkeys = (props) => {
   const hotkeys = useMemo(
     () => [
       {
-        combo: "SHIFT+I",
-        global: true,
-        label:
-          "Set the current selection and its inverse to cell sets 1 and 2, respectively.",
-        onKeyDown: () =>
-          dispatch(actions.setCellsFromSelectionAndInverseAction()),
-      },
-      {
-        combo: "SHIFT+1",
-        global: true,
-        label: "Set current selection to cell set 1.",
-        onKeyDown: () => dispatch(actions.setCellSetFromSelection(1)),
-      },
-      {
-        combo: "SHIFT+2",
-        global: true,
-        label: "Set current selection to cell set 2.",
-        onKeyDown: () => dispatch(actions.setCellSetFromSelection(2)),
-      },
-      {
         combo: "Z",
         global: true,
         label: "Hold to use multiple selection lassos.",
@@ -68,6 +48,26 @@ export const DgeHotkeys = (props) => {
   const inputRef = createRef();
   const hotkeys = useMemo(
     () => [
+      {
+        combo: "SHIFT+I",
+        global: true,
+        label:
+          "Set the current selection and its inverse to cell sets 1 and 2, respectively.",
+        onKeyDown: () =>
+          dispatch(actions.setCellsFromSelectionAndInverseAction()),
+      },
+      {
+        combo: "SHIFT+1",
+        global: true,
+        label: "Set current selection to cell set 1.",
+        onKeyDown: () => dispatch(actions.setCellSetFromSelection(1)),
+      },
+      {
+        combo: "SHIFT+2",
+        global: true,
+        label: "Set current selection to cell set 2.",
+        onKeyDown: () => dispatch(actions.setCellSetFromSelection(2)),
+      },      
       {
         combo: "SHIFT+D",
         global: true,

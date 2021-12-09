@@ -162,9 +162,6 @@ def schema_get_helper(data_adaptor):
     for layout in [x.split(f"{userID}/emb/")[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
         layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
         schema["layout"]["obs"].append(layout_schema)
-    schema["layout"]["obs"].append(
-        {"name": "root", "type": "float32", "dims": [f"root_0", f"root_1"]}
-    )
     return schema
 
 def schema_get(data_adaptor):
@@ -601,7 +598,7 @@ def layout_obs_put(request, data_adaptor):
 
     try:
         userID = _get_user_id(data_adaptor)                 
-        schema = data_adaptor.compute_embedding(method, filter, reembedParams, parentName, embName, userID)
+        schema = data_adaptor.compute_embedding(method, filter, reembedParams, parentName, embName, userID, hosted = current_app.hosted_mode)
         return make_response(jsonify(schema), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))

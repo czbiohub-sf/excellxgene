@@ -38,6 +38,26 @@ def auth0_token_required(f):
   
     return decorated
 
+def desktop_mode_only(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if current_app.hosted_mode:
+            return jsonify({'message' : 'Feature only available in desktop mode.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated    
+
+def hosted_mode_only(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_app.hosted_mode:
+            return jsonify({'message' : 'Feature only available in hosted mode.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated    
+
 def _cache_control(always, **cache_kwargs):
     """
     Used to easily manage cache control headers on responses.
@@ -174,6 +194,10 @@ class UserInfoAuth0API(Resource):
         else:
             return make_response(jsonify({"response": None}), HTTPStatus.OK)            
 
+class HostedModeAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    def get(self):
+        return make_response(jsonify({"response": current_app.hosted_mode}), HTTPStatus.OK)
 
 class AnnotationsVarAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -213,6 +237,7 @@ class PreprocessAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
     @auth0_token_required
+    @desktop_mode_only
     def put(self, data_adaptor):
         return common_rest.preprocess_put(request, data_adaptor)
 
@@ -277,7 +302,6 @@ class LeidenClusterAPI(Resource):
 class ReembedParametersObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
-    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.reembed_parameters_obsm_put(request, data_adaptor)
 
@@ -344,6 +368,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(ConfigAPI, "/config")
     add_resource(UserInfoAPI, "/userinfo")
     add_resource(UserInfoAuth0API, "/userInfo")
+    add_resource(HostedModeAPI, "/hostedMode")
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")
     add_resource(AnnotationsVarAPI, "/annotations/var")

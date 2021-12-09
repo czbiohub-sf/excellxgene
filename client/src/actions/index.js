@@ -46,6 +46,9 @@ async function schemaFetch() {
 async function userInfoAuth0Fetch() {
   return fetchJson("userInfo");
 }
+async function hostedModeFetch() {
+  return fetchJson("hostedMode");
+}
 async function initializeFetch() {
   return fetchJson("initialize");
 }
@@ -413,17 +416,20 @@ const doInitialDataLoad = () =>
     dispatch({ type: "initial data load start" });
     await initializeFetch(dispatch);
     try {
-      const [config, schema, res] = await Promise.all([
+      const [config, schema, res, res2] = await Promise.all([
         configFetch(dispatch),
         schemaFetch(dispatch),
         userInfoAuth0Fetch(dispatch),
+        hostedModeFetch(dispatch),
         userColorsFetchAndLoad(dispatch),
         userInfoFetch(dispatch),
       ]);
       genesetsFetch(dispatch, config);
       reembedParamsFetch(dispatch);
       const { response: userInfo } = res;
+      const { response: hostedMode } = res2;
       dispatch({type: "set user info", userInfo})
+      dispatch({type: "set hosted mode", hostedMode})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);

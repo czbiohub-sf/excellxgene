@@ -158,7 +158,7 @@ class AnndataAdaptor(DataAdaptor):
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
-        self._load_data(data_locator)    
+        self._load_data(data_locator, root_embedding=app_config.root_embedding)    
         self._validate_and_initialize()
 
 
@@ -286,7 +286,7 @@ class AnndataAdaptor(DataAdaptor):
     def get_schema(self):
         return self.schema
 
-    def _load_data(self, data_locator):
+    def _load_data(self, data_locator, root_embedding = None):
         # as of AnnData 0.6.19, backed mode performs initial load fast, but at the
         # cost of significantly slower access to X data.
         try:
@@ -339,7 +339,23 @@ class AnndataAdaptor(DataAdaptor):
                     if not sparse.issparse(adata.layers[k]):
                         adata.layers[k] = sparse.csr_matrix(adata.layers[k])
 
-                adata.obsm["X_root"] = np.zeros((adata.shape[0],2))
+                if root_embedding is not None:
+                    adata.obsm["X_root"] = adata.obsm[root_embedding]
+                    if root_embedding[:2] == "X_":
+                        obsp = root_embedding[2:]
+                    else:
+                        obsp = root_embedding
+                    
+                    if "N_"+obsp in adata.obsp.keys():
+                        adata.obsp["N_root"] = adata.obsp["N_"+obsp]
+                        adata.uns["N_root_params"] = adata.uns["N_"+obsp+"_params"]
+                        del adata.obsp["N_"+obsp]
+                        del adata.uns["N_"+obsp+"_params"]
+
+                    del adata.obsm[root_embedding]
+                else:
+                    adata.obsm["X_root"] = np.zeros((adata.shape[0],2))
+                
                 adata.obs_names_make_unique()
                 
                 if adata.X.getformat() == "csr":
@@ -437,14 +453,13 @@ class AnndataAdaptor(DataAdaptor):
 
             pickle.dump(self._obs_init,open(f"{userID}/obs.p",'wb'))
             for k in self._obsm_init.keys():
-                if k != "X_root":
-                    k2 = "X_".join(k.split("X_")[1:])
-                    pickle.dump(self._obsm_init[k],open(f"{userID}/emb/{k2}.p",'wb'))
-                    r = self._uns_init.get("N_"+k2,self._obsp_init.get("connectivities",None))
-                    p = self._uns_init.get("N_"+k2+"_params",{})
-                    if r is not None:
-                        pickle.dump(r,open(f"{userID}/nnm/{k2}.p",'wb'))
-                        pickle.dump(p,open(f"{userID}/params/{k2}.p",'wb'))
+                k2 = "X_".join(k.split("X_")[1:])
+                pickle.dump(self._obsm_init[k],open(f"{userID}/emb/{k2}.p",'wb'))
+                r = self._obsp_init.get("N_"+k2,self._obsp_init.get("connectivities",None))
+                p = self._uns_init.get("N_"+k2+"_params",{})
+                if r is not None:
+                    pickle.dump(r,open(f"{userID}/nnm/{k2}.p",'wb'))
+                    pickle.dump(p,open(f"{userID}/params/{k2}.p",'wb'))
             
 
     def _validate_and_initialize(self):
@@ -754,7 +769,7 @@ class AnndataAdaptor(DataAdaptor):
         return ps,cs
 
     def compute_preprocess(self, reembedParams, obsFilter, userID, hosted=False):
-        self.data.obsm["X_root"] = np.zeros(self.data.obsm["X_root"].shape)+0.5
+        self.data.obsm["X_root"] = self._obsm_init["X_root"]
 
         try:
             shape = self.get_shape()
@@ -970,7 +985,7 @@ class AnndataAdaptor(DataAdaptor):
         with ServerTiming.time("layout.compute"):  
             
             if hosted:
-                adata = self.compute_preprocess(reembedParams, userID, hosted=True)                      
+                adata = self.compute_preprocess(reembedParams, obsFilter, userID, hosted=True)                      
             else:
                 adata = AnnData(X=self.data.layers["X;;csr"])
                 for k in self.data.layers.keys():

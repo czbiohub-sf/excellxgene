@@ -24,7 +24,8 @@ import { Dataframe } from "../../util/dataframe";
   preprocessController: state.preprocessController,
   refresher: state.sankeySelection.refresher,
   numChecked: state.sankeySelection.numChecked,
-  layoutChoice: state.layoutChoice
+  layoutChoice: state.layoutChoice,
+  userLoggedIn: state.controls.userInfo ? true : false
 }))
 class Categories extends React.Component {
   constructor(props) {
@@ -216,7 +217,8 @@ class Categories extends React.Component {
       reembedController,
       preprocessController,
       dispatch,
-      layoutChoice
+      layoutChoice,
+      userLoggedIn
     } = this.props;
     const ontologyEnabled = ontology?.enabled ?? false;
     const loading = !!leidenController?.pendingFetch || !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
@@ -314,7 +316,7 @@ class Categories extends React.Component {
                     data-testid="open-annotation-dialog"
                     onClick={this.handleEnableAnnoMode}
                     intent="primary"
-                    disabled={!userInfo.is_authenticated}
+                    disabled={!userInfo.is_authenticated || !userLoggedIn}
                   >
                     Create new <strong>category</strong>
                   </AnchorButton>
@@ -325,7 +327,7 @@ class Categories extends React.Component {
                     data-testid="leiden-cluster"
                     onClick={this.handleLeidenClustering}
                     intent="primary"
-                    disabled={loading}
+                    disabled={loading || !userLoggedIn}
                   >
                     <strong>Leiden</strong> cluster
                   </AnchorButton>     
@@ -369,7 +371,7 @@ class Categories extends React.Component {
                     data-testid="fuse-labels"
                     onClick={this.handleFuseLabels}
                     intent="primary"
-                    disabled={!fuseEnabled}
+                    disabled={!fuseEnabled || !userLoggedIn}
                   >
                     <strong>Fuse</strong> labels
                   </AnchorButton>   
@@ -379,7 +381,7 @@ class Categories extends React.Component {
                     data-testid="delete-labels"
                     onClick={this.handleDeleteLabels}
                     intent="primary"
-                    disabled={!deleteEnabled || layoutChoice.sankey}
+                    disabled={!deleteEnabled || layoutChoice.sankey || !userLoggedIn}
                   >
                     <strong>Delete</strong> labels
                   </AnchorButton>                     

@@ -18,7 +18,8 @@ import QuickGene from "./quickGene";
     colorAccessor: state.colors.colorAccessor,
     genesets: state.genesets.genesets,
     annoMatrix: state.annoMatrix,
-    reembedParams: state.reembedParameters
+    reembedParams: state.reembedParameters,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class GeneExpression extends React.Component {
@@ -119,14 +120,14 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix } = this.props;
+    const { dispatch, genesets, annoMatrix, userLoggedIn } = this.props;
     const { geneSetsExpanded } = this.state;
     return (
       <div>
-        <GenesetHotkeys
+       {userLoggedIn ?  <GenesetHotkeys
           dispatch={dispatch}
           genesets={genesets}
-        />
+        /> : null}
         <div style={{
           marginBottom: "20px",
           textAlign: "right"
@@ -165,6 +166,7 @@ class GeneExpression extends React.Component {
               data-testid="open-create-geneset-dialog"
               onClick={this.handleActivateCreateGenesetMode}
               intent="primary"
+              disabled={!userLoggedIn}
             >
               Create new
             </Button>

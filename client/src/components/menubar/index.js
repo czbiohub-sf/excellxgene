@@ -67,7 +67,8 @@ function HotkeysDialog(props) {
     sankeyController: state.sankeyController,
     currCacheKey: state.sankeySelection.currCacheKey,
     maxLink: state.sankeySelection.maxLink,
-    alignmentThreshold: state.sankeySelection.alignmentThreshold
+    alignmentThreshold: state.sankeySelection.alignmentThreshold,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class MenuBar extends React.PureComponent {
@@ -319,7 +320,8 @@ class MenuBar extends React.PureComponent {
       outputController,
       sankeyController,
       currCacheKey,
-      maxLink
+      maxLink,
+      userLoggedIn
     } = this.props;
     const { pendingClipPercentiles, saveName, threshold } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
@@ -367,7 +369,6 @@ class MenuBar extends React.PureComponent {
           }
         />
         <ButtonGroup className={styles.menubarButton}>
-          <Preprocessing />          
           <Reembedding />
         </ButtonGroup>
         <Tooltip
@@ -468,7 +469,7 @@ class MenuBar extends React.PureComponent {
           handleSubset={this.handleSubset}
           handleSubsetReset={this.handleSubsetReset}
         />
-        {disableDiffexp ? null : <DiffexpButtons />}
+        {(disableDiffexp || !userLoggedIn) ? null : <DiffexpButtons />}
         <ButtonGroup className={styles.menubarButton}>        
         <Tooltip
             content="Click to display hotkey menu ( or SHIFT+?)"
