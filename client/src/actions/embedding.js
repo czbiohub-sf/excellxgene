@@ -31,9 +31,9 @@ export async function _switchEmbedding(
 
 export const requestDeleteEmbedding = (toDelete) => async (
     _dispatch,
-    getState
+    _getState
   ) => {
-  const {username} = getState().controls;
+  
   const res = await fetch(
     `${API.prefix}${API.version}layout/obsm`,
     {

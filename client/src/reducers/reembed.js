@@ -11,7 +11,7 @@ export const reembedController = (
     case "reembed: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "reembed: request aborted":
@@ -38,7 +38,7 @@ export const preprocessController = (
     case "preprocess: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "preprocess: request aborted":

@@ -181,6 +181,7 @@ export const downloadData = () => async (
 
     const state = getState();
     const { annoMatrix, layoutChoice, controls } = state;
+    const { wsDownloadAnndata } = controls;
     
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
@@ -195,45 +196,15 @@ export const downloadData = () => async (
         annoNames.push(item.name)
       }
     }
-
-    const af = abortableFetch(
-      `${API.prefix}${API.version}downloadAnndata`,
-      {
-        method: "PUT",
-        headers: new Headers({
-          Accept: "application/octet-stream",
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          labelNames: annoNames,
-          labels: annos,
-          currentLayout: layoutChoice.current,
-          filter: { obs: { index: cells } }
-        }),
-        credentials: "include",
-        },
-        600000000
-    );
-    dispatch({
-      type: "output data: request start",
-      abortableFetch: af,
-    });    
-    const res = await af.ready()
-
-    const blob = await res.blob()
-
-    var a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    var url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
-    a.click();
-    window.URL.revokeObjectURL(url);
+    wsDownloadAnndata.send(JSON.stringify({
+      labelNames: annoNames,
+      labels: annos,
+      currentLayout: layoutChoice.current,
+      filter: { obs: { index: cells } }
+    }))
 
     dispatch({
-      type: "output data: request completed",
+      type: "output data: request start"
     });    
 }
 
@@ -364,7 +335,7 @@ export const requestSaveAnndataToFile = (saveName) => async (
 }
 
 const setupWebSockets = (dispatch,getState) => {
-  const onMessage = (event) => {
+  const onMessage = async (event) => {
     const data = JSON.parse(event.data)
 
     if (data.cfn === "diffexp"){
@@ -403,12 +374,114 @@ const setupWebSockets = (dispatch,getState) => {
           });              
         }
       });  
+    } else if (data.cfn == "reembedding"){
+      
+      const schema = data.response;
+      console.log(schema)
+      dispatch({
+        type: "reembed: request completed",
+      });
+      const {
+        annoMatrix: prevAnnoMatrix,
+        obsCrossfilter: prevCrossfilter,
+        layoutChoice,
+      } = getState();
+      const base = prevAnnoMatrix.base().addEmbedding(schema);
+      dispatch({
+        type: "reset subset"
+      })
+      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
+        base,
+        prevCrossfilter,
+        layoutChoice.current,
+        schema.name
+      );
+      dispatch({
+        type: "reembed: add reembedding",
+        schema,
+        annoMatrix,
+        obsCrossfilter,
+      });
+      postAsyncSuccessToast("Re-embedding has completed.");
+
+    } else if (data.cfn == "preprocessing"){
+      const {        
+        obsCrossfilter: prevCrossfilter,
+        layoutChoice,
+        annoMatrix: dummy
+      } = getState();
+
+      const schema = dummy.schema;
+
+      dispatch({
+        type: "preprocess: request completed",
+      });
+
+      const baseDataUrl = `${API.prefix}${API.version}`;
+      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, schema);
+      prefetchEmbeddings(annoMatrixNew);
+
+      dispatch({
+        type: "reset subset"
+      })
+
+      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
+        annoMatrixNew,
+        prevCrossfilter,
+        layoutChoice.current,
+        layoutChoice.current
+      );
+      
+      dispatch({
+        type: "annoMatrix: init complete",
+        annoMatrix,
+        obsCrossfilter
+      });      
+      postAsyncSuccessToast("Preprocessing has completed.");
+    } else if (data.cfn == "sankey"){
+
+    } else if (data.cfn == "leiden"){
+
+    } else if (data.cfn == "downloadAnndata"){
+      const { layoutChoice } = getState();
+      const res = await fetch(`http://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sendFile?path=${data.response}`)
+      const blob = await res.blob()
+  
+      var a = document.createElement("a");
+      document.body.appendChild(a);
+      a.style = "display: none";
+  
+      var url = window.URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
+      a.click();
+      window.URL.revokeObjectURL(url);
+  
+      dispatch({
+        type: "output data: request completed",
+      });    
     }
   }   
   const wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
+  const wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
+  const wsPreprocessing = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/preprocessing`)
+  const wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
+  const wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
+  const wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
+
   wsDiffExp.onmessage = onMessage
+  wsReembedding.onmessage = onMessage
+  wsPreprocessing.onmessage = onMessage
+  wsSankey.onmessage = onMessage
+  wsLeiden.onmessage = onMessage
+  wsDownloadAnndata.onmessage = onMessage
 
   dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})
+  dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
+  dispatch({type: "init: set up websockets",ws: wsPreprocessing, name: "wsPreprocessing"})
+  dispatch({type: "init: set up websockets",ws: wsSankey, name: "wsSankey"})
+  dispatch({type: "init: set up websockets",ws: wsLeiden, name: "wsLeiden"})
+  dispatch({type: "init: set up websockets",ws: wsDownloadAnndata, name: "wsDownloadAnndata"})
 }
 
 const doInitialDataLoad = () =>
@@ -438,6 +511,7 @@ const doInitialDataLoad = () =>
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
+      console.log(annoMatrix.schema)
       const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
       prefetchEmbeddings(annoMatrix);
       const allGenes = await annoMatrix.fetch("var","name_0")

@@ -11,7 +11,7 @@ from flask_cors import CORS
 from backend.server.default_config import default_config
 from backend.server.app.app import Server
 from backend.server.common.config.app_config import AppConfig
-from flask import redirect, session, jsonify, make_response
+from flask import redirect, session, jsonify, make_response, request, send_file, after_this_request, current_app
 from six.moves.urllib.parse import urlencode
 from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
@@ -23,9 +23,22 @@ import signal
 from backend.server.data_anndata.anndata_adaptor import AnndataAdaptor
 from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
-
+from functools import wraps
 from dotenv import load_dotenv
 load_dotenv()
+
+def auth0_token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = 'profile' in session
+        # return 401 if token is not passed
+        if not token and current_app.hosted_mode:
+            return jsonify({'message' : 'Authorization missing.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated
+
 
 def annotation_args(func):
     @click.option(
@@ -521,6 +534,25 @@ def launch(
         # Redirect user to logout endpoint
         params = {'returnTo': "http://localhost:3000/", 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
         return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
+    
+    @server.app.route("/sendFile")
+    @auth0_token_required
+    def f():
+        field = request.args.get("path", None)
+        if field is not None:            
+            annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
+            userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"              
+            assert (userID in field)
+            
+            @after_this_request
+            def ff(response):
+                try:
+                    os.remove(field)
+                except Exception as error:
+                    print(error)
+                return response    
+            
+            return send_file(field,as_attachment=True)
 
     try:
         server.app.run(

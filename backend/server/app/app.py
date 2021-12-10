@@ -248,12 +248,6 @@ class LayoutObsAPI(Resource):
     def get(self, data_adaptor):
         return common_rest.layout_obs_get(request, data_adaptor)
 
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    @auth0_token_required
-    def put(self, data_adaptor):
-        return common_rest.layout_obs_put(request, data_adaptor)
-
 class SankeyPlotAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
@@ -269,6 +263,7 @@ class OutputAPI(Resource):
 class DownloadAnndataAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.save_data_put(request, data_adaptor)
 
@@ -378,19 +373,19 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(ReembedParametersAPI, "/reembed-parameters")
     add_resource(ReembedParametersObsmAPI, "/reembed-parameters-obsm")
 
-    add_resource(SankeyPlotAPI, "/sankey")
-    add_resource(OutputAPI, "/output")
-    add_resource(DownloadAnndataAPI, "/downloadAnndata")
+    #add_resource(SankeyPlotAPI, "/sankey")
+    #add_resource(OutputAPI, "/output")
+    #add_resource(DownloadAnndataAPI, "/downloadAnndata")
     add_resource(DownloadMetadataAPI, "/downloadMetadata")
-    add_resource(LeidenClusterAPI, "/leiden")
+    #add_resource(LeidenClusterAPI, "/leiden")
     add_resource(DeleteObsmAPI, "/layout/obsm")
     add_resource(RenameObsmAPI, "/layout/rename")
-    add_resource(PreprocessAPI, "/preprocess")
+    #add_resource(PreprocessAPI, "/preprocess")
     add_resource(SummarizeVarAPI, "/summarize/var")
     # Display routes
     add_resource(ColorsAPI, "/colors")
     # Computation routes
-    add_resource(DiffExpObsAPI, "/diffexp/obs")
+    #add_resource(DiffExpObsAPI, "/diffexp/obs")
     add_resource(LayoutObsAPI, "/layout/obs")
     return api
 
