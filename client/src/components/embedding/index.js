@@ -76,6 +76,7 @@ class Embedding extends React.PureComponent {
         data: embeddingName,
       });
     }
+    e.preventDefault();
   };
   disableEditLayoutMode = () => {
     const { dispatch } = this.props;

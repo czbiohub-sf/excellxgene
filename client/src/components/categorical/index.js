@@ -9,7 +9,6 @@ import AnnoSelect from "./annoSelect";
 import LabelInput from "../labelInput";
 import { labelPrompt } from "./labelUtil";
 import actions from "../../actions";
-import { Dataframe } from "../../util/dataframe";
 
 @connect((state) => ({
   writableCategoriesEnabled: state.config?.parameters?.annotations ?? false,
@@ -72,46 +71,8 @@ class Categories extends React.Component {
     this.setState({ createAnnoModeActive: true });
   };
   handleLeidenClustering = () => {
-    const { dispatch, obsCrossfilter: prevObsCF } = this.props
-    dispatch(actions.requestLeiden()).then(item => {
-      const [val,name] = item;
-      let prevObsCrossfilter;
-      if (prevObsCF.annoMatrix.schema.annotations.obsByName[name]) {
-        prevObsCrossfilter = prevObsCF.dropObsColumn(name);
-      } else {
-        prevObsCrossfilter = prevObsCF;
-      }
-      const initialValue = new Array(val.clusters);
-      const df = new Dataframe([initialValue[0].length,1],initialValue)
-      const { categories } = df.col(0).summarizeCategorical();
-      if (!categories.includes(globals.unassignedCategoryLabel)) {
-        categories.push(globals.unassignedCategoryLabel);
-      }
-      const ctor = initialValue.constructor;
-      const newSchema = {
-        name: name,
-        type: "categorical",
-        categories,
-        writable: true,
-      };     
-      const arr = new Array(prevObsCrossfilter.annoMatrix.schema.dataframe.nObs).fill("unassigned");
-      const index = prevObsCrossfilter.annoMatrix.rowIndex.labels()
-      for (let i = 0; i < index.length; i++) {
-        arr[index[i]] = val.clusters[i] ?? "what"
-      }
-      const obsCrossfilter = prevObsCrossfilter.addObsColumn(
-        newSchema,
-        ctor,
-        arr
-      );         
-      dispatch({
-        type: "annotation: create category",
-        data: name,
-        categoryToDuplicate: null,
-        annoMatrix: obsCrossfilter.annoMatrix,
-        obsCrossfilter,
-      });            
-    })
+    const { dispatch } = this.props
+    dispatch(actions.requestLeiden())
   };
   handleDisableAnnoMode = () => {
     this.setState({

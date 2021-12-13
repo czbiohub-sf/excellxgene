@@ -534,25 +534,6 @@ def launch(
         # Redirect user to logout endpoint
         params = {'returnTo': "http://localhost:3000/", 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
         return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
-    
-    @server.app.route("/sendFile")
-    @auth0_token_required
-    def f():
-        field = request.args.get("path", None)
-        if field is not None:            
-            annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
-            userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"              
-            assert (userID in field)
-            
-            @after_this_request
-            def ff(response):
-                try:
-                    os.remove(field)
-                except Exception as error:
-                    print(error)
-                return response    
-            
-            return send_file(field,as_attachment=True)
 
     try:
         server.app.run(

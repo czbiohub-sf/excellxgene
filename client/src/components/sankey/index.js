@@ -29,33 +29,7 @@ class Sankey extends React.Component {
 
   handleSankey = () => {
     const { dispatch, alignmentThreshold: threshold } = this.props;
-    const prom = dispatch(requestSankey());
-    const links = []
-    const nodes = []
-    prom.then((res) => {
-      let n = []
-      res.edges.forEach(function (item, index) {
-        if (res.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
-          links.push({
-            source: item[0],
-            target: item[1],
-            value: res.weights[index]
-          })
-          n.push(item[0])
-          n.push(item[1])
-        }
-      });   
-      n = n.filter((item, i, ar) => ar.indexOf(item) === i);
-
-      n.forEach(function (item){
-        nodes.push({
-          id: item
-        })
-      })
-      const data = {links: links, nodes: nodes}
-      dispatch({type: "sankey: set data",data: data})
-      this.constructSankey()
-    });
+    dispatch(requestSankey(threshold));
   };  
 
   handleResize = () => {
@@ -325,10 +299,8 @@ class Sankey extends React.Component {
     this.constructSankey()
   };
   componentDidUpdate(prevProps) {
-    const { dispatch, layoutChoice, refresher, numCells, currCacheKey } = this.props
-    if (layoutChoice.current !== prevProps.layoutChoice.current){
-      this.handleSankey()
-    } else if(refresher !== prevProps.refresher) {
+    const { dispatch, refresher, numCells, currCacheKey } = this.props
+    if(refresher !== prevProps.refresher) {
       this.constructSankey()
     } else if (numCells !== prevProps.numCells){
       dispatch({type: "sankey: clear cached result",key: currCacheKey})
@@ -337,7 +309,10 @@ class Sankey extends React.Component {
   }
   componentDidMount() {
     window.addEventListener("resize", this.handleResize);
-    this.constructSankey();
+    if(this.props.sankeyData){
+      this.constructSankey();
+    }
+    
   }
 
   componentWillUnmount() {

@@ -12,14 +12,16 @@ from flask import (
     Blueprint,
     request,
     send_from_directory,
-    session
+    session,
+    after_this_request,
+    send_file
 )
 from flask_restful import Api, Resource
 import backend.server.common.rest as common_rest
 from backend.common.errors import DatasetAccessError, RequestException
 from backend.server.common.health import health_check
 from backend.common.utils.utils import Float32JSONEncoder
-import jwt
+import os
 
 webbp = Blueprint("webapp", "backend.server.common.web", template_folder="templates")
 
@@ -199,6 +201,26 @@ class HostedModeAPI(Resource):
     def get(self):
         return make_response(jsonify({"response": current_app.hosted_mode}), HTTPStatus.OK)
 
+class SendFileAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def get(self,data_adaptor):
+        field = request.args.get("path", None)
+    
+        annotations = data_adaptor.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(data_adaptor)}"             
+        assert (userID in field)
+        @after_this_request
+        def f(response):
+            try:
+                os.remove(field)
+            except Exception as error:
+                print(error)
+            return response    
+        
+        return send_file(field,as_attachment=True)    
+
 class AnnotationsVarAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
@@ -326,7 +348,6 @@ class GenesetsAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.genesets_put(request, data_adaptor)
 
-
 class SummarizeVarAPI(Resource):
     @rest_get_data_adaptor
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -360,6 +381,7 @@ def get_api_dataroot_resources(bp_dataroot):
     # Initialization routes
     add_resource(SchemaAPI, "/schema")
     add_resource(InitializeUserAPI, "/initialize")
+    add_resource(SendFileAPI, "/sendFile")
     add_resource(ConfigAPI, "/config")
     add_resource(UserInfoAPI, "/userinfo")
     add_resource(UserInfoAuth0API, "/userInfo")

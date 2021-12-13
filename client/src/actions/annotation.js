@@ -276,22 +276,6 @@ export const annotationDeleteCategoryAction = (categoryName) => (
   });
 
   dispatch({type: "sankey: set", category: categoryName, value: false})
-
-  
-  fetch(
-    `${API.prefix}${API.version}deleteObs`,
-    {
-      method: "PUT",
-      headers: new Headers({
-        Accept: "application/octet-stream",
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify({
-        category: categoryName,
-      }),
-      credentials: "include",
-      }
-  );
 };
 
 export const annotationCreateLabelInCategory = (

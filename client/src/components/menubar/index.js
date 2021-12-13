@@ -108,41 +108,44 @@ class MenuBar extends React.PureComponent {
   handleSankey = (threshold,reset) => {
     const { dispatch, layoutChoice } = this.props;
     if (!layoutChoice.sankey || !reset) {
-      const prom = dispatch(requestSankey());
-      const links = []
-      const nodes = []
-      prom.then((res) => {
-        let n = []
-        res.edges.forEach(function (item, index) {
-          if (res.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
-            links.push({
-              source: item[0],
-              target: item[1],
-              value: res.weights[index]
+      const res = dispatch(requestSankey(threshold));
+      res.then((resp)=>{
+        if (resp) {
+          const sankey = resp[0];
+          const links = []
+          const nodes = []
+          let n = []
+          sankey.edges.forEach(function (item, index) {
+            if (sankey.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
+              links.push({
+                source: item[0],
+                target: item[1],
+                value: sankey.weights[index]
+              })
+              n.push(item[0])
+              n.push(item[1])
+            }
+          });   
+          n = n.filter((item, i, ar) => ar.indexOf(item) === i);
+    
+          n.forEach(function (item){
+            nodes.push({
+              id: item
             })
-            n.push(item[0])
-            n.push(item[1])
-          }
-        });   
-        n = n.filter((item, i, ar) => ar.indexOf(item) === i);
-  
-        n.forEach(function (item){
-          nodes.push({
-            id: item
           })
-        })
-        
-        const data = {links: links, nodes: nodes}
-        dispatch({type: "sankey: set data",data: data})
-        if (reset){
-          dispatch({type: "toggle sankey"})
-          dispatch({type: "sankey: set alignment score threshold", threshold: 0})   
-          this.setState({
-            ...this.state,
-            threshold: 0
-          })
+          const d = {links: links, nodes: nodes}
+          dispatch({type: "sankey: set data",data: d})
         }
-      })      
+      })
+      if (reset){
+        dispatch({type: "toggle sankey"})
+        dispatch({type: "sankey: set alignment score threshold", threshold: 0})   
+        this.setState({
+          ...this.state,
+          threshold: 0
+        })
+      }
+      return res;      
     } else {
       dispatch({type: "sankey: reset"})
       dispatch({type: "toggle sankey"})
@@ -152,7 +155,6 @@ class MenuBar extends React.PureComponent {
         threshold: 0
       })      
     }
-
   };
   componentDidUpdate = (prevProps) => {
     if (this.props.layoutChoice.current !== prevProps.layoutChoice.current){
@@ -540,8 +542,8 @@ class MenuBar extends React.PureComponent {
           <Slider
             min={0}
             max={maxLink}
-            stepSize={parseFloat((maxLink/100).toFixed(2))}
-            labelStepSize={maxLink}
+            stepSize={Math.max(parseFloat((maxLink/100).toFixed(2)),0.001)}
+            labelStepSize={Math.max(maxLink,0.001)}
             showTrackFill={false}
             onRelease={this.onRelease}
             onChange={this.onSliderChange}

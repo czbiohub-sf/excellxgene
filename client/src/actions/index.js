@@ -28,6 +28,8 @@ import * as embActions from "./embedding";
 import * as genesetActions from "./geneset";
 import { defaultReembedParams } from "../reducers/reembed";
 import { _switchEmbedding } from "./embedding";
+import { Dataframe } from "../util/dataframe";
+
 /*
 return promise fetching user-configured colors
 */
@@ -334,10 +336,9 @@ export const requestSaveAnndataToFile = (saveName) => async (
   }
 }
 
-const setupWebSockets = (dispatch,getState) => {
+const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
   const onMessage = async (event) => {
-    const data = JSON.parse(event.data)
-
+    const data = JSON.parse(event.data);
     if (data.cfn === "diffexp"){
       const { annoMatrix, genesets } = getState();
       const { diffExpListsLists } = genesets;
@@ -374,10 +375,8 @@ const setupWebSockets = (dispatch,getState) => {
           });              
         }
       });  
-    } else if (data.cfn == "reembedding"){
-      
+    } else if (data.cfn === "reembedding"){
       const schema = data.response;
-      console.log(schema)
       dispatch({
         type: "reembed: request completed",
       });
@@ -404,7 +403,7 @@ const setupWebSockets = (dispatch,getState) => {
       });
       postAsyncSuccessToast("Re-embedding has completed.");
 
-    } else if (data.cfn == "preprocessing"){
+    } else if (data.cfn === "preprocessing"){
       const {        
         obsCrossfilter: prevCrossfilter,
         layoutChoice,
@@ -438,13 +437,95 @@ const setupWebSockets = (dispatch,getState) => {
         obsCrossfilter
       });      
       postAsyncSuccessToast("Preprocessing has completed.");
-    } else if (data.cfn == "sankey"){
-
-    } else if (data.cfn == "leiden"){
-
-    } else if (data.cfn == "downloadAnndata"){
+    } else if (data.cfn === "sankey"){
       const { layoutChoice } = getState();
-      const res = await fetch(`http://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sendFile?path=${data.response}`)
+      const catNames = data.catNames;
+      const sankey = data.response;
+      const threshold = data.threshold;
+      dispatch({
+        type: "sankey: request completed",
+      });
+      dispatch({
+        type: "sankey: cache results",
+        sankey,
+        key: `${catNames.join(";")}_${layoutChoice.current}`
+      })
+      const links = []
+      const nodes = []
+      let n = []
+      sankey.edges.forEach(function (item, index) {
+        if (sankey.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
+          links.push({
+            source: item[0],
+            target: item[1],
+            value: sankey.weights[index]
+          })
+          n.push(item[0])
+          n.push(item[1])
+        }
+      });   
+      n = n.filter((item, i, ar) => ar.indexOf(item) === i);
+
+      n.forEach(function (item){
+        nodes.push({
+          id: item
+        })
+      })
+      const d = {links: links, nodes: nodes}
+      dispatch({type: "sankey: set data",data: d})
+    } else if (data.cfn === "leiden"){
+      const { obsCrossfilter: prevObsCF } = getState();
+      const val = data.response;
+      const name = data.cName;
+      dispatch({
+        type: "leiden: request completed",
+      });
+
+      let prevObsCrossfilter;
+      if (prevObsCF.annoMatrix.schema.annotations.obsByName[name]) {
+        prevObsCrossfilter = prevObsCF.dropObsColumn(name);
+      } else {
+        prevObsCrossfilter = prevObsCF;
+      }
+      const initialValue = new Array(val);
+      const df = new Dataframe([initialValue[0].length,1],initialValue)
+      const { categories } = df.col(0).summarizeCategorical();
+      if (!categories.includes(globals.unassignedCategoryLabel)) {
+        categories.push(globals.unassignedCategoryLabel);
+      }
+      const ctor = initialValue.constructor;
+      const newSchema = {
+        name: name,
+        type: "categorical",
+        categories,
+        writable: true,
+      };     
+      const arr = new Array(prevObsCrossfilter.annoMatrix.schema.dataframe.nObs).fill("unassigned");
+      const index = prevObsCrossfilter.annoMatrix.rowIndex.labels()
+      for (let i = 0; i < index.length; i++) {
+        arr[index[i]] = val[i] ?? "what"
+      }
+      const obsCrossfilter = prevObsCrossfilter.addObsColumn(
+        newSchema,
+        ctor,
+        arr
+      );         
+      dispatch({
+        type: "annotation: create category",
+        data: name,
+        categoryToDuplicate: null,
+        annoMatrix: obsCrossfilter.annoMatrix,
+        obsCrossfilter,
+      });       
+    } else if (data.cfn === "downloadAnndata"){
+      const { layoutChoice } = getState();
+      const res = await fetch(`${API.prefix}${API.version}sendFile?path=${data.response}`,
+            {
+              headers: new Headers({
+                "Content-Type": "application/octet-stream",
+              }),
+              credentials: "include",
+            })
       const blob = await res.blob()
   
       var a = document.createElement("a");
@@ -462,26 +543,48 @@ const setupWebSockets = (dispatch,getState) => {
       });    
     }
   }   
-  const wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
-  const wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
-  const wsPreprocessing = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/preprocessing`)
-  const wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
-  const wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
-  const wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
-
-  wsDiffExp.onmessage = onMessage
-  wsReembedding.onmessage = onMessage
-  wsPreprocessing.onmessage = onMessage
-  wsSankey.onmessage = onMessage
-  wsLeiden.onmessage = onMessage
-  wsDownloadAnndata.onmessage = onMessage
-
-  dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})
-  dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
-  dispatch({type: "init: set up websockets",ws: wsPreprocessing, name: "wsPreprocessing"})
-  dispatch({type: "init: set up websockets",ws: wsSankey, name: "wsSankey"})
-  dispatch({type: "init: set up websockets",ws: wsLeiden, name: "wsLeiden"})
-  dispatch({type: "init: set up websockets",ws: wsDownloadAnndata, name: "wsDownloadAnndata"})
+  try{
+    if (loggedIn || !hostedMode){
+      const wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
+      wsDiffExp.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})    
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      const wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
+      wsReembedding.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
+    }
+  } catch (e) {}
+  try{
+    if (!hostedMode){
+      const wsPreprocessing = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/preprocessing`)
+      wsPreprocessing.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsPreprocessing, name: "wsPreprocessing"})
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      const wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
+      wsSankey.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsSankey, name: "wsSankey"})
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      const wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
+      wsLeiden.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsLeiden, name: "wsLeiden"})
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      const wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
+      wsDownloadAnndata.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsDownloadAnndata, name: "wsDownloadAnndata"})
+    }
+  } catch (e) {}
 }
 
 const doInitialDataLoad = () =>
@@ -511,7 +614,6 @@ const doInitialDataLoad = () =>
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
-      console.log(annoMatrix.schema)
       const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
       prefetchEmbeddings(annoMatrix);
       const allGenes = await annoMatrix.fetch("var","name_0")
@@ -561,7 +663,7 @@ const doInitialDataLoad = () =>
         dispatch(embActions.layoutChoiceAction(defaultEmbedding));
       }
 
-      setupWebSockets(dispatch,getState)      
+      setupWebSockets(dispatch,getState,userInfo ? true : false, hostedMode)      
 
     } catch (error) {
       dispatch({ type: "initial data load error", error });

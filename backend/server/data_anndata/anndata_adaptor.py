@@ -349,6 +349,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, h
     return layout_schema
 
 def compute_leiden(_obsp_init,obs_mask,name,resolution,userID):
+    print('Trigger2')
     direc = pathlib.Path().absolute() 
     try:
         nnm = pickle.load(open(f"{direc}/{userID}/nnm/{name}.p","rb"))            
@@ -884,8 +885,9 @@ def initialize_socket(da):
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
-                _multiprocessing_wrapper(ws,None,da.compute_leiden, "leiden",data,None,da._obsp_init,obs_mask,name,resolution,userID)
-
+                print('Trigger')
+                x = da._obsp_init
+                _multiprocessing_wrapper(ws,compute_leiden, "leiden",data,None,x,obs_mask,name,resolution,userID)
 
 @njit(parallel=True)
 def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True):

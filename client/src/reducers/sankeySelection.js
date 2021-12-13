@@ -124,7 +124,11 @@ const SankeySelection = (
                     refresher: false,
                     numChecked: 0,
                     currCacheKey: null};
-    }    
+    } 
+    case "sankey: trigger refresh": {
+      state.dataRefresher=!state.dataRefresher;
+      return state;
+    }
     default:
       return state;
   }
@@ -140,7 +144,7 @@ export const sankeyController = (
     case "sankey: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "sankey: request aborted":
