@@ -32,7 +32,7 @@ import pathlib
 import base64
 from hashlib import blake2b
 from functools import wraps
-
+from multiprocessing import shared_memory
 from os.path import exists
 import sklearn.utils.sparsefuncs as sf
 from numba import njit, prange
@@ -76,54 +76,14 @@ def _callback_fn(res,ws,cfn,data,post_processing):
     ws.send(jsonify_numpy(d))
     
 
-def _multiprocessing_wrapper(ws,fn,cfn,data,post_processing,*args):
+def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing)
-    AnndataAdaptor.pool.apply_async(fn,args=args, callback=_new_callback_fn)
+    da.pool.apply_async(fn,args=args, callback=_new_callback_fn)
 
-def compute_diffexp_ttest(XI,obs_mask_A,obs_mask_B,tMean,tMeanSq,top_n,lfc_cutoff):
-    iA = np.where(obs_mask_A)[0]
-    iB = np.where(obs_mask_B)[0]
-    niA = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iA)))[0]
-    niB = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iB)))[0]
-    nA = iA.size
-    nB = iB.size
-    if (iA.size + iB.size) == XI.shape[0]:
-        n = XI.shape[0]
-
-        if iA.size < iB.size:
-            meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
-            meanA/=nA
-            meanAsq/=nA
-            vA = meanAsq - meanA**2
-            vA[vA<0]=0
-            meanB = (tMean*n - meanA*nA) / nB
-            meanBsq = (tMeanSq*n - meanAsq*nA) / nB
-            vB = meanBsq - meanB**2                          
-        else:
-            meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
-            meanB/=nB
-            meanBsq/=nB
-            vB = meanBsq - meanB**2
-            vB[vB<0]=0
-            meanA = (tMean*n - meanB*nB) / nA
-            meanAsq = (tMeanSq*n - meanBsq*nB) / nA
-            vA = meanAsq - meanA**2  
-    else:
-        meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
-        meanA/=nA
-        meanAsq/=nA
-        vA = meanAsq - meanA**2
-        vA[vA<0]=0
-
-        meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
-        meanB/=nB
-        meanBsq/=nB
-        vB = meanBsq - meanB**2
-        vB[vB<0]=0
-
+def compute_diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff):
     return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
 
-def save_data(AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID):
+def save_data(shm,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID):
     direc = pathlib.Path().absolute()        
 
     fnames = glob(f"{direc}/{userID}/emb/*.p")
@@ -143,10 +103,21 @@ def save_data(AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID):
     X = embs[currentLayout]
     f = np.isnan(X).sum(1)==0    
     filt = np.logical_and(f,obs_mask)
-    adata = AnnData(X = AnnDataDict["Xs"]["X"][filt],
+
+    a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm["X"]
+    shm1 = shared_memory.SharedMemory(name=a)
+    shm2 = shared_memory.SharedMemory(name=b)
+    shm3 = shared_memory.SharedMemory(name=c)    
+    indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+    indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+    data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+    X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+    
+    adata = AnnData(X = X[filt],
             obs = AnnDataDict["obs"][filt],
             var = AnnDataDict["var"])
-    
+    adata.layers["X"] = X
+
     for k in AnnDataDict['varm'].keys():
         adata.varm[k] = AnnDataDict['varm'][k]
 
@@ -194,25 +165,53 @@ def save_data(AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID):
         pass        
 
 
-    for k in list(AnnDataDict["Xs"].keys()):
-        adata.layers[k] = AnnDataDict["Xs"][k][filt]
+    for k in AnnDataDict["Xs"]:
+        if k != "X":
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[k]
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+                        
+            adata.layers[k] = X[filt]
 
     adata.write_h5ad(f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad")
     return f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad"
 
-def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, hosted):    
+def compute_embedding(shm, AnnDataDict, reembedParams, parentName, embName, userID, hosted):    
     obs_mask = AnnDataDict['obs_mask']    
     with ServerTiming.time("layout.compute"):
         if hosted:
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, True)                      
+            adata = compute_preprocess(shm, AnnDataDict, reembedParams, userID, True)                      
         else:
             layers = AnnDataDict['Xs'] #this should be the specified CSR dataLayers -- if batch prepping, only include the dataLayers that are referenced.
             obs = AnnDataDict['obs'] 
-            adata = AnnData(X=layers[list(layers.keys())[0]],obs=obs)
-            for k in layers.keys():
-                adata.layers[k] = layers[k]
-            del layers
-            del obs
+            kkk=layers[0]
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+                                                
+            adata = AnnData(X=X,obs=obs)
+            adata.layers[layers[0]] = X
+            for k in layers[1:]:
+                kkk=k
+                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
+                shm1 = shared_memory.SharedMemory(name=a)
+                shm2 = shared_memory.SharedMemory(name=b)
+                shm3 = shared_memory.SharedMemory(name=c)    
+                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+                X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)                
+                adata.layers[k] = X
 
         if adata.isbacked:
             raise NotImplementedError("Backed mode is incompatible with re-embedding")
@@ -349,7 +348,6 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, h
     return layout_schema
 
 def compute_leiden(_obsp_init,obs_mask,name,resolution,userID):
-    print('Trigger2')
     direc = pathlib.Path().absolute() 
     try:
         nnm = pickle.load(open(f"{direc}/{userID}/nnm/{name}.p","rb"))            
@@ -500,19 +498,36 @@ def compute_sankey_df(_obsp_init,labels, name, obs_mask, userID):
     cs = list(cs)        
     return {"edges":ps,"weights":cs}
 
-def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble Anndata from raw inputs.
-    layers = AnnDataDict['Xs'] #this should be the specified CSR dataLayers -- if batch prepping, only include the dataLayers that are referenced.
+def compute_preprocess(shm, AnnDataDict, reembedParams, userID, hosted): # Assemble Anndata from raw inputs.
+    layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
     root = AnnDataDict['X_root']
     obs_mask = AnnDataDict['obs_mask']
     
-    # this should create a viewer of "X" and not copy the whole matrix.
-    # i am creating an AnnData view with csr matrices for fast subsetting.
-    adata = AnnData(X=layers[list(layers.keys())[0]],obs=obs)
-    for k in layers.keys():
-        adata.layers[k] = layers[k]
-    del layers
-    del obs
+    kkk=layers[0]
+    a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
+    shm1 = shared_memory.SharedMemory(name=a)
+    shm2 = shared_memory.SharedMemory(name=b)
+    shm3 = shared_memory.SharedMemory(name=c)    
+    indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+    indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+    data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+    X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+
+    adata = AnnData(X=X,obs=obs)
+    adata.layers[layers[0]] = X
+    for k in layers[1:]:
+        kkk=k
+        a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
+        shm1 = shared_memory.SharedMemory(name=a)
+        shm2 = shared_memory.SharedMemory(name=b)
+        shm3 = shared_memory.SharedMemory(name=c)    
+        indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+        indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+        data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+        X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)        
+        adata.layers[k] = X
+
     adata.obsm["X_root"] = root
 
     obs_mask = np.array([True]*adata.shape[0]) if obs_mask is None else obs_mask
@@ -539,7 +554,6 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble A
 
         
     filt = np.array([True]*adata.shape[0])
-
     if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
         cl = np.array(list(adata.obs[batchPrepKey]))
         batches = np.unique(cl)
@@ -582,11 +596,8 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble A
                 a2,_=sc.pp.filter_genes(adata_sub_raw, min_cells=minCellsGF/100*adata_sub_raw.shape[0],inplace=False)
                 a3,_=sc.pp.filter_genes(adata_sub_raw, max_cells=maxCellsGF/100*adata_sub_raw.shape[0],inplace=False)
                 a = a1*a2*a3
-                if sp.sparse.issparse(adata_sub_raw.X):
-                    adata_sub_raw.X = adata_sub_raw.X.multiply(a.flatten()[None,:]).tocsc()
-                else:
-                    adata_sub_raw.X = adata_sub_raw.X * (a.flatten()[None,:])
-            
+                
+                adata_sub_raw.X = adata_sub_raw.X.multiply(a.flatten()[None,:]).tocsr()
 
                 if sumNormalizeCells:
                     sc.pp.normalize_total(adata_sub_raw,target_sum=target_sum)
@@ -618,7 +629,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble A
             adata_raw.obs = adata.obs
             for key in adata.var.keys():
                 adata_raw.var[key] = adata.var[key]                
-        
+
         if doPreprocess:
             filt1,_ = sc.pp.filter_cells(adata_raw,min_counts=minCountsCF, inplace=False)
             filt2,_ = sc.pp.filter_cells(adata_raw,min_genes=minGenesCF, inplace=False)
@@ -628,11 +639,9 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble A
             a2,_=sc.pp.filter_genes(adata_raw, min_cells=minCellsGF/100*adata_raw.shape[0],inplace=False)
             a3,_=sc.pp.filter_genes(adata_raw, max_cells=maxCellsGF/100*adata_raw.shape[0],inplace=False)
             a = a1*a2*a3
-            if sp.sparse.issparse(adata_raw.X):
-                adata_raw.X = adata_raw.X.multiply(a.flatten()[None,:]).tocsc()
-            else:
-                adata_raw.X = adata_raw.X * (a.flatten()[None,:])
-        
+            
+            adata_raw.X = adata_raw.X.multiply(a.flatten()[None,:]).tocsr()
+            
             if sumNormalizeCells:
                 sc.pp.normalize_total(adata_raw,target_sum=target_sum)
             if logTransform:
@@ -640,25 +649,23 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble A
                     sc.pp.log1p(adata_raw) 
                 except:
                     pass
+
     direc = pathlib.Path().absolute() 
     if not hosted: 
+        if adata_raw.X.getformat() == "csr":
+            X = fmt_swapper(adata_raw.X)
+            X_shm = _create_shm_from_data(adata_raw.X)
+        else:
+            X = adata_raw.X
+            X_shm = _create_shm_from_data(fmt_swapper(adata_raw.X))
 
-        #self.data.layers['X;;csr'] = adata_raw.X
-        #self.data.X = adata_raw.X.tocsc()
-        #self.data.layers['X'] = self.data.X
-        
-        #X = self.data.X
         AnnDataDictReturn = {
-            "X;;csr":adata_raw.X,
-            "X":adata_raw.X.tocsc()
+            "X_shm":X_shm,
+            "X": X
         }
         X = AnnDataDictReturn["X"]        
-        if sparse.issparse(X):
-            mean,v = sf.mean_variance_axis(X,axis=0)
-            meansq = v-mean**2
-        else:
-            mean = X.mean(0)
-            meansq = (X**2).mean(0)         
+        mean,v = sf.mean_variance_axis(X,axis=0)
+        meansq = v-mean**2
         
         AnnDataDictReturn.update({
             "mean":mean,
@@ -674,7 +681,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, hosted): # Assemble A
     else:
         adata_raw.layers['X'] = adata_raw.X            
         return adata_raw
-    
+
     doBatchPrep = reembedParams.get("doBatchPrep",False)
     batchPrepParams = reembedParams.get("batchPrepParams",{})
     batchPrepKey = reembedParams.get("batchPrepKey","")
@@ -731,7 +738,47 @@ def initialize_socket(da):
                 XI = da.data.layers[layer] 
                 tMean = da.data.var[f'{layer};;tMean'].values
                 tMeanSq = da.data.var[f'{layer};;tMeanSq'].values
-                _multiprocessing_wrapper(ws,compute_diffexp_ttest, "diffexp",data,None,XI,obs_mask_A,obs_mask_B,tMean,tMeanSq,top_n,lfc_cutoff)
+
+                iA = np.where(obs_mask_A)[0]
+                iB = np.where(obs_mask_B)[0]
+                niA = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iA)))[0]
+                niB = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iB)))[0]
+                nA = iA.size
+                nB = iB.size
+                if (iA.size + iB.size) == XI.shape[0]:
+                    n = XI.shape[0]
+
+                    if iA.size < iB.size:
+                        meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
+                        meanA/=nA
+                        meanAsq/=nA
+                        vA = meanAsq - meanA**2
+                        vA[vA<0]=0
+                        meanB = (tMean*n - meanA*nA) / nB
+                        meanBsq = (tMeanSq*n - meanAsq*nA) / nB
+                        vB = meanBsq - meanB**2                          
+                    else:
+                        meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
+                        meanB/=nB
+                        meanBsq/=nB
+                        vB = meanBsq - meanB**2
+                        vB[vB<0]=0
+                        meanA = (tMean*n - meanB*nB) / nA
+                        meanAsq = (tMeanSq*n - meanBsq*nB) / nA
+                        vA = meanAsq - meanA**2  
+                else:
+                    meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
+                    meanA/=nA
+                    meanAsq/=nA
+                    vA = meanAsq - meanA**2
+                    vA[vA<0]=0
+
+                    meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
+                    meanB/=nB
+                    meanBsq/=nB
+                    vB = meanBsq - meanB**2
+                    vB[vB<0]=0                
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
     
     @sock.route("/reembedding")
     @auth0_token_required
@@ -748,7 +795,7 @@ def initialize_socket(da):
     
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
-                layers = {}
+                layers = []
                 if current_app.hosted_mode:
                     doBatchPrep = reembedParams.get("doBatchPrep",False)
                     batchPrepParams = reembedParams.get("batchPrepParams",{})
@@ -761,13 +808,13 @@ def initialize_socket(da):
                         for k in batches:
                             params = batchPrepParams[batchPrepKey].get(k,{})
                             k = params.get("dataLayer","X")
-                            layers[k] = da.data.layers[k+";;csr"]
+                            layers.append(k)
                     else:
-                        layers[dataLayer] = da.data.layers[dataLayer+";;csr"]
+                        layers.append(dataLayer)
                 else:
-                    layers["X"] = da.data.layers["X;;csr"]
+                    layers.append("X")
+                layers = list(np.unique(layers))
 
-                    
                 AnnDataDict = {
                     "Xs":layers,
                     "obs":da.data.obs,
@@ -779,7 +826,7 @@ def initialize_socket(da):
                     da.schema["layout"]["obs"].append(res)
                     return res
                      
-                _multiprocessing_wrapper(ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
+                _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,da.shm_layers_csr,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
 
     @sock.route("/preprocessing")
     @desktop_mode_only
@@ -795,7 +842,7 @@ def initialize_socket(da):
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
 
-                layers = {}
+                layers = []
                 doBatchPrep = reembedParams.get("doBatchPrep",False)
                 batchPrepParams = reembedParams.get("batchPrepParams",{})
                 batchPrepKey = reembedParams.get("batchPrepKey","")
@@ -807,9 +854,11 @@ def initialize_socket(da):
                     for k in batches:
                         params = batchPrepParams[batchPrepKey].get(k,{})
                         k = params.get("dataLayer","X")
-                        layers[k] = da.data.layers[k+";;csr"]
+                        layers.append(k)
                 else:
-                    layers[dataLayer] = da.data.layers[dataLayer+";;csr"]
+                    layers.append(dataLayer)
+                layers = list(np.unique(layers))
+                
                 AnnDataDict = {
                     "Xs":layers,
                     "obs":da.data.obs,
@@ -818,13 +867,28 @@ def initialize_socket(da):
                 }
 
                 def post_processing(res):
+                    """
+                    k = "X"
+                    d = da.shm_layers_csr
+                    shm = shared_memory.SharedMemory(name=d[k][0])
+                    shm.close()
+                    shm.unlink()
+                    shm = shared_memory.SharedMemory(name=d[k][3])
+                    shm.close()
+                    shm.unlink()
+                    shm = shared_memory.SharedMemory(name=d[k][6])
+                    shm.close()
+                    shm.unlink()                 
+
+                    del da.shm_layers_csr["X"]
+                    """
+                    da.shm_layers_csr["X"] = res["X_shm"]                    
                     da.data.X = res["X"]
-                    da.data.layers["X;;csr"] = res["X;;csr"]
                     da.data.var["X;;tMean"] = res['mean']
                     da.data.var["X;;tMeanSq"] = res['meansq']
                     return da.get_schema()
 
-                _multiprocessing_wrapper(ws,compute_preprocess, "preprocessing",data,post_processing,AnnDataDict,reembedParams,userID, False)
+                _multiprocessing_wrapper(da,ws,compute_preprocess, "preprocessing",data,post_processing,da.shm_layers_csr,AnnDataDict,reembedParams,userID, False)
 
     @sock.route("/sankey")
     def sankey(ws):
@@ -839,7 +903,7 @@ def initialize_socket(da):
                 userID = f"{annotations._get_userdata_idhash(da)}"  
 
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
-                _multiprocessing_wrapper(ws,compute_sankey_df, "sankey",data,None,da._obsp_init,labels, name, obs_mask, userID)              
+                _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,da._obsp_init,labels, name, obs_mask, userID)              
 
     @sock.route("/downloadAnndata")
     @auth0_token_required
@@ -859,17 +923,14 @@ def initialize_socket(da):
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}" 
                 
-                layers = {}
-                for k in da.data.layers.keys():
-                    if ';;csr' in k:
-                        layers[k.split(';;csr')[0]] = da.data.layers[k]
+                layers = list(da.data.layers.keys())
                 varm = {}
                 for k in da.data.varm.keys():
                     varm[k] = da.data.varm[k]
 
                 AnnDataDict={"Xs":layers,"obs":da.data.obs, "var": da.data.var, "varm": varm}
 
-                _multiprocessing_wrapper(ws,save_data, "downloadAnndata",data,None,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID)
+                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID)
 
  
     @sock.route("/leiden")
@@ -885,9 +946,9 @@ def initialize_socket(da):
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
-                print('Trigger')
+
                 x = da._obsp_init
-                _multiprocessing_wrapper(ws,compute_leiden, "leiden",data,None,x,obs_mask,name,resolution,userID)
+                _multiprocessing_wrapper(da,ws,compute_leiden, "leiden",data,None,x,obs_mask,name,resolution,userID)
 
 @njit(parallel=True)
 def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True):
@@ -919,15 +980,76 @@ def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True):
             res2[i] = s2
     return res,res2
 
+@njit(parallel=True)
+def _fmt_swapper(indices,indptr,data,n):#x,y,d,ptr):
+    pair = np.zeros_like(indices)
+    for i in prange(indptr.size):
+        pair[indptr[i]:indptr[i+1]]=i
+
+    indptr2 = np.zeros(n,dtype=indices.dtype)
+    for i in range(indices.size):
+        indptr2[indices[i]+1]+=1
+    indptr2 = np.cumsum(indptr2)
+
+    res = np.zeros_like(pair)
+    dres = np.zeros_like(data)
+    indptr3 = indptr2[:-1].copy()  
+    for i in range(indices.size):
+        j = indices[i]
+        k = indptr3[j]
+        res[k]=pair[i]
+        dres[k]=data[i]
+        indptr3[j]+=1
+    return dres,res,indptr2
+
+def fmt_swapper(X):
+    import scipy as sp
+    if X.getformat()=="csc":
+        return sp.sparse.csr_matrix(_fmt_swapper(X.indices,X.indptr,X.data,X.shape[0]+1),shape=X.shape)
+    elif X.getformat()=="csr":
+        return sp.sparse.csc_matrix(_fmt_swapper(X.indices,X.indptr,X.data,X.shape[1]+1),shape=X.shape)
+
+def _create_shm(X):
+    shm = shared_memory.SharedMemory(create=True,size=X.nbytes)
+    a = np.ndarray(X.shape, dtype = X.dtype, buffer = shm.buf)
+    a[:] = X[:]
+    return shm.name
+
+def _create_shm_from_data(X):
+    a = _create_shm(X.indices)
+    b = _create_shm(X.indptr)
+    c = _create_shm(X.data)    
+    return (a,X.indices.shape,X.indices.dtype,b,X.indptr.shape,X.indptr.dtype,c,X.data.shape,X.data.dtype,X.shape)
+
+"""
+def _create_data_from_shm(a,ash,ad,b,bsh,bd,c,csh,cd,Xsh):
+    import scipy as sp
+    shm1 = shared_memory.SharedMemory(name=a)
+    shm2 = shared_memory.SharedMemory(name=b)
+    shm3 = shared_memory.SharedMemory(name=c)    
+    indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+    indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+    data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+    return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
+
+def create_data_from_shm(r):
+    return _create_data_from_shm(*r)
+"""
+
+def _initializer():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
 class AnndataAdaptor(DataAdaptor):
-    pool = Pool(os.cpu_count(), initializer=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN), maxtasksperchild=1)
 
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
+        self._create_pool()
         self._load_data(data_locator, root_embedding=app_config.root_embedding)    
         self._validate_and_initialize()
 
+    def _create_pool(self):
+        self.pool = Pool(os.cpu_count(), initializer=_initializer, maxtasksperchild=1)
 
     def cleanup(self):
         pass
@@ -971,6 +1093,18 @@ class AnndataAdaptor(DataAdaptor):
         while f"{col_name_prefix}{suffix}" in df:
             suffix += 1
         return f"{col_name_prefix}{suffix}"
+
+    def compute_diffexp_ttest(self):
+        pass
+
+    def compute_embedding(self):
+        pass
+
+    def compute_sankey_df(self):
+        pass
+
+    def compute_leiden(self):
+        pass
 
     def _alias_annotation_names(self):
         """
@@ -1022,12 +1156,6 @@ class AnndataAdaptor(DataAdaptor):
         
         if "X" not in layers:
             layers = ["X"] + layers
-        
-        ln = []
-        for k in layers:
-            if ";;csr" not in k:
-                ln.append(k)
-        layers = ln
         
         self.schema = {
             "dataframe": {"nObs": self.cell_count, "nVar": self.gene_count, "type": str(self.data.X.dtype)},
@@ -1098,10 +1226,11 @@ class AnndataAdaptor(DataAdaptor):
                     adata = sc.read_10x_mtx(lh)
                 else:
                     adata = anndata.read_h5ad(lh, backed=backed)
-                # as of AnnData 0.6.19, backed mode performs initial load fast, but at the
-                # cost of significantly slower access to X data.
+
+
                 if not sparse.issparse(adata.X):
                     adata.X = sparse.csr_matrix(adata.X)
+
                 for k in adata.layers.keys():  
                     if not sparse.issparse(adata.layers[k]):
                         adata.layers[k] = sparse.csr_matrix(adata.layers[k])
@@ -1124,74 +1253,71 @@ class AnndataAdaptor(DataAdaptor):
                     adata.obsm["X_root"] = np.zeros((adata.shape[0],2))
                 
                 adata.obs_names_make_unique()
+
+                self.shm_layers_csr = {}
                 
                 if adata.X.getformat() == "csr":
-                    adata.layers["X;;csr"] = adata.X
-                    adata.X=adata.X.tocsc()
+                    self.shm_layers_csr["X"] = _create_shm_from_data(adata.X)
+                    adata.X=fmt_swapper(adata.X)
                 elif adata.X.getformat() != "csc":
                     adata.X=adata.X.tocsc()
 
                 adata.layers["X"] = adata.X
 
                 print("Loading and precomputing layers necessary for fast differential expression and reembedding...")
-                for k in list(adata.layers.keys()):  
-                    if sparse.issparse(adata.layers[k]) and ';;csr' not in k:
-                        if adata.layers[k].getformat() == "csr":
-                            adata.layers[k+';;csr'] = adata.layers[k]
-                            adata.layers[k] = adata.layers[k].tocsc()
-                        elif adata.layers[k].getformat() != "csc":
-                            adata.layers[k] = adata.layers[k].tocsc()
                 
-                l = list(adata.layers.keys())
+                # convert everything to CSC and cache all CSR into shared memory.
+                shm_keys = list(self.shm_layers_csr.keys())
+                for k in list(adata.layers.keys()):  
+                    if k not in shm_keys:
+                        if adata.layers[k].getformat() == "csr": # if csr, swap to csc and cache csr into shared memory.
+                            self.shm_layers_csr[k] = _create_shm_from_data(adata.layers[k])
+                            adata.layers[k] = fmt_swapper(adata.layers[k])
+                        elif adata.layers[k].getformat() != "csc": # if any other format, just convert to csc.
+                            adata.layers[k] = adata.layers[k].tocsc()
+                                
+                # cache all remaining CSC into CSR shared memory
+                shm_keys = list(self.shm_layers_csr.keys())
                 for key in list(adata.layers.keys()):
-                    if ';;csr' not in key:
-                        X = adata.layers[key]
-                        if key + ';;csr' not in l:
-                            X2 = X.tocsr()
-                            adata.layers[key+";;csr"] = X2
-                        if sparse.issparse(X):
-                            mean,v = sf.mean_variance_axis(X,axis=0)
-                            meansq = v-mean**2
-                            adata.var[f"{key};;tMean"] = mean
-                            adata.var[f"{key};;tMeanSq"] = meansq
-                        else:
-                            adata.var[f"{key};;tMean"] = X.mean(0)
-                            adata.var[f"{key};;tMeanSq"] = (X**2).mean(0)
+                    X = adata.layers[key]
+                    if  key not in shm_keys: # if key not in shm_keys, then it means that it's CSC and didn't come from CSR.
+                        X2 = fmt_swapper(X) # convert csc to csr
+                        self.shm_layers_csr[key] = _create_shm_from_data(X2) #cache csr into shared memory
+
+                    mean,v = sf.mean_variance_axis(X,axis=0)
+                    meansq = v-mean**2
+                    adata.var[f"{key};;tMean"] = mean
+                    adata.var[f"{key};;tMeanSq"] = meansq
                 
                 if 'orig.X' not in adata.layers.keys(): 
                     adata.layers['orig.X'] = adata.X   
-                    adata.layers['orig.X;;csr'] = adata.layers['X;;csr']
+                    self.shm_layers_csr['orig.X'] = self.shm_layers_csr['X']
                     adata.var['orig.X;;tMean'] = adata.var['X;;tMean']
                     adata.var['orig.X;;tMeanSq'] = adata.var['X;;tMeanSq']
                 
                 if adata.raw is not None:
                     X = adata.raw.X
                     
-                    if sparse.issparse(X):
-                        mean,v = sf.mean_variance_axis(X,axis=0)
-                        meansq = v-mean**2
-                        adata.var[f".raw;;tMean"] = mean
-                        adata.var[f".raw;;tMeanSq"] = meansq
-                    else:
-                        adata.var[f".raw;;tMean"] = X.mean(0)
-                        adata.var[f".raw;;tMeanSq"] = (X**2).mean(0)   
+
+                    mean,v = sf.mean_variance_axis(X,axis=0)
+                    meansq = v-mean**2
+                    adata.var[f".raw;;tMean"] = mean
+                    adata.var[f".raw;;tMeanSq"] = meansq
 
                     del adata.raw
                     
-                    if sparse.issparse(X):
-                        if X.getformat() == "csc":
-                            X1 = X
-                            X2 = X.tocsr()
-                        elif X.getformat() == "csr":
-                            X1 = X.tocsc()
-                            X2 = X
-                        else:
-                            X1 = X.tocsc()
-                            X2 = X.tocsr()                        
-                        adata.layers[".raw"] = X1
-                        adata.layers[".raw;;csr"] = X2
+                    if X.getformat() == "csc":
+                        X1 = X
+                        X2 = fmt_swapper(X)
+                    elif X.getformat() == "csr":
+                        X1 = fmt_swapper(X)
+                        X2 = X
                     else:
-                        adata.layers[".raw"] = X
+                        X1 = X.tocsc()
+                        X2 = X.tocsr()                        
+                    adata.layers[".raw"] = X1
+                    self.shm_layers_csr[".raw"] = _create_shm_from_data(X2)
+
 
                 self.data = adata
 
@@ -1376,541 +1502,6 @@ class AnndataAdaptor(DataAdaptor):
         except:
             full_embedding = self._obsm_init[f"X_{ename}"]
         return full_embedding[:, 0:dims]
-    
-    def compute_leiden(self,name,cName,resolution,obsFilter,userID):
-        try:
-            nnm = pickle.load(open(f"{userID}/nnm/{name}.p","rb"))            
-        except:
-            nnm = self._obsp_init['connectivities'] 
-
-        try:
-            shape = self.get_shape()
-            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
-        except (KeyError, IndexError):
-            raise FilterError("Error parsing filter")          
-
-        nnm = nnm[obs_mask][:,obs_mask]
-   
-        X = nnm
-
-        import igraph as ig
-        import leidenalg
-
-        adjacency = X
-        sources, targets = adjacency.nonzero()
-        weights = adjacency[sources, targets]
-        if isinstance(weights, np.matrix):
-            weights = weights.A1
-        g = ig.Graph(directed=True)
-        g.add_vertices(adjacency.shape[0])
-        g.add_edges(list(zip(sources, targets)))
-        try:
-            g.es["weight"] = weights
-        except BaseException:
-            pass
-
-        cl = leidenalg.find_partition(
-            g, leidenalg.RBConfigurationVertexPartition, resolution_parameter=resolution,seed=0
-        )
-        result = np.array(cl.membership)
-        clusters = np.array(["unassigned"]*obs_mask.size,dtype='object')
-        clusters[obs_mask] = result.astype('str')
-        return list(result)
-
-    def compute_sankey_df(self, labels, name,obsFilter, userID):
-        def reducer(a, b):
-            result_a, inv_ndx = np.unique(a, return_inverse=True)
-            result_b = np.bincount(inv_ndx, weights=b)
-            return result_a, result_b        
-        def cantor(a,b):
-            return ((a+b)*(a+b+1)/2+b).astype('int')
-        def inv_cantor(z):
-            w = np.floor((np.sqrt(8*z + 1) - 1)/2)
-            t = (w**2 + w)/2
-            y = (z-t).astype('int')
-            x = (w-y).astype('int')
-            return x,y
-        
-        try:
-            shape = self.get_shape()
-            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
-        except (KeyError, IndexError):
-            raise FilterError("Error parsing filter")          
-
-        try:
-            nnm = pickle.load(open(f"{userID}/nnm/{name}.p","rb"))            
-        except:
-            nnm = self._obsp_init['connectivities']          
-        nnm = nnm[obs_mask][:,obs_mask]
-
-        cl=[]
-        clu = []
-        rixers=[]
-        unassigned_ints=[];
-        for i,c in enumerate(labels):
-            cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])
-            clu0,cluc0 = np.unique(cl0,return_counts=True)
-            ix = pd.Series(index=clu0,data=np.arange(clu0.size))
-            cl0 = ix[cl0].values
-            ll = np.arange(clu0.size)[clu0=="A"+str(i)+"_unassigned"]
-            if ll.size > 0:
-                unassigned_ints.append(ll[0])
-            else:
-                unassigned_ints.append(-1)
-                
-            rixers.append(pd.Series(data=clu0,index=np.arange(clu0.size)))                     
-            clu0 = np.arange(clu0.size)
-            clu.append((clu0,cluc0))
-            cl.append(cl0)
-
-        ps = []
-        cs = []
-        for i,cl1 in enumerate(cl[:-1]):
-            j = i+1
-            cl2 = cl[i+1]
-            clu1,cluc1 = clu[i]
-            clu2,cluc2 = clu[j]
-            uint1 = unassigned_ints[i]
-            uint2 = unassigned_ints[j]
-            rixer1 = rixers[i]
-            rixer2 = rixers[j]        
-            
-            ac = pd.Series(index=clu1,data=cluc1)
-            bc = pd.Series(index=clu2,data=cluc2)
-
-            ixer1 = pd.Series(data=np.arange(clu1.size),index=clu1)
-            ixer2 = pd.Series(data=np.arange(clu2.size),index=clu2)
-
-            xi,yi = nnm.nonzero()
-            di = nnm.data
-
-            px,py = cl1[xi],cl2[yi]
-            filt = np.logical_and(px != uint1,py != uint2)
-            px = px[filt]
-            py = py[filt]
-            dif = di[filt]
-
-            p = cantor(px,py)
-
-            keys,cluster_scores = reducer(p,dif)
-            xc,yc = inv_cantor(keys)
-            cluster_scores = cluster_scores / ac[xc].values
-
-            xc=ixer1[xc].values
-            yc=ixer2[yc].values
-
-            CSIM = sp.sparse.coo_matrix((cluster_scores,(xc,yc)),shape=(clu1.size,clu2.size)).A
-
-
-            xi,yi = nnm.nonzero()
-            di = nnm.data
-
-            px,py = cl2[xi],cl1[yi]
-            filt = np.logical_and(px != uint2,py != uint1)
-            px = px[filt]
-            py = py[filt]
-            dif = di[filt]
-
-            p = cantor(px,py)
-
-            keys,cluster_scores = reducer(p,dif)
-            xc,yc = inv_cantor(keys)
-            cluster_scores = cluster_scores / bc[xc].values
-
-
-            xc=ixer2[xc].values
-            yc=ixer1[yc].values
-
-            CSIM2 = sp.sparse.coo_matrix((cluster_scores,(xc,yc)),shape=(clu2.size,clu1.size)).A
-
-
-            CSIM = np.stack((CSIM,CSIM2.T),axis=2).min(2)
-            x,y = CSIM.nonzero()
-            d = CSIM[x,y]
-            x,y = rixer1[clu1[x]].values,rixer2[clu2[y]].values
-            ps.append(np.vstack((x,y)).T)
-            cs.append(d)
-
-        ps = np.vstack(ps)
-        cs = np.concatenate(cs)
-        ps = [list(x) for x in ps]
-        cs = list(cs)        
-        return {"edges":ps,"weights":cs}
-
-    def compute_preprocess(self, reembedParams, obsFilter, userID, hosted):
-        self.data.obsm["X_root"] = self._obsm_init["X_root"]
-
-        try:
-            shape = self.get_shape()
-            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
-        except (KeyError, IndexError):
-            raise FilterError("Error parsing filter")
-
-        # this should create a viewer of "X" and not copy the whole matrix.
-        # i am creating an AnnData view with csr matrices for fast subsetting.
-        adata = AnnData(X=self.data.layers["X;;csr"])
-        for k in self.data.layers.keys():
-            if ";;csr" in k:
-                adata.layers[k.split(";;csr")[0]] = self.data.layers[k]
-
-        adata.obs = self.data.obs
-        adata.var = self.data.var
-        adata.obsm = self.data.obsm
-        adata.varm = self.data.varm
-        obs_mask = np.array([True]*adata.shape[0]) if obs_mask is None else obs_mask
-        
-        # safely get scanpy module, which may not be present.
-        sc = get_scanpy_module()
-
-        cn = np.array(list(adata.obs["name_0"]))
-
-        doBatchPrep = reembedParams.get("doBatchPrep",False)
-        batchPrepParams = reembedParams.get("batchPrepParams",{})
-        batchPrepKey = reembedParams.get("batchPrepKey","")
-        batchPrepLabel = reembedParams.get("batchPrepLabel","")
-
-        doPreprocess = reembedParams.get("doPreprocess",False)
-        minCountsCF = reembedParams.get("minCountsCF",0)
-        minGenesCF = reembedParams.get("minGenesCF",0)
-        minCellsGF = reembedParams.get("minCellsGF",0)
-        maxCellsGF = reembedParams.get("maxCellsGF",100)
-        minCountsGF = reembedParams.get("minCountsGF",0)
-        logTransform = reembedParams.get("logTransform",False)
-        dataLayer = reembedParams.get("dataLayer","X")
-        sumNormalizeCells = reembedParams.get("sumNormalizeCells",False)
-
-            
-        filt = np.array([True]*adata.shape[0])
-
-        if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
-            cl = np.array(list(adata.obs[batchPrepKey]))
-            batches = np.unique(cl)
-            adatas = []
-            cns = []
-            for k in batches:
-                params = batchPrepParams[batchPrepKey].get(k,{})
-
-                doPreprocess = params.get("doPreprocess",False)
-                minCountsCF = params.get("minCountsCF",0)
-                minGenesCF = params.get("minGenesCF",0)
-                minCellsGF = params.get("minCellsGF",0)
-                maxCellsGF = params.get("maxCellsGF",100)
-                minCountsGF = params.get("minCountsGF",0)
-                logTransform = params.get("logTransform",False)
-                dataLayer = params.get("dataLayer","X")
-                sumNormalizeCells = params.get("sumNormalizeCells",False)
-                
-                adata_sub = adata[cl==k].copy()
-                adata_sub.obs_names = adata_sub.obs["name_0"]
-                if dataLayer == "X":
-                    adata_sub_raw = adata_sub
-                    if dataLayer == "X" and "X" not in adata_sub_raw.layers.keys():
-                        adata_sub_raw.layers["X"] = adata_sub_raw.X    
-                    adata_sub_raw.X = adata_sub_raw.layers[dataLayer]        
-                else:
-                    adata_sub_raw = AnnData(X=adata_sub.layers[dataLayer])
-                    adata_sub_raw.var_names = adata_sub.var_names
-                    adata_sub_raw.obs_names = adata_sub.obs_names
-                    adata_sub_raw.obs = adata_sub.obs
-                    for key in adata_sub.var.keys():
-                        adata_sub_raw.var[key] = adata_sub.var[key]   
-                if doPreprocess:
-                    filt1,_ = sc.pp.filter_cells(adata_sub_raw,min_counts=minCountsCF, inplace=False)
-                    filt2,_ = sc.pp.filter_cells(adata_sub_raw,min_genes=minGenesCF, inplace=False)
-                    filt = np.logical_and(filt1,filt2)
-                    cns.extend(np.array(list(adata_sub_raw.obs["name_0"]))[filt])
-                    target_sum = np.median(np.array(adata_sub_raw.X[filt].sum(1)).flatten())
-                    a1,_=sc.pp.filter_genes(adata_sub_raw, min_counts=minCountsGF,inplace=False)
-                    a2,_=sc.pp.filter_genes(adata_sub_raw, min_cells=minCellsGF/100*adata_sub_raw.shape[0],inplace=False)
-                    a3,_=sc.pp.filter_genes(adata_sub_raw, max_cells=maxCellsGF/100*adata_sub_raw.shape[0],inplace=False)
-                    a = a1*a2*a3
-                    if sp.sparse.issparse(adata_sub_raw.X):
-                        adata_sub_raw.X = adata_sub_raw.X.multiply(a.flatten()[None,:]).tocsc()
-                    else:
-                        adata_sub_raw.X = adata_sub_raw.X * (a.flatten()[None,:])
-                
-
-                    if sumNormalizeCells:
-                        sc.pp.normalize_total(adata_sub_raw,target_sum=target_sum)
-                    if logTransform:
-                        try:
-                            sc.pp.log1p(adata_sub_raw)  
-                        except:
-                            pass
-                else: 
-                    cns.extend(np.array(list(adata_sub_raw.obs["name_0"])))
-
-                adatas.append(adata_sub_raw)
-            adata_raw = anndata.concat(adatas,axis=0,join="inner")
-            filt = np.logical_and(np.in1d(np.array(list(cn)),np.array(cns)),obs_mask)
-            temp = adata_raw.obs_names.copy()
-            adata_raw.obs_names = adata_raw.obs["name_0"]
-            adata_raw = adata_raw[cn]
-            adata_raw.obs_names = temp
-        else:
-            if dataLayer == "X":
-                adata_raw = adata.copy()
-                if dataLayer == "X" and "X" not in adata_raw.layers.keys():
-                    adata_raw.layers["X"] = adata_raw.X    
-                adata_raw.X = adata_raw.layers[dataLayer]        
-            else:
-                adata_raw = AnnData(X=adata.layers[dataLayer])
-                adata_raw.var_names = adata.var_names
-                adata_raw.obs_names = adata.obs_names
-                adata_raw.obs = adata.obs
-                for key in adata.var.keys():
-                    adata_raw.var[key] = adata.var[key]                
-            
-            if doPreprocess:
-                filt1,_ = sc.pp.filter_cells(adata_raw,min_counts=minCountsCF, inplace=False)
-                filt2,_ = sc.pp.filter_cells(adata_raw,min_genes=minGenesCF, inplace=False)
-                filt = np.logical_and(np.logical_and(filt1,filt2),obs_mask)
-                target_sum = np.median(np.array(adata_raw.X[filt].sum(1)).flatten())
-                a1,_=sc.pp.filter_genes(adata_raw, min_counts=minCountsGF,inplace=False)
-                a2,_=sc.pp.filter_genes(adata_raw, min_cells=minCellsGF/100*adata_raw.shape[0],inplace=False)
-                a3,_=sc.pp.filter_genes(adata_raw, max_cells=maxCellsGF/100*adata_raw.shape[0],inplace=False)
-                a = a1*a2*a3
-                if sp.sparse.issparse(adata_raw.X):
-                    adata_raw.X = adata_raw.X.multiply(a.flatten()[None,:]).tocsc()
-                else:
-                    adata_raw.X = adata_raw.X * (a.flatten()[None,:])
-            
-                if sumNormalizeCells:
-                    sc.pp.normalize_total(adata_raw,target_sum=target_sum)
-                if logTransform:
-                    try:
-                        sc.pp.log1p(adata_raw) 
-                    except:
-                        pass
-
-        if not hosted: 
-            self.data.layers['X;;csr'] = adata_raw.X
-            self.data.X = adata_raw.X.tocsc()
-            self.data.layers['X'] = self.data.X
-            
-            X = self.data.X
-            if sparse.issparse(X):
-                mean,v = sf.mean_variance_axis(X,axis=0)
-                meansq = v-mean**2
-                self.data.var[f"{key};;tMean"] = mean
-                self.data.var[f"{key};;tMeanSq"] = meansq
-            else:
-                self.data.var[f"{key};;tMean"] = X.mean(0)
-                self.data.var[f"{key};;tMeanSq"] = (X**2).mean(0)         
-            
-            layouts = glob(f"{userID}/emb/*.p")
-            for k in layouts:
-                umap = pickle.load(open(k,"rb"))
-                result = np.full((filt.size, umap.shape[1]), np.NaN)
-                result[filt] = umap[filt]
-                pickle.dump(result,open(k,"wb"))
-        else:
-            adata_raw.layers['X'] = adata_raw.X            
-            return adata_raw
-        
-        doBatchPrep = reembedParams.get("doBatchPrep",False)
-        batchPrepParams = reembedParams.get("batchPrepParams",{})
-        batchPrepKey = reembedParams.get("batchPrepKey","")
-        batchPrepLabel = reembedParams.get("batchPrepLabel","")
-
-        doPreprocess = reembedParams.get("doPreprocess",False)
-        minCountsCF = reembedParams.get("minCountsCF",0)
-        minGenesCF = reembedParams.get("minGenesCF",0)
-        minCellsGF = reembedParams.get("minCellsGF",0)
-        maxCellsGF = reembedParams.get("maxCellsGF",100)
-        minCountsGF = reembedParams.get("minCountsGF",0)
-        logTransform = reembedParams.get("logTransform",False)
-        dataLayer = reembedParams.get("dataLayer","X")
-        sumNormalizeCells = reembedParams.get("sumNormalizeCells",False)
-
-        prepParams = {
-            "doBatchPrep":doBatchPrep,
-            "batchPrepParams":batchPrepParams,
-            "batchPrepKey":batchPrepKey,
-            "batchPrepLabel":batchPrepLabel,
-            "doPreprocess":doPreprocess,
-            "minCountsCF":minCountsCF,
-            "minGenesCF":minGenesCF,
-            "minCellsGF":minCellsGF,
-            "maxCellsGF":maxCellsGF,
-            "minCountsGF":minCountsGF,
-            "logTransform":logTransform,
-            "dataLayer":dataLayer,
-            "sumNormalizeCells":sumNormalizeCells,        
-        }        
-        pickle.dump(prepParams, open(f"{userID}/params/latest.p","wb"))
-        return self.get_schema()
-
-    def compute_embedding(self, method, obsFilter, reembedParams, parentName, embName, userID, hosted=False):
-        if Axis.VAR in obsFilter:
-            raise FilterError("Observation filters may not contain variable conditions")
-        if method != "umap":
-            raise NotImplementedError(f"re-embedding method {method} is not available.")
-        try:
-            shape = self.get_shape()
-            obs_mask = self._axis_filter_to_mask(Axis.OBS, obsFilter["obs"], shape[0])
-        except (KeyError, IndexError):
-            raise FilterError("Error parsing filter")
-        with ServerTiming.time("layout.compute"):  
-            
-            if hosted:
-                adata = self.compute_preprocess(reembedParams, obsFilter, userID, True)                      
-            else:
-                adata = AnnData(X=self.data.layers["X;;csr"])
-                for k in self.data.layers.keys():
-                    if ";;csr" in k:
-                        adata.layers[k.split(";;csr")[0]] = self.data.layers[k]
-
-                adata.obs = self.data.obs
-                adata.var = self.data.var
-                adata.obsm = self.data.obsm
-                adata.varm = self.data.varm
-
-            if adata.isbacked:
-                raise NotImplementedError("Backed mode is incompatible with re-embedding")
-
-            # safely get scanpy module, which may not be present.
-            sc = get_scanpy_module()
-
-            # https://github.com/theislab/anndata/issues/311
-            obs_mask = slice(None) if obs_mask is None else obs_mask
-
-            adata = adata[obs_mask, :].copy()
-
-            for k in list(adata.obsm.keys()):
-                del adata.obsm[k]
-            
-            doSAM = reembedParams.get("doSAM",False)
-            nTopGenesHVG = reembedParams.get("nTopGenesHVG",2000)
-            nBinsHVG = reembedParams.get("nBins",20)
-            doBatch = reembedParams.get("doBatch",False)
-            batchMethod = reembedParams.get("batchMethod","Scanorama")
-            batchKey = reembedParams.get("batchKey","")
-            scanoramaKnn = reembedParams.get("scanoramaKnn",20)
-            scanoramaSigma = reembedParams.get("scanoramaSigma",15)
-            scanoramaAlpha = reembedParams.get("scanoramaAlpha",0.1)
-            scanoramaBatchSize = reembedParams.get("scanoramaBatchSize",5000)
-            bbknnNeighborsWithinBatch = reembedParams.get("bbknnNeighborsWithinBatch",3)
-            numPCs = reembedParams.get("numPCs",150)
-            pcaSolver = reembedParams.get("pcaSolver","randomized")
-            neighborsKnn = reembedParams.get("neighborsKnn",20)
-            neighborsMethod = reembedParams.get("neighborsMethod","umap")
-            distanceMetric = reembedParams.get("distanceMetric","cosine")
-            nnaSAM = reembedParams.get("nnaSAM",50)
-            weightModeSAM = reembedParams.get("weightModeSAM","dispersion")
-            umapMinDist = reembedParams.get("umapMinDist",0.1)
-            scaleData = reembedParams.get("scaleData",False)
-
- 
-            if not doSAM:
-                try:
-                    sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(nTopGenesHVG,adata.shape[1]), n_bins=nBinsHVG)                
-                    adata = adata[:,adata.var['highly_variable']]                
-                except:
-                    print('Error during HVG selection - some of your expressions are probably negative.')
-                X = adata.X
-                if scaleData:
-                    sc.pp.scale(adata,max_value=10)
-
-                sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
-                adata.X = X
-            else:
-                SAM = get_samalg_module()
-                sam=SAM(counts = adata, inplace=True)
-                X = sam.adata.X
-                preprocessing = "StandardScaler" if scaleData else "Normalizer"
-                sam.run(projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM)
-                sam.adata.X = X        
-                adata=sam.adata
-
-            if doBatch:
-                sce = get_scanpy_external_module()
-                if doSAM:
-                    adata_batch = sam.adata
-                else:
-                    adata_batch = adata
-                
-                if batchMethod == "Harmony":
-                    sce.pp.harmony_integrate(adata_batch,batchKey,adjusted_basis="X_pca")
-                elif batchMethod == "BBKNN":
-                    sce.pp.bbknn(adata_batch, batch_key=batchKey, metric=distanceMetric, n_pcs=numPCs, neighbors_within_batch=bbknnNeighborsWithinBatch)
-                elif batchMethod == "Scanorama":
-                    sce.pp.scanorama_integrate(adata_batch, batchKey, basis='X_pca', adjusted_basis='X_pca',
-                                            knn=scanoramaKnn, sigma=scanoramaSigma, alpha=scanoramaAlpha,
-                                            batch_size=scanoramaBatchSize)
-                if doSAM:
-                    sam.adata = adata_batch
-                else:
-                    adata = adata_batch
-
-            if not doSAM or doSAM and batchMethod == "BBKNN":
-                if not doBatch or doBatch and batchMethod != "BBKNN":
-                    sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric)    
-                sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
-            else:
-                sam.run_umap(metric=distanceMetric,min_dist=umapMinDist)
-                adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
-                adata.obsp['connectivities'] = sam.adata.obsp['connectivities']
-                
-            umap = adata.obsm["X_umap"]
-            result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
-            result[obs_mask] = umap
-            X_umap,nnm = result, adata.obsp['connectivities']            
-
-        if embName == "":
-            embName = f"{method}_{str(hex(int(time.time())))[2:]}"
-
-        if parentName != "":
-            parentName+=";;"
-        
-        name = f"{parentName}{embName}"
-        if "X_"+name in self.data.obsm.keys():
-            name = f"{name}_{str(hex(int(time.time())))[2:]}"
-            
-        dims = [f"{name}_0", f"{name}_1"]
-        layout_schema = {"name": name, "type": "float32", "dims": dims}
-        self.schema["layout"]["obs"].append(layout_schema)
-
-        IXer = pd.Series(index =np.arange(nnm.shape[0]), data = np.where(obs_mask.flatten())[0])
-        x,y = nnm.nonzero()
-        d = nnm.data
-        nnm = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(self.data.shape[0],)*2).tocsr()
-
-        if exists(f"{userID}/params/latest.p"):
-            latestPreParams = pickle.load(open(f"{userID}/params/latest.p","rb"))
-        else:
-            latestPreParams = None
-
-        if exists(f"{userID}/params/{parentName}.p"):
-            parentParams = pickle.load(open(f"{userID}/params/{parentName}.p","rb"))
-        else:
-            parentParams = None
-
-        if latestPreParams is not None:
-            for k in latestPreParams.keys():
-                reembedParams[k] = latestPreParams[k]
-                
-        if (parentParams is not None):
-            reembedParams[f"parentParams"]=parentParams
-
-        reembedParams['sample_ids']=np.array(list(adata.obs_names))
-        reembedParams['feature_ids']=np.array(list(adata.var_names))
-        if doSAM:
-            reembedParams['feature_weights']=np.array(list(sam.adata.var['weights']))
-            
-        pickle.dump(nnm, open(f"{userID}/nnm/{name}.p","wb"))
-        pickle.dump(X_umap, open(f"{userID}/emb/{name}.p","wb"))
-        pickle.dump(reembedParams, open(f"{userID}/params/{name}.p","wb"))
-
-        return layout_schema
-
-    
-    def compute_diffexp_ttest(self, maskA, maskB, top_n=None, lfc_cutoff=None):
-        if top_n is None:
-            top_n = self.dataset_config.diffexp__top_n
-        if lfc_cutoff is None:
-            lfc_cutoff = self.dataset_config.diffexp__lfc_cutoff
-        return diffexp_generic.diffexp_ttest(self, maskA, maskB, top_n, lfc_cutoff)
 
     def get_colors(self):
         return convert_anndata_category_colors_to_cxg_category_colors(self.data)
@@ -1925,7 +1516,8 @@ class AnndataAdaptor(DataAdaptor):
 
         if col_idx is None:
             col_idx = np.arange(self.data.shape[1])        
-        if sp.sparse.issparse(XI) and col_idx.size == 1:
+        
+        if col_idx.size == 1:
             i1 = col_idx[0]
                             
             d = XI.data[XI.indptr[i1] : XI.indptr[i1 + 1]]

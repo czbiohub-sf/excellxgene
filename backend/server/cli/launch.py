@@ -18,6 +18,7 @@ from backend.common.utils.utils import sort_options
 from flask_sock import Sock
 import multiprocessing
 from authlib.integrations.flask_client import OAuth
+from multiprocessing import shared_memory
 import sys
 import signal
 from backend.server.data_anndata.anndata_adaptor import AnndataAdaptor
@@ -289,6 +290,12 @@ def launch_args(func):
         show_default=True,
         help="Choose the fixed, immutable embedding. If not set, the root embedding will contain all points in the center of the screen.",
     )              
+    @click.option(
+        "--auth_url",
+        default=None,
+        show_default=True,
+        help="Provide URL to use for authorization redirects.",
+    )                  
     @click.help_option("--help", "-h", help="Show this message and exit.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -371,7 +378,8 @@ def launch(
     config_file,
     dump_default_config,
     hosted,
-    root_embedding
+    root_embedding,
+    auth_url
 ):
     """Launch the cellxgene data viewer.
     This web app lets you explore single-cell expression data.
@@ -473,8 +481,27 @@ def launch(
 
     def handler(signal, frame):
         print('\nShutting down cellxgene.')
-        AnndataAdaptor.pool.terminate()
-        AnndataAdaptor.pool.join()        
+        app_config.server_config.data_adaptor.pool.terminate()
+        app_config.server_config.data_adaptor.pool.join()      
+        d = app_config.server_config.data_adaptor.shm_layers_csr
+        already_deleted = []
+        for k in d.keys():
+            if d[k][0] not in already_deleted:
+                shm = shared_memory.SharedMemory(name=d[k][0])
+                shm.close()
+                shm.unlink()
+                already_deleted.append(d[k][0])
+            if d[k][3] not in already_deleted:
+                shm = shared_memory.SharedMemory(name=d[k][3])
+                shm.close()
+                shm.unlink()
+                already_deleted.append(d[k][3])
+            if d[k][6] not in already_deleted:
+                shm = shared_memory.SharedMemory(name=d[k][6])
+                shm.close()
+                shm.unlink()                 
+                already_deleted.append(d[k][6])       
+
         sys.exit(0)
 
     signal.signal(signal.SIGINT, handler)
@@ -508,6 +535,8 @@ def launch(
             'scope': 'openid profile email',
         }
     )
+    if auth_url is None:
+        auth_url = cellxgene_url
 
     @server.app.route('/callback')
     def callback_handling():
@@ -521,18 +550,18 @@ def launch(
         annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
         app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
-        return redirect('http://localhost:3000/')
+        return redirect(auth_url)
     
     @server.app.route('/login')
     def login():
-        return auth0.authorize_redirect(redirect_uri='http://localhost:5005/callback') #TODO: CHANGE FOR SERVER
+        return auth0.authorize_redirect(redirect_uri=auth_url+'/callback') #TODO: CHANGE FOR SERVER
     
     @server.app.route('/logout')
     def logout():
         # Clear session stored data
         session.clear()
         # Redirect user to logout endpoint
-        params = {'returnTo': "http://localhost:3000/", 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
+        params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
         return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
 
     try:
