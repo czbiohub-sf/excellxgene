@@ -32,7 +32,7 @@ import pathlib
 import base64
 from hashlib import blake2b
 from functools import wraps
-from multiprocessing import shared_memory
+from multiprocessing import shared_memory, resource_tracker
 from os.path import exists
 import sklearn.utils.sparsefuncs as sf
 from numba import njit, prange
@@ -74,7 +74,6 @@ def _callback_fn(res,ws,cfn,data,post_processing):
     d = {"response": res,"cfn": cfn}
     d.update(data)
     ws.send(jsonify_numpy(d))
-    
 
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing)
@@ -663,6 +662,36 @@ def compute_preprocess(shm, AnnDataDict, reembedParams, userID, hosted): # Assem
             "X_shm":X_shm,
             "X": X
         }
+        if shm["X"][0] != shm["orig.X"][0]:
+            s = shared_memory.SharedMemory(name=shm["X"][0])
+            s.close()
+            s.unlink()
+
+            s = shared_memory.SharedMemory(name=shm["X"][3])
+            s.close()
+            s.unlink()
+            
+            s = shared_memory.SharedMemory(name=shm["X"][6])
+            s.close()
+            s.unlink()    
+
+            for i in shm.keys():
+                for j in [0,3,6]:
+                    resource_tracker.unregister("/"+shm[i][j],"shared_memory")
+
+            for j in [0,3,6]:
+                resource_tracker.unregister("/"+X_shm[j],"shared_memory")                         
+        else:
+            for i in shm.keys():
+                if i!="orig.X":
+                    for j in [0,3,6]:
+                        resource_tracker.unregister("/"+shm[i][j],"shared_memory")
+
+            for j in [0,3,6]:
+                resource_tracker.unregister("/"+X_shm[j],"shared_memory") 
+
+
+           
         X = AnnDataDictReturn["X"]        
         mean,v = sf.mean_variance_axis(X,axis=0)
         meansq = v-mean**2
@@ -679,6 +708,11 @@ def compute_preprocess(shm, AnnDataDict, reembedParams, userID, hosted): # Assem
             result[filt] = umap[filt]
             pickle.dump(result,open(k,"wb"))
     else:
+        for i in shm.keys():
+            for j in [0,3,6]:
+                if i!="orig.X":
+                    resource_tracker.unregister("/"+shm[i][j],"shared_memory") 
+                           
         adata_raw.layers['X'] = adata_raw.X            
         return adata_raw
 
@@ -867,21 +901,6 @@ def initialize_socket(da):
                 }
 
                 def post_processing(res):
-                    """
-                    k = "X"
-                    d = da.shm_layers_csr
-                    shm = shared_memory.SharedMemory(name=d[k][0])
-                    shm.close()
-                    shm.unlink()
-                    shm = shared_memory.SharedMemory(name=d[k][3])
-                    shm.close()
-                    shm.unlink()
-                    shm = shared_memory.SharedMemory(name=d[k][6])
-                    shm.close()
-                    shm.unlink()                 
-
-                    del da.shm_layers_csr["X"]
-                    """
                     da.shm_layers_csr["X"] = res["X_shm"]                    
                     da.data.X = res["X"]
                     da.data.var["X;;tMean"] = res['mean']
