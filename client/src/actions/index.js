@@ -403,7 +403,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       });
       postAsyncSuccessToast("Re-embedding has completed.");
 
-    } else if (data.cfn === "preprocessing"){
+    /*} else if (data.cfn === "preprocessing"){
       const {        
         obsCrossfilter: prevCrossfilter,
         layoutChoice,
@@ -437,6 +437,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         obsCrossfilter
       });      
       postAsyncSuccessToast("Preprocessing has completed.");
+    } */ 
     } else if (data.cfn === "sankey"){
       const { layoutChoice } = getState();
       const catNames = data.catNames;
@@ -557,13 +558,13 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
     }
   } catch (e) {}
-  try{
+  /*try{
     if (!hostedMode){
       const wsPreprocessing = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/preprocessing`)
       wsPreprocessing.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsPreprocessing, name: "wsPreprocessing"})
     }
-  } catch (e) {}
+  } catch (e) {}*/
   try{
     if (loggedIn || !hostedMode){
       const wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
@@ -619,7 +620,7 @@ const doInitialDataLoad = () =>
       const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
       if(layoutSchema.length > 0){
-        const preferredNames = ["umap", "tsne", "pca"];
+        const preferredNames = ["root","umap", "tsne", "pca"];
         const f = layoutSchema.filter((i) => {
           return preferredNames.includes(i.name)
         })

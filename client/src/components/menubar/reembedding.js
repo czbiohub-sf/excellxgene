@@ -23,7 +23,6 @@ import PrepPanel from "./preppanel";
   obsCrossfilter: state.obsCrossfilter,
   layoutChoice: state.layoutChoice,
   isSubsetted: state.controls.isSubsetted,
-  hostedMode: state.controls.hostedMode,
   userLoggedIn: state.controls.userInfo ? true : false
 }))
 class Reembedding extends React.PureComponent {
@@ -87,7 +86,7 @@ class Reembedding extends React.PureComponent {
   }
   render() {
     const { setReembedDialogActive, embName, reembeddingPanel } = this.state;
-    const { reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, hostedMode, userLoggedIn } = this.props;
+    const { reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn } = this.props;
     const loading = !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const tipContent =
       "Click to perform preprocessing and dimensionality reduction on the currently selected cells.";
@@ -132,8 +131,6 @@ class Reembedding extends React.PureComponent {
             <PrepPanel idhash={idhash} />
             <ControlGroup style={{paddingTop: "15px"}} fill={true} vertical={false}>
               <Button onClick={this.handleDisableReembedDialog}>Close</Button>
-              {hostedMode ? null : <Button disabled={reembedParams.doBatchPrep && (reembedParams.batchPrepKey==="" || reembedParams.batchPrepLabel === "")}
-                      onClick={this.handleRunAndDisablePreprocessingDialog} intent="primary"> Preprocess </Button>}
             </ControlGroup>            
           </div>
           :
@@ -145,7 +142,10 @@ class Reembedding extends React.PureComponent {
             <DimredPanel embName={embName} onChange={this.onNameChange} idhash={idhash} />
             <ControlGroup style={{paddingTop: "15px"}} fill={true} vertical={false}>
                 <Button onClick={this.handleDisableReembedDialog}>Close</Button>
-                <Button disabled={reembedParams.doBatch && reembedParams.batchKey===""} onClick={this.handleRunAndDisableReembedDialog} intent="primary"> {hostedMode ? "Preprocess and run" : "Run"} </Button>                 
+                <Button disabled={reembedParams.doBatch && reembedParams.batchKey==="" || 
+                                  reembedParams.doBatchPrep && (reembedParams.batchPrepKey==="" || 
+                                  reembedParams.batchPrepLabel === "")
+                } onClick={this.handleRunAndDisableReembedDialog} intent="primary"> Preprocess and run </Button>                 
             </ControlGroup>            
           </div>}
         </Dialog>

@@ -478,31 +478,27 @@ def launch(
 
     cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
     initialize_socket(app_config.server_config.data_adaptor)
-
+    global in_handler
+    in_handler = False
     def handler(signal, frame):
         print('\nShutting down cellxgene.')
-        app_config.server_config.data_adaptor.pool.terminate()
-        app_config.server_config.data_adaptor.pool.join()      
-        d = app_config.server_config.data_adaptor.shm_layers_csr
-        already_deleted = []
-        for k in d.keys():
-            if d[k][0] not in already_deleted:
-                shm = shared_memory.SharedMemory(name=d[k][0])
-                shm.close()
-                shm.unlink()
-                already_deleted.append(d[k][0])
-            if d[k][3] not in already_deleted:
-                shm = shared_memory.SharedMemory(name=d[k][3])
-                shm.close()
-                shm.unlink()
-                already_deleted.append(d[k][3])
-            if d[k][6] not in already_deleted:
-                shm = shared_memory.SharedMemory(name=d[k][6])
-                shm.close()
-                shm.unlink()                 
-                already_deleted.append(d[k][6])       
+        global in_handler
+        if not in_handler:
+            in_handler = True
+            app_config.server_config.data_adaptor.pool.terminate()
+            app_config.server_config.data_adaptor.pool.join()      
 
-        sys.exit(0)
+            already_deleted = []
+            for d in [app_config.server_config.data_adaptor.shm_layers_csr,app_config.server_config.data_adaptor.shm_layers_csc]:
+                for k in d.keys():
+                    for j in [0,3,6]:
+                        if d[k][j] not in already_deleted:
+                            shm = shared_memory.SharedMemory(name=d[k][j])
+                            shm.close()
+                            shm.unlink()
+                            already_deleted.append(d[k][j])         
+
+            sys.exit(0)
 
     signal.signal(signal.SIGINT, handler)
     
