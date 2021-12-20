@@ -4,6 +4,7 @@ import * as d3s from "d3-sankey";
 import { connect } from "react-redux";
 import { requestSankey } from "../../actions/sankey";
 import { width } from "../scatterplot/util";
+import _ from "lodash";
 
 @connect((state) => ({
     layoutChoice: state.layoutChoice,
@@ -192,12 +193,25 @@ class Sankey extends React.Component {
     this.setState({
       height: height
     })
+    const temp_nodes = data.nodes;
+    const un_node_ids = [];
+    for (const ino of temp_nodes) {
+      const inot = parseInt(ino.id.split('_').at(0).slice(-1));
+      if (!un_node_ids.includes(inot)){
+        un_node_ids.push(inot)
+      }
+    }
+    const map = new Map();
+    un_node_ids.forEach((item,i)=>{
+      map.set(item,i)
+    })
+    
     const sankey = d3s.sankey()
                      .size(graphSize)
                      .nodeId(d => d.id)
                      .nodeWidth(nodeWidth)
                      .nodePadding(nodePadding)
-                     .nodeAlign((n,tn)=>parseFloat(n.id.split('_').at(0).slice(-1)));
+                     .nodeAlign((n,tn)=>map.get(parseInt(n.id.split('_').at(0).slice(-1))));
 
     let graph = sankey(data);
     

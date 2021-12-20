@@ -808,6 +808,10 @@ const CategoryValueList = React.memo(
     continuousAverages,
     removeHistZeros
   }) => {
+    const categoryValueCountsObj = {}
+    categorySummary.categoryValueCounts.forEach((item,index)=>{
+      categoryValueCountsObj[categorySummary.categoryValues[index]] = item;
+    })    
     let tuples = [...categorySummary.categoryValueIndices];
     
     let newTuples;
@@ -834,18 +838,31 @@ const CategoryValueList = React.memo(
         }
         newTuples.push(["unassigned",newTuples.length])
       } else {
-        newTuples = tuples;
+        newTuples = [];
+        let z = 0;
+        for (let i = 0; i < tuples.length; i++) {
+          if (categoryValueCountsObj[tuples[i][0]]>0 || tuples[i][0] === "unassigned"){
+            newTuples.push([tuples[i][0],z])
+            z = z + 1;
+          }
+        }      
       }
     } else {
-      newTuples = tuples;
+      newTuples = [];
+      let z = 0;
+      for (let i = 0; i < tuples.length; i++) {
+        if (categoryValueCountsObj[tuples[i][0]]>0 || tuples[i][0] === "unassigned"){
+          newTuples.push([tuples[i][0],z])
+          z = z + 1;
+        }
+      }
     }    
+
     const newCategoryValues = [];
-    const categoryValueCountsObj = {}
-    categorySummary.categoryValueCounts.forEach((item,index)=>{
-      categoryValueCountsObj[categorySummary.categoryValues[index]] = item;
-    })
+
     const newCategoryValueCounts = []
-    for (let i = 0; i < categorySummary.categoryValues.length; i++) {
+    for (let i = 0; i < newTuples.length; i++) {
+      
       newCategoryValues.push(newTuples[i][0])
       newCategoryValueCounts.push(categoryValueCountsObj[newTuples[i][0]])
     }
@@ -882,7 +899,6 @@ const CategoryValueList = React.memo(
 
     /* User annotation */
     const flipKey = [...categorySummary.categoryValueIndices].map((t) => t[0]).join("");
-
     return (
       <Flipper flipKey={flipKey}>
         {newTuples.map(([value, index]) => (

@@ -337,6 +337,7 @@ export const requestSaveAnndataToFile = (saveName) => async (
 }
 
 const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
+
   const onMessage = async (event) => {
     const data = JSON.parse(event.data);
     if (data.cfn === "diffexp"){
@@ -544,16 +545,21 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       });    
     }
   }   
+  let wsDiffExp;
+  let wsReembedding;
+  let wsSankey;
+  let wsLeiden;
+  let wsDownloadAnndata;
   try{
     if (loggedIn || !hostedMode){
-      const wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
+      wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
       wsDiffExp.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})    
     }
   } catch (e) {}
   try{
     if (loggedIn || !hostedMode){
-      const wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
+      wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
       wsReembedding.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
     }
@@ -567,25 +573,43 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
   } catch (e) {}*/
   try{
     if (loggedIn || !hostedMode){
-      const wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
+      wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
       wsSankey.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsSankey, name: "wsSankey"})
     }
   } catch (e) {}
   try{
     if (loggedIn || !hostedMode){
-      const wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
+      wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
       wsLeiden.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsLeiden, name: "wsLeiden"})
     }
   } catch (e) {}
   try{
     if (loggedIn || !hostedMode){
-      const wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
+      wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
       wsDownloadAnndata.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsDownloadAnndata, name: "wsDownloadAnndata"})
     }
   } catch (e) {}
+  if (loggedIn || !hostedMode) {
+    window.onbeforeunload = function() {
+      wsDiffExp.onclose = function () {};
+      wsDiffExp.close();
+  
+      wsReembedding.onclose = function () {};
+      wsReembedding.close();
+      
+      wsSankey.onclose = function () {};
+      wsSankey.close();
+      
+      wsLeiden.onclose = function () {};
+      wsLeiden.close();
+      
+      wsDownloadAnndata.onclose = function () {};
+      wsDownloadAnndata.close(); 
+    };  
+  }
 }
 
 const doInitialDataLoad = () =>
