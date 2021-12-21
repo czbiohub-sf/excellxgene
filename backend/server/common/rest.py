@@ -259,10 +259,10 @@ def data_var_put(request, data_adaptor):
     args = request.get_json()
     filter = args.get("filter",None)
     layer = args.get("layer","X")
-
+    logscale = args.get("logscale","false")=="true"
     try:
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -277,11 +277,13 @@ def data_var_get(request, data_adaptor):
 
     try:
         layer = request.values.get("layer", default="X")
+        logscale = request.values.get("logscale", default="false") == "true"
         args_filter_only = request.args.copy()
-        args_filter_only.poplist("layer")        
+        args_filter_only.poplist("layer")  
+        args_filter_only.poplist("logscale")        
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -667,12 +669,14 @@ def summarize_var_helper(request, data_adaptor, key, raw_query):
     args_filter_only.poplist("method")
     args_filter_only.poplist("key")
     args_filter_only.poplist("layer")
+    args_filter_only.poplist("logscale")
 
     try:
-        layer = request.values.get("layer", default="X")        
+        layer = request.values.get("layer", default="X")  
+        logscale = request.values.get("logscale", default="false")=="true"        
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.summarize_var(summary_method, filter, query_hash, layer),
+            data_adaptor.summarize_var(summary_method, filter, query_hash, layer, logscale),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )

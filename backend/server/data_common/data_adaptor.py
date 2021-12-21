@@ -264,7 +264,7 @@ class DataAdaptor(metaclass=ABCMeta):
         var_names = set(self.query_var_array(self.parameters.get("var_names")))
         return validate_gene_sets(genesets, var_names)
 
-    def data_frame_to_fbs_matrix(self, filter, axis, layer="X"):
+    def data_frame_to_fbs_matrix(self, filter, axis, layer="X", logscale=False):
         """
         Retrieves data 'X' and returns in a flatbuffer Matrix.
         :param filter: filter: dictionary with filter params
@@ -286,7 +286,7 @@ class DataAdaptor(metaclass=ABCMeta):
             raise FilterError("Error parsing filter")
 
         col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
-        X = self.get_X_array(col_idx,layer=layer)
+        X = self.get_X_array(col_idx,layer=layer,logscale=logscale)
         return encode_matrix_fbs(X, col_idx=col_idx, row_idx=None)
 
     def diffexp_topN(self, obsFilterA, obsFilterB, top_n=None):
@@ -398,7 +398,7 @@ class DataAdaptor(metaclass=ABCMeta):
             lastmod = None
         return lastmod
 
-    def summarize_var(self, method, filter, query_hash,layer="X"):
+    def summarize_var(self, method, filter, query_hash,layer="X",logscale=False):
         if method != "mean":
             raise UnsupportedSummaryMethod("Unknown gene set summary method.")
 
@@ -410,7 +410,7 @@ class DataAdaptor(metaclass=ABCMeta):
             mean = np.zeros((self.get_shape()[0], 1), dtype=np.float32)
         else:
             col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
-            X = self.get_X_array(col_idx,layer=layer)
+            X = self.get_X_array(col_idx,layer=layer,logscale=logscale)
             if sparse.issparse(X):
                 mean = X.mean(axis=1)
             else:

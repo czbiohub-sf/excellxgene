@@ -111,6 +111,18 @@ class GeneExpression extends React.Component {
         annoMatrix: annoMatrixNew,
         obsCrossfilter: obsCrossfilterNew
       });      
+    } else if(prevProps.reembedParams.logScaleExpr !== reembedParams.logScaleExpr){
+      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
+      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
+      annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
+      const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
+      actions.prefetchEmbeddings(annoMatrixNew);
+
+      dispatch({
+        type: "annoMatrix: init complete",
+        annoMatrix: annoMatrixNew,
+        obsCrossfilter: obsCrossfilterNew
+      });      
     }
   }
 
@@ -130,15 +142,25 @@ class GeneExpression extends React.Component {
         /> : null}
         <div style={{
           marginBottom: "20px",
-          textAlign: "right"
+          textAlign: "right",
+          display: "flex",
+          justifyContent: "right",
         }}>
-          <ParameterInput
-            label="Data layer"
-            param="dataLayerExpr"
-            options={annoMatrix.schema.layers}
-            tooltipContent={"Expression layer used for visualization and differential expression."}
-            left
-          />                   
+            <ParameterInput
+              label="Log scale"
+              param="logScaleExpr"
+              tooltipContent={"Check to display expressions in log scale."}
+              left
+            />               
+          <div style={{paddingLeft: "10px"}}>
+            <ParameterInput
+              label="Data layer"
+              param="dataLayerExpr"
+              options={annoMatrix.schema.layers}
+              tooltipContent={"Expression layer used for visualization and differential expression."}
+              left
+            /> 
+          </div>     
         </div>               
         <QuickGene/>
         <div>

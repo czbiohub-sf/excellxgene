@@ -1466,7 +1466,10 @@ class AnndataAdaptor(DataAdaptor):
     def get_colors(self):
         return convert_anndata_category_colors_to_cxg_category_colors(self.data)
 
-    def get_X_array(self, col_idx, layer="X"):
+    def get_X_array(self, col_idx, layer="X", logscale=False):
+        def bisym_log_transform(x):
+             return np.sign(x)*np.log(1+np.abs(x))
+
         #if row_idx is None:
         #    row_idx = np.arange(self.data.shape[0])
         if layer == "X":
@@ -1485,9 +1488,16 @@ class AnndataAdaptor(DataAdaptor):
             x = np.zeros(XI.shape[0])
             x[i] = d
             x=x[:,None]
+            if logscale:
+                x = bisym_log_transform(x)
             #x=x[row_idx][:,None]                
         else:
             x = XI[:,col_idx]
+            if logscale:
+                if sparse.issparse(x):
+                    x.data[:] = bisym_log_transform(x.data)
+                else:
+                    x = bisym_log_transform(x)
         return x
 
     def get_shape(self):

@@ -234,7 +234,7 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
   /**
    ** Private below
    **/
-  async _doLoad(field, query, layer="X") {
+  async _doLoad(field, query, layer="X", logscale=false) {
     /*
     _doLoad - evaluates the query against the field. Returns:
       * whereCache update: column query map mapping the query to the column labels
@@ -249,7 +249,7 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
         break;
       }
       case "X": {
-        doRequest = _XLoader(this.baseURL, field, query, layer);
+        doRequest = _XLoader(this.baseURL, field, query, layer, logscale);
         break;
       }
       case "emb": {
@@ -318,12 +318,12 @@ function _obsOrVarLoader(baseURL, field, query) {
   return () => doBinaryRequest(url);
 }
 
-function _XLoader(baseURL, field, query, layer) {
+function _XLoader(baseURL, field, query, layer, logscale) {
   _expectComplexQuery(query);
   if (query.where) {
     const urlBase = `${baseURL}data/var`;
     const urlQuery = _urlEncodeComplexQuery(query);
-    const url = `${urlBase}?${urlQuery}&layer=${layer}`;
+    const url = `${urlBase}?${urlQuery}&layer=${layer}&logscale=${logscale}`;
     return () => doBinaryRequest(url);
   }
 
@@ -332,7 +332,7 @@ function _XLoader(baseURL, field, query, layer) {
     const urlQuery = _urlEncodeComplexQuery(query);
 
     if (urlBase.length + urlQuery.length < 2000) {
-      const url = `${urlBase}?${urlQuery}&layer=${layer}`;
+      const url = `${urlBase}?${urlQuery}&layer=${layer}&logscale=${logscale}`;
       return () => doBinaryRequest(url);
     }
 
