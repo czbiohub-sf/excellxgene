@@ -103,6 +103,7 @@ class GeneExpression extends React.Component {
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
       const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
       annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
+      annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
       const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
       actions.prefetchEmbeddings(annoMatrixNew);
 
@@ -114,6 +115,7 @@ class GeneExpression extends React.Component {
     } else if(prevProps.reembedParams.logScaleExpr !== reembedParams.logScaleExpr){
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
       const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
+      annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
       annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
       const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
       actions.prefetchEmbeddings(annoMatrixNew);
