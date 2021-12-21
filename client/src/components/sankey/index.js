@@ -3,8 +3,9 @@ import * as d3 from "d3";
 import * as d3s from "d3-sankey";
 import { connect } from "react-redux";
 import { requestSankey } from "../../actions/sankey";
-import { width } from "../scatterplot/util";
-import _ from "lodash";
+import Canvg, {
+  presets
+} from 'canvg';
 
 @connect((state) => ({
     layoutChoice: state.layoutChoice,
@@ -41,7 +42,7 @@ class Sankey extends React.Component {
     });
   };  
   constructSankey = () => {
-    const { sankeyData: data } = this.props
+    const { sankeyData: data, layoutChoice } = this.props
     const { viewport } = this.state
     const topMargin = this.sankeyTopPadding
     const leftMargin = this.sankeyLeftPadding
@@ -299,6 +300,29 @@ class Sankey extends React.Component {
     .attr("dy", "0.35em")
     .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
     .text(d => d.id.split('_').slice(1).join('_'))
+    svg.attr("id","sankeyPlot");
+    
+    d3.select('#saveSankeyButton').on('click', function(){
+      var s = document.querySelector('#sankeyPlot');
+      var data = (new XMLSerializer()).serializeToString(s);
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      Canvg.from(ctx, data, presets.offscreen()).then((v)=>{
+        v.render().then(()=>{
+          canvas.convertToBlob().then((blob)=>{
+            var a = document.createElement("a");
+            document.body.appendChild(a);
+            a.style = "display: none";
+        
+            var url = window.URL.createObjectURL(blob);
+            a.href = url;
+            a.download = `${layoutChoice.current.split(';;').at(-1)}_sankey.png`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          });
+        })
+      });
+    });    
   }
 
   handleResize = () => {

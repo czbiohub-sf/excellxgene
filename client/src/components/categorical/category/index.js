@@ -55,6 +55,8 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
   };
 })
 class Category extends React.PureComponent {
+  _isMounted = false;
+
   constructor(props){
     super(props);
     this.state = {
@@ -96,7 +98,11 @@ class Category extends React.PureComponent {
       categorySummary
     );
   }
-  
+  setState = (p) => {
+    if (this._isMounted) {
+      super.setState(p)
+    }
+  }
   onSortCategoryLabels = () => {
     const { sortDirection } = this.state;
     if (sortDirection === "descending") {
@@ -116,6 +122,13 @@ class Category extends React.PureComponent {
       })
     }
   }
+  componentDidMount = () => {
+    this._isMounted = true;
+  }
+  componentWillUnmount = () => {
+    this._isMounted = false;
+  }
+
   componentDidUpdate = (prevProps) => {
     const { colors, isExpanded, annoMatrix, selectedCategories, metadataField, refresher } = this.props;
     const { colorMode, colorAccessor } = colors;

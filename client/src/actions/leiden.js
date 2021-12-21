@@ -20,6 +20,11 @@ function abortableFetch(request, opts, timeout = 0) {
   };
 }
 
+function writableAnnotations(annoMatrix) {
+  return annoMatrix.schema.annotations.obs.columns
+    .filter((s) => s.writable)
+    .map((s) => s.name);
+}
 
 export function requestLeiden() {
     return async (dispatch, getState) => {
@@ -33,7 +38,17 @@ export function requestLeiden() {
         let cells = annoMatrix.rowIndex.labels();
         cells = Array.isArray(cells) ? cells : Array.from(cells);          
         
-        const name = `leiden_${Math.round(new Date().getTime() / 1000).toString(16)}_r${Math.round((res+Number.EPSILON)*1000)/1000.0}`
+        const annos = writableAnnotations(annoMatrix)
+        const nums = [];
+        annos.forEach((item)=>{
+          if (item.startsWith("leiden_v")){
+            nums.push(parseInt(item.split("leiden_v").at(-1).split("_").at(0)));
+          }
+        })
+        const latest = nums.reduce(function(a, b) {
+            return Math.max(a, b);
+        }, 0)+1;
+        const name = `leiden_v${latest}_r${Math.round((res+Number.EPSILON)*1000)/1000.0}`
         wsLeiden.send(JSON.stringify({
           name: layoutChoice.current,
           cName: name,

@@ -131,6 +131,7 @@ class Reembedding extends React.PureComponent {
             <PrepPanel idhash={idhash} />
             <ControlGroup style={{paddingTop: "15px"}} fill={true} vertical={false}>
               <Button onClick={this.handleDisableReembedDialog}>Close</Button>
+              <Button onClick={()=>{this.setState({...this.state, reembeddingPanel: true})}}>Next</Button>
             </ControlGroup>            
           </div>
           :

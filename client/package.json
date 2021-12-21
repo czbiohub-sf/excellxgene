@@ -45,6 +45,7 @@
     "@blueprintjs/popover2": "^0.6.0",
     "@blueprintjs/select": "^3.16.0",
     "abort-controller": "^3.0.0",
+    "canvg": "^3.0.9",
     "core-js": "^3.6.5",
     "d3": "^4.10.0",
     "d3-sankey": "^0.12.3",

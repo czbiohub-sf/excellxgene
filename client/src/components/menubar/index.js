@@ -454,7 +454,7 @@ class MenuBar extends React.PureComponent {
           >            
             <AnchorButton
                 type="button"
-                icon="duplicate"
+                icon="fork"
                 active={layoutChoice.sankey}
                 disabled={!displaySankey && !layoutChoice.sankey}
                 loading={loadingSankey}
@@ -511,7 +511,8 @@ class MenuBar extends React.PureComponent {
         <div style={{
           width: "20%",
           textAlign: "right",
-          justifyContent: "right"
+          display: "flex",
+          justifyContent: "right",
         }}>
           <AnchorButton
           type="button"
@@ -523,7 +524,15 @@ class MenuBar extends React.PureComponent {
           disabled={loadingSankey}
         >
           Recalculate sankey
-        </AnchorButton> </div> : null} 
+        </AnchorButton>
+        <div style={{paddingLeft: "10px"}}>
+        <AnchorButton
+          type="button"
+          disabled={loadingSankey}
+          icon="floppy-disk"
+          id="saveSankeyButton"
+        /></div>
+         </div> : null} 
         {layoutChoice.sankey ? 
         <div style={{
           width: "80%",
@@ -535,20 +544,27 @@ class MenuBar extends React.PureComponent {
           justifyContent: "space-between",
           display: "flex"
         }}>
-          <div style={{paddingRight: "15px"}}>Edge threshold:</div> 
+          <div style={{paddingRight: "15px"}}>{<Tooltip
+          content="Edges with weights below this threshold are filtered out."
+          position="bottom"
+          style={{
+            width: "inherit"
+          }}
+        >Edge threshold:</Tooltip>}</div> 
           <div style={{
             width: "inherit"
           }}>
-          <Slider
-            min={0}
-            max={maxLink}
-            stepSize={Math.max(parseFloat((maxLink/100).toFixed(2)),0.001)}
-            labelStepSize={Math.max(maxLink,0.001)}
-            showTrackFill={false}
-            onRelease={this.onRelease}
-            onChange={this.onSliderChange}
-            value={threshold}
-          /> </div></div>: null}         
+        <Slider
+        min={0}
+        max={maxLink}
+        stepSize={Math.max(parseFloat((maxLink/100).toFixed(2)),0.001)}
+        labelStepSize={Math.max(maxLink,0.001)}
+        showTrackFill={false}
+        onRelease={this.onRelease}
+        onChange={this.onSliderChange}
+        value={threshold}
+      />
+           </div></div>: null}         
       </div>
     );
   }
