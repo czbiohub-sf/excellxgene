@@ -255,9 +255,6 @@ class DataAdaptor(metaclass=ABCMeta):
                 if isinstance(dtype, pd.Int64Dtype):
                     labels_df[col] = labels_df[col].astype("int64")
         
-        if any([np.issubdtype(coltype.type, np.floating) for coltype in labels_df.dtypes]):
-            raise ValueError("Columns may not have floating point types")
-
         return labels_df
 
     def check_new_gene_sets(self, genesets, context=None):
