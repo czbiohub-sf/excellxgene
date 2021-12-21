@@ -40,7 +40,7 @@ bash ~/miniconda.sh -b -p $HOME/miniconda
 2. Create and activate a new environment:
 
 ```
-conda create -n cxg python=3.7
+conda create -n cxg python=3.8
 conda activate cxg
 ```
 
