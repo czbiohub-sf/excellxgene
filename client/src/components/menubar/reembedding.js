@@ -90,8 +90,11 @@ class Reembedding extends React.PureComponent {
     const loading = !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const tipContent =
       "Click to perform preprocessing and dimensionality reduction on the currently selected cells.";
-    const title = (reembeddingPanel ? `Reembedding on ${obsCrossfilter.countSelected()}/${annoMatrix.schema.dataframe.nObs} cells.` :
-                  "Preprocessing");
+    const cS = obsCrossfilter.countSelected();
+    
+    const runDisabled = cS > 50000;
+    
+    const title = `${reembeddingPanel ? "Reembedding" : "Preprocessing"} on ${cS}/${annoMatrix.schema.dataframe.nObs} cells.`;
     return (
       <div>
         <Dialog
@@ -106,6 +109,7 @@ class Reembedding extends React.PureComponent {
           isOpen={setReembedDialogActive}
           usePortal
         >        
+          {runDisabled ? <div style={{paddingBottom: "20px"}}><AnchorButton fill minimal icon="warning-sign" intent="danger"> You cannot preprocess or reembed on greater than 50,000 cells. </AnchorButton></div> : null}
           <ControlGroup fill={true} vertical={false}>
             <AnchorButton
               onClick={() => {
@@ -145,7 +149,7 @@ class Reembedding extends React.PureComponent {
                 <Button onClick={this.handleDisableReembedDialog}>Close</Button>
                 <Button disabled={reembedParams.doBatch && reembedParams.batchKey==="" || 
                                   reembedParams.doBatchPrep && (reembedParams.batchPrepKey==="" || 
-                                  reembedParams.batchPrepLabel === "")
+                                  reembedParams.batchPrepLabel === "") || runDisabled
                 } onClick={this.handleRunAndDisableReembedDialog} intent="primary"> Preprocess and run </Button>                 
             </ControlGroup>            
           </div>}

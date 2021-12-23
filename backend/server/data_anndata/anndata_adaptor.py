@@ -754,50 +754,51 @@ def initialize_socket(da):
             if data is not None:  
                 data = json.loads(data)
 
-                filter = data["filter"] if data else None
-                reembedParams = data["params"] if data else {}
-                parentName = data["parentName"] if data else ""
-                embName = data["embName"] if data else None
-    
-                annotations = da.dataset_config.user_annotations        
-                userID = f"{annotations._get_userdata_idhash(da)}"  
-                layers = []
-                if current_app.hosted_mode:
-                    doBatchPrep = reembedParams.get("doBatchPrep",False)
-                    batchPrepParams = reembedParams.get("batchPrepParams",{})
-                    batchPrepKey = reembedParams.get("batchPrepKey","")
-                    batchPrepLabel = reembedParams.get("batchPrepLabel","")
-                    dataLayer = reembedParams.get("dataLayer","X")
-                    if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
-                        cl = np.array(list(da.data.obs[batchPrepKey]))
-                        batches = np.unique(cl)
-                        for k in batches:
-                            params = batchPrepParams[batchPrepKey].get(k,{})
-                            k = params.get("dataLayer","X")
-                            layers.append(k)
+                filter = data["filter"]
+                if len(filter["obs"]["index"]) <= 50000: 
+                    reembedParams = data["params"] if data else {}
+                    parentName = data["parentName"] if data else ""
+                    embName = data["embName"] if data else None
+        
+                    annotations = da.dataset_config.user_annotations        
+                    userID = f"{annotations._get_userdata_idhash(da)}"  
+                    layers = []
+                    if current_app.hosted_mode:
+                        doBatchPrep = reembedParams.get("doBatchPrep",False)
+                        batchPrepParams = reembedParams.get("batchPrepParams",{})
+                        batchPrepKey = reembedParams.get("batchPrepKey","")
+                        batchPrepLabel = reembedParams.get("batchPrepLabel","")
+                        dataLayer = reembedParams.get("dataLayer","X")
+                        if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
+                            cl = np.array(list(da.data.obs[batchPrepKey]))
+                            batches = np.unique(cl)
+                            for k in batches:
+                                params = batchPrepParams[batchPrepKey].get(k,{})
+                                k = params.get("dataLayer","X")
+                                layers.append(k)
+                        else:
+                            layers.append(dataLayer)
                     else:
+                        dataLayer = reembedParams.get("dataLayer","X")
                         layers.append(dataLayer)
-                else:
-                    dataLayer = reembedParams.get("dataLayer","X")
-                    layers.append(dataLayer)
-                layers = list(np.unique(layers))
-                direc = pathlib.Path().absolute()  
-                obs = pickle.load(open(f"{direc}/{userID}/obs.p",'rb'))
+                    layers = list(np.unique(layers))
+                    direc = pathlib.Path().absolute()  
+                    obs = pickle.load(open(f"{direc}/{userID}/obs.p",'rb'))
 
-                obs['name_0'] = obs.index
-                obs.index = pd.Index(np.arange(obs.shape[0]))
-                AnnDataDict = {
-                    "Xs": layers,
-                    "obs": obs,
-                    "X_root":da._obsm_init["X_root"],
-                    "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
-                }
+                    obs['name_0'] = obs.index
+                    obs.index = pd.Index(np.arange(obs.shape[0]))
+                    AnnDataDict = {
+                        "Xs": layers,
+                        "obs": obs,
+                        "X_root":da._obsm_init["X_root"],
+                        "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
+                    }
 
-                def post_processing(res):
-                    da.schema["layout"]["obs"].append(res)
-                    return res
-
-                _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict, reembedParams, parentName, embName, userID)
+                    def post_processing(res):
+                        da.schema["layout"]["obs"].append(res)
+                        return res
+        
+                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict, reembedParams, parentName, embName, userID)
     """
     @sock.route("/preprocessing")
     @desktop_mode_only
