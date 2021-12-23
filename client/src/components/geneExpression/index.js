@@ -1,6 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button, Icon, Collapse, H4, AnchorButton } from "@blueprintjs/core";
+import { Button, Icon, Collapse, H4, AnchorButton, Tooltip } from "@blueprintjs/core";
 import { IconNames } from "@blueprintjs/icons";
 import ParameterInput from "../menubar/parameterinput";
 import GeneSet from "./geneSet";
@@ -89,6 +89,11 @@ class GeneExpression extends React.Component {
     return els;
   };
   
+  handleSaveGenedata = () => {
+    const { dispatch } = this.props;
+    dispatch(actions.downloadGenedata())
+  } 
+
   handleExpandGeneSets = () => {
     this.setState({
       ...this.state,
@@ -142,18 +147,40 @@ class GeneExpression extends React.Component {
           dispatch={dispatch}
           genesets={genesets}
         /> : null}
-        <div style={{
-          marginBottom: "20px",
-          textAlign: "right",
-          display: "flex",
-          justifyContent: "right",
-        }}>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "left",
+            textAlign: "left", 
+            float: "left",
+            paddingRight: "10px"
+          }}>
+                      
+            <Tooltip
+              content="Save gene sets a `.csv` file."
+              position="bottom"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            >                                              
+              <AnchorButton
+                  type="button"
+                  icon="floppy-disk"
+                  onClick={() => {
+                    this.handleSaveGenedata()
+                  }}
+                /> 
+              </Tooltip>    
+            </div>       
+            <div style={{
+              marginBottom: "20px",
+              display: "flex",
+              justifyContent: "right",
+            }}>                 
             <ParameterInput
               label="Log scale"
               param="logScaleExpr"
               tooltipContent={"Check to display expressions in log scale."}
               left
-            />               
+            />   
           <div style={{paddingLeft: "10px"}}>
             <ParameterInput
               label="Data layer"

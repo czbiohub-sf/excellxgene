@@ -244,7 +244,6 @@ class Categories extends React.Component {
                 <AnchorButton
                     type="button"
                     icon="floppy-disk"
-                    loading={loading}
                     onClick={() => {
                       this.handleSaveMetadata()
                     }}

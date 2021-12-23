@@ -416,6 +416,17 @@ def save_metadata_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
 
+def save_genedata_put(request, data_adaptor):
+    userID = _get_user_id(data_adaptor)        
+    try:
+        direc = pathlib.Path().absolute()
+        return send_file(f"{direc}/{userID}/gene-sets.csv",as_attachment=True)
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+
+
 def _get_user_id(data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations        
     userID = f"{annotations._get_userdata_idhash(data_adaptor)}"       

@@ -264,6 +264,35 @@ export const downloadMetadata = () => async (
     window.URL.revokeObjectURL(url);
 }
 
+export const downloadGenedata = () => async (
+  _dispatch,
+  _getState
+) => {
+
+    const res = await fetch(
+      `${API.prefix}${API.version}downloadGenedata`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        credentials: "include",
+        }
+    );
+
+    const blob = await res.blob()
+
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    var url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = "gene-sets.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
 export const requestSaveAnndataToFile = (saveName) => async (
   dispatch,
   getState
@@ -655,7 +684,6 @@ const doInitialDataLoad = () =>
           name = layoutSchema[0].name
         }
         const base = annoMatrix.base();
-
         const [annoMatrixNew, obsCrossfilterNew] = await _switchEmbedding(
           base,
           obsCrossfilter,
@@ -669,7 +697,7 @@ const doInitialDataLoad = () =>
           annoMatrix: annoMatrixNew,
           obsCrossfilter: obsCrossfilterNew
         });        
-        
+        dispatch(embActions.layoutChoiceAction(name));        
       } else { 
         dispatch({
           type: "annoMatrix: init complete",
@@ -679,14 +707,6 @@ const doInitialDataLoad = () =>
       }
 
       dispatch({ type: "initial data load complete", allGenes});
-
-      const defaultEmbedding = config?.parameters?.default_embedding;
-      if (
-        defaultEmbedding &&
-        layoutSchema.some((s) => s.name === defaultEmbedding)
-      ) {
-        dispatch(embActions.layoutChoiceAction(defaultEmbedding));
-      }
 
       setupWebSockets(dispatch,getState,userInfo ? true : false, hostedMode)      
 
@@ -860,6 +880,7 @@ export default {
   requestLeiden,
   downloadData,
   downloadMetadata,
+  downloadGenedata,
   requestSaveAnndataToFile,
   setCellsFromSelectionAndInverseAction:
     selnActions.setCellsFromSelectionAndInverseAction,

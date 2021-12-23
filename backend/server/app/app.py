@@ -295,6 +295,12 @@ class DownloadMetadataAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.save_metadata_put(request, data_adaptor)
 
+class DownloadGenedataAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    def put(self, data_adaptor):
+        return common_rest.save_genedata_put(request, data_adaptor)
+
 class DeleteObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
@@ -399,6 +405,7 @@ def get_api_dataroot_resources(bp_dataroot):
     #add_resource(OutputAPI, "/output")
     #add_resource(DownloadAnndataAPI, "/downloadAnndata")
     add_resource(DownloadMetadataAPI, "/downloadMetadata")
+    add_resource(DownloadGenedataAPI, "/downloadGenedata")
     #add_resource(LeidenClusterAPI, "/leiden")
     add_resource(DeleteObsmAPI, "/layout/obsm")
     add_resource(RenameObsmAPI, "/layout/rename")

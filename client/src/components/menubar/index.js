@@ -410,6 +410,7 @@ class MenuBar extends React.PureComponent {
                   data: "select",
                 });
               }}
+              disabled={layoutChoice.sankey}
             />
           </Tooltip>
           <Tooltip
@@ -428,6 +429,7 @@ class MenuBar extends React.PureComponent {
                   data: "zoom",
                 });
               }}
+              disabled={layoutChoice.sankey}
             />
           </Tooltip>
           <Tooltip
@@ -445,6 +447,7 @@ class MenuBar extends React.PureComponent {
                   data: "lidar",
                 });
               }}
+              disabled={layoutChoice.sankey}
             />       
           </Tooltip>
           <Tooltip
@@ -460,6 +463,10 @@ class MenuBar extends React.PureComponent {
                 loading={loadingSankey}
                 onClick={() => {
                   this.handleSankey(0,true)
+                  dispatch({
+                    type: "change graph interaction mode",
+                    data: "select",
+                  });                  
                 }}
               />           
             </Tooltip>

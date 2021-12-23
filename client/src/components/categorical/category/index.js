@@ -883,10 +883,13 @@ const CategoryValueList = React.memo(
     const newCategoryValueIndices = new Map(newTuples)
     const newCategorySummary = {
       ...categorySummary, 
+      allCategoryValues: newCategoryValues,
       categoryValues: newCategoryValues, 
       categoryValueCounts: newCategoryValueCounts, 
-      categoryValueIndices: newCategoryValueIndices
+      categoryValueIndices: newCategoryValueIndices,
+      numCategoryValues: newCategoryValues.length
     }    
+
     if (!isUserAnno) {
       return (
         <>

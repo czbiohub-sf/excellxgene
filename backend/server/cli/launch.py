@@ -405,6 +405,7 @@ def launch(
     # app config
     app_config = AppConfig()
     app_config.root_embedding = root_embedding
+    app_config.hosted_mode = hosted
     server_config = app_config.server_config
 
     try:
@@ -485,8 +486,9 @@ def launch(
         global in_handler
         if not in_handler:
             in_handler = True
-            app_config.server_config.data_adaptor.pool.terminate()
-            app_config.server_config.data_adaptor.pool.join()      
+            if hosted:
+                app_config.server_config.data_adaptor.pool.terminate()
+                app_config.server_config.data_adaptor.pool.join()      
 
             already_deleted = []
             for d in [app_config.server_config.data_adaptor.shm_layers_csr,app_config.server_config.data_adaptor.shm_layers_csc]:
@@ -518,47 +520,47 @@ def launch(
         f = open(os.devnull, "w")
         sys.stdout = f
     
-    
-    oauth = OAuth(server.app)
-    auth0 = oauth.register(
-        'auth0',
-        client_id='YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB',
-        client_secret=os.environ.get('SECRET'),
-        api_base_url='https://dev-gbiqjhha.us.auth0.com',
-        access_token_url=f'https://dev-gbiqjhha.us.auth0.com/oauth/token',
-        authorize_url=f'https://dev-gbiqjhha.us.auth0.com/authorize',
-        client_kwargs={
-            'scope': 'openid profile email',
-        }
-    )
-    if auth_url is None:
-        auth_url = cellxgene_url
+    if hosted:
+        oauth = OAuth(server.app)
+        auth0 = oauth.register(
+            'auth0',
+            client_id='YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB',
+            client_secret=os.environ.get('SECRET'),
+            api_base_url='https://dev-gbiqjhha.us.auth0.com',
+            access_token_url=f'https://dev-gbiqjhha.us.auth0.com/oauth/token',
+            authorize_url=f'https://dev-gbiqjhha.us.auth0.com/authorize',
+            client_kwargs={
+                'scope': 'openid profile email',
+            }
+        )
+        if auth_url is None:
+            auth_url = cellxgene_url
 
-    @server.app.route('/callback')
-    def callback_handling():
-        auth0.authorize_access_token()
-        resp = auth0.get('userinfo')
-        userinfo = resp.json()
-        # Store the user information in flask session.
-        session['jwt_payload'] = userinfo
-        session['profile'] = userinfo
+        @server.app.route('/callback')
+        def callback_handling():
+            auth0.authorize_access_token()
+            resp = auth0.get('userinfo')
+            userinfo = resp.json()
+            # Store the user information in flask session.
+            session['jwt_payload'] = userinfo
+            session['profile'] = userinfo
+            
+            annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
+            userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
+            app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
+            return redirect(auth_url)
         
-        annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
-        userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
-        app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
-        return redirect(auth_url)
-    
-    @server.app.route('/login')
-    def login():
-        return auth0.authorize_redirect(redirect_uri=auth_url+'/callback') #TODO: CHANGE FOR SERVER
-    
-    @server.app.route('/logout')
-    def logout():
-        # Clear session stored data
-        session.clear()
-        # Redirect user to logout endpoint
-        params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
-        return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
+        @server.app.route('/login')
+        def login():
+            return auth0.authorize_redirect(redirect_uri=auth_url+'/callback') #TODO: CHANGE FOR SERVER
+        
+        @server.app.route('/logout')
+        def logout():
+            # Clear session stored data
+            session.clear()
+            # Redirect user to logout endpoint
+            params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
+            return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
 
     try:
         server.app.run(

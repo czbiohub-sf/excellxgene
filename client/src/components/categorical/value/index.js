@@ -56,6 +56,7 @@ function _currentLabelAsString(ownProps) {
     isDilated,
     isSelected,
     label,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class CategoryValue extends React.Component {
@@ -523,7 +524,8 @@ class CategoryValue extends React.Component {
       isDilated,
       isSelected,
       categorySummary,
-      label
+      label,
+      userLoggedIn
     } = this.props;
 
     const colorScale = colorTable?.scale;
@@ -753,7 +755,7 @@ class CategoryValue extends React.Component {
                               crossfilter,
                               metadataField,
                               label
-                            )}
+                            ) || !userLoggedIn}
                           />
                         )}
                       </CategoryCrossfilterContext.Consumer>
@@ -764,7 +766,7 @@ class CategoryValue extends React.Component {
                           data-testclass="handleEditValue"
                           data-testid={`${metadataField}:${displayString}:edit-label`}
                           onClick={this.activateEditLabelMode}
-                          disabled={annotations.isEditingLabelName}
+                          disabled={annotations.isEditingLabelName || !userLoggedIn}
                         />
                       ) : null}
                       {displayString !== globals.unassignedCategoryLabel ? (
@@ -775,6 +777,7 @@ class CategoryValue extends React.Component {
                           data-testid={`${metadataField}:${displayString}:delete-label`}
                           onClick={this.handleDeleteValue}
                           text={`Delete this label, and reassign all cells to type '${globals.unassignedCategoryLabel}'`}
+                          disabled={!userLoggedIn}
                         />
                       ) : null}
                     </Menu>

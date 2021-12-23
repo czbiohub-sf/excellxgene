@@ -88,7 +88,14 @@ def _callback_fn(res,ws,cfn,data,post_processing):
 
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing)
-    da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_error_callback)
+    if current_app.hosted_mode:
+        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_error_callback)
+    else:
+        try:
+            res = fn(*args)
+            _new_callback_fn(res)
+        except Exception as e:
+            _error_callback(e)
 
 def _error_callback(e):
     print("ERROR",e)
@@ -1005,7 +1012,9 @@ class AnndataAdaptor(DataAdaptor):
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
-        self._create_pool()
+        if app_config.hosted_mode:
+            self._create_pool()
+
         self._load_data(data_locator, root_embedding=app_config.root_embedding)    
         self._validate_and_initialize()
 
