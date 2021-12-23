@@ -38,9 +38,13 @@ from functools import wraps
 from multiprocessing import shared_memory, resource_tracker
 from os.path import exists
 import sklearn.utils.sparsefuncs as sf
-from numba import njit, prange
+from numba import njit, prange, config, threading_layer
 from numba.core import types
 from numba.typed import Dict
+#config.THREADING_LAYER = 'tbb'
+
+global process_count
+process_count = 0
 
 anndata_version = version.parse(str(anndata.__version__)).release
 
@@ -77,6 +81,10 @@ def _callback_fn(res,ws,cfn,data,post_processing):
     d = {"response": res,"cfn": cfn}
     d.update(data)
     ws.send(jsonify_numpy(d))
+    global process_count
+    process_count = process_count + 1
+    print("Process count:",process_count)
+
 
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing)
@@ -1002,7 +1010,7 @@ class AnndataAdaptor(DataAdaptor):
         self._validate_and_initialize()
 
     def _create_pool(self):
-        self.pool = Pool(os.cpu_count(), initializer=_initializer, maxtasksperchild=1)
+        self.pool = Pool(os.cpu_count(), initializer=_initializer, maxtasksperchild=None)
 
     def cleanup(self):
         pass
@@ -1279,6 +1287,13 @@ class AnndataAdaptor(DataAdaptor):
                     self.shm_layers_csr[".raw"] = _create_shm_from_data(X2)
                     self.shm_layers_csc[".raw"] = _create_shm_from_data(X1)
 
+                for curr_axis in [adata.obs,adata.var]:
+                    for ann in curr_axis:
+                        dtype = curr_axis[ann].dtype
+                        if hasattr(dtype,'numpy_dtype'):
+                            dtype = dtype.numpy_dtype
+                        curr_axis[ann] = curr_axis[ann].astype(dtype)
+
                 self.data = adata
 
         except ValueError:
@@ -1313,6 +1328,16 @@ class AnndataAdaptor(DataAdaptor):
                 if r is not None:
                     pickle.dump(r,open(f"{userID}/nnm/{k2}.p",'wb'))
                     pickle.dump(p,open(f"{userID}/params/{k2}.p",'wb'))
+        else:
+            obs = pickle.load(open(f"{userID}/obs.p",'rb'))
+            for ann in obs:
+                dtype = obs[ann].dtype
+                if hasattr(dtype,'numpy_dtype'):
+                    dtype = dtype.numpy_dtype
+                obs[ann] = obs[ann].astype(dtype)     
+            pickle.dump(obs,open(f"{userID}/obs.p",'wb'))
+
+
             
 
     def _validate_and_initialize(self):
