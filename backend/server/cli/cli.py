@@ -8,7 +8,7 @@ from .. import __version__
 
 
 @click.group(
-    name="cellxgene",
+    name="excellxgene",
     subcommand_metavar="COMMAND <args>",
     options_metavar="<options>",
     context_settings=dict(max_content_width=85, help_option_names=["-h", "--help"]),
@@ -16,7 +16,7 @@ from .. import __version__
 @click.help_option("--help", "-h", help="Show this message and exit.")
 @click.version_option(
     version=__version__,
-    prog_name="cellxgene",
+    prog_name="excellxgene",
     message="[%(prog)s] Version %(version)s",
     help="Show the software version and exit.",
 )

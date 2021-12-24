@@ -4,7 +4,7 @@ BUILDDIR := build
 CLIENTBUILD := $(BUILDDIR)/client
 CZIHOSTEDBUILD := $(BUILDDIR)/backend/czi_hosted
 SERVERBUILD := $(BUILDDIR)/backend/server
-CLEANFILES :=  $(BUILDDIR)/ client/build build dist cellxgene.egg-info
+CLEANFILES :=  $(BUILDDIR)/ client/build build dist excellxgene.egg-info
 
 PART ?= patch
 
@@ -251,21 +251,21 @@ install-dev: uninstall
 # install from test.pypi to test your release
 .PHONY: install-release-test
 install-release-test: uninstall
-	pip install --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple cellxgene
-	@echo "Installed cellxgene from test.pypi.org, now run and smoke test"
+	pip install --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple excellxgene
+	@echo "Installed excellxgene from test.pypi.org, now run and smoke test"
 
 # install from pypi to test your release
 .PHONY: install-release
 install-release: uninstall
-	pip install --no-cache-dir cellxgene
-	@echo "Installed cellxgene from pypi.org"
+	pip install --no-cache-dir excellxgene
+	@echo "Installed excellxgene from pypi.org"
 
 # install from dist
 .PHONY: install-dist
 install-dist: uninstall
-	pip install dist/cellxgene*.tar.gz
+	pip install dist/excellxgene*.tar.gz
 
 .PHONY: uninstall
 uninstall:
-	pip uninstall -y cellxgene || :
+	pip uninstall -y excellxgene || :
 

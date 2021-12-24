@@ -56,22 +56,22 @@ conda install -c conda-forge gcc cxx-compiler
 
 4. Download the git repository to get the example datasets (assumes git is available, if not install it with conda install -c anaconda git)
 ```
-git clone https://github.com/czbiohub/cellxgene
-cd cellxgene
+git clone https://github.com/czbiohub/excellxgene
+cd excellxgene
 ```
 Datasets are stored in `example-dataset`
 
-5. Launch cellxgene with:
+5. Launch excellxgene with:
 ```
-cellxgene launch example-dataset
+excellxgene launch example-dataset
 ```
 
 
-This should launch a cellxgene session with all the datasets in example-datasets/ loaded in.
+This should launch an excellxgene session with all the datasets in example-datasets/ loaded in.
 
 If you're running excellxgene remotely, please launch with:
 ```
-cellxgene launch example-datasets --host 0.0.0.0
+excellxgene launch example-datasets --host 0.0.0.0
 ```
 
 Ping me on the Biohub slack (@Alec) if you have any questions!

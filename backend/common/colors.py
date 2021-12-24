@@ -191,7 +191,7 @@ def convert_color_to_hex_format(unknown):
 
 def convert_anndata_category_colors_to_cxg_category_colors(data):
     """
-    Convert color information from anndata files to the cellxgene color data format as described below:
+    Convert color information from anndata files to the excellxgene color data format as described below:
         {
             "<category_name>": {
                 "<label_name>": "<color_hex_code>",

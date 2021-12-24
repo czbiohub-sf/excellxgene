@@ -346,7 +346,7 @@ class CliLaunchServer(Server):
 
 @sort_options
 @click.command(
-    short_help="Launch the cellxgene data viewer. " "Run `cellxgene launch --help` for more information.",
+    short_help="Launch excellxgene. " "Run `excellxgene launch --help` for more information.",
     options_metavar="<options>",
 )
 @launch_args
@@ -389,11 +389,11 @@ def launch(
 
     Examples:
 
-    > cellxgene launch example-dataset/pbmc3k.h5ad --title pbmc3k
+    > excellxgene launch example-dataset/pbmc3k.h5ad --title pbmc3k
 
-    > cellxgene launch <your data file> --title <your title>
+    > excellxgene launch <your data file> --title <your title>
 
-    > cellxgene launch <url>"""
+    > excellxgene launch <url>"""
 
     if dump_default_config:
         print(default_config)

@@ -8,9 +8,9 @@ with open("backend/server/requirements.txt") as fh:
 
 setup(
     name="excellxgene",
-    version="2.0.5",
+    version="2.1.0",
     packages=find_packages(),
-    url="https://github.com/czbiohub/cellxgene",
+    url="https://github.com/czbiohub/excellxgene",
     license="MIT",
     author="Chan Zuckerberg Biohub",
     author_email="alexander.tarashansky@czbiohub.org",
@@ -29,11 +29,9 @@ setup(
         "Operating System :: Unix",
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: JavaScript",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.8 :: Only",
         "Topic :: Scientific/Engineering :: Bio-Informatics",
     ],
-    entry_points={"console_scripts": ["cellxgene = backend.server.cli.cli:cli"]},
+    entry_points={"console_scripts": ["excellxgene = backend.server.cli.cli:cli"]},
 )
