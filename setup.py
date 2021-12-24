@@ -6,9 +6,6 @@ with open("README.md", "rb") as fh:
 with open("backend/server/requirements.txt") as fh:
     requirements = fh.read().splitlines()
 
-with open("backend/server/requirements-prepare.txt") as fh:
-    requirements_prepare = fh.read().splitlines()
-
 setup(
     name="excellxgene",
     version="2.0.5",
@@ -39,5 +36,4 @@ setup(
         "Topic :: Scientific/Engineering :: Bio-Informatics",
     ],
     entry_points={"console_scripts": ["cellxgene = backend.server.cli.cli:cli"]},
-    extras_require=dict(prepare=requirements_prepare),
 )
