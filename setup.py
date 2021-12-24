@@ -30,7 +30,7 @@ setup(
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: JavaScript",
         "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.8 :: Only",
+        "Programming Language :: Python :: 3 :: Only",
         "Topic :: Scientific/Engineering :: Bio-Informatics",
     ],
     entry_points={"console_scripts": ["excellxgene = backend.server.cli.cli:cli"]},
