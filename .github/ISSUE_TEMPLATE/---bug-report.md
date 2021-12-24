@@ -1,6 +1,6 @@
 ---
 name: "\U0001F41E Bug report"
-about: Create a report to identify a bug in cellxgene
+about: Create a report to identify a bug in excellxgene
 title: "[BUG]"
 labels: bug
 assignees: ''
