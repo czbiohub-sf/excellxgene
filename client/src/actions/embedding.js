@@ -33,6 +33,7 @@ export const requestDeleteEmbedding = (toDelete) => async (
     _dispatch,
     _getState
   ) => {
+  
   const res = await fetch(
     `${API.prefix}${API.version}layout/obsm`,
     {
@@ -66,7 +67,8 @@ export const requestRenameEmbedding = (toRename,oldName,newName) => async (
   dispatch,
   getState
 ) => {
-
+const { controls } = getState();
+const { username } = controls;
 const res = await fetch(
   `${API.prefix}${API.version}layout/rename`,
   {

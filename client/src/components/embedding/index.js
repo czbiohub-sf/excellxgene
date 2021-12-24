@@ -26,6 +26,7 @@ import LabelInput from "../labelInput";
     schema: state.annoMatrix?.schema,
     annoMatrix: state.annoMatrix,
     crossfilter: state.obsCrossfilter,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class Embedding extends React.PureComponent {
@@ -65,14 +66,17 @@ class Embedding extends React.PureComponent {
     }
   }
   activateEditLayoutMode = (e, embeddingName) => {
-    const { dispatch } = this.props;
-    this.setState({
-      newLayoutText: embeddingName.split(';;').at(-1)
-    })
-    dispatch({
-      type: "reembed: activate layout edit mode",
-      data: embeddingName,
-    });
+    const { dispatch, userLoggedIn } = this.props;
+    if (userLoggedIn) {
+      this.setState({
+        newLayoutText: embeddingName.split(';;').at(-1)
+      })
+      dispatch({
+        type: "reembed: activate layout edit mode",
+        data: embeddingName,
+      });
+    }
+    e.preventDefault();
   };
   disableEditLayoutMode = () => {
     const { dispatch } = this.props;
@@ -121,21 +125,24 @@ class Embedding extends React.PureComponent {
   };
 
   handleDeleteEmbedding = (e,val) => {
-    const { dispatch, annoMatrix, layoutChoice } = this.props;
-    const { available } = layoutChoice;
-    const toDelete = [val]
-    available.forEach((item) => {
-      if (item.includes(`${val};;`)){
-        toDelete.push(item)
-      }
-    });
-    let newAnnoMatrix;
-    toDelete.forEach((item) => {
-      dispatch({type: "reembed: delete reembedding", embName: item})
-      newAnnoMatrix = annoMatrix.dropObsmLayout(val);
-      dispatch({type: "", annoMatrix: newAnnoMatrix})
-    })
-    dispatch(actions.requestDeleteEmbedding(toDelete))
+    const { dispatch, annoMatrix, layoutChoice, userLoggedIn } = this.props;
+    if (userLoggedIn) {
+      const { available } = layoutChoice;
+      const toDelete = [val]
+      available.forEach((item) => {
+        if (item.includes(`${val};;`)){
+          toDelete.push(item)
+        }
+      });
+      let newAnnoMatrix;
+      toDelete.forEach((item) => {
+        dispatch({type: "reembed: delete reembedding", embName: item})
+        newAnnoMatrix = annoMatrix.dropObsmLayout(val);
+        dispatch({type: "", annoMatrix: newAnnoMatrix})
+      })
+      dispatch(actions.requestDeleteEmbedding(toDelete))
+    }
+    e.preventDefault()    
   }
   render() {
     const { layoutChoice, schema, crossfilter } = this.props;

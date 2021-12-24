@@ -5,14 +5,53 @@ import * as globals from "../../globals";
 import DynamicScatterplot from "../scatterplot/scatterplot";
 import TopLeftLogoAndTitle from "./topLeftLogoAndTitle";
 import Continuous from "../continuous/continuous";
+import { Button } from "@blueprintjs/core";
 
+const UserButton = (props) => {
+  const { userInfo } = props;
+  return (
+    (userInfo ?? false) ? <LogoutButton/> : <LoginButton/>
+  );
+}
+
+const LoginButton = () => {
+  return <Button style={{height: "50%", textAlign: "right", float: "right"}}  
+  onClick={() => {
+    window.location=`${window.location.origin}/login`
+  }}>Log In</Button>;
+};
+
+const LogoutButton = () => { 
+  return (
+    <Button style={{height: "50%", textAlign: "right", float: "right"}} onClick={() => window.location=`${window.location.origin}/logout`}>
+      Logout
+    </Button>
+  );
+};
+
+const Profile = (props) => {
+  const { userInfo } = props;
+  return (
+    (userInfo ?? false) && (
+      <div style={{
+        float: "left"
+      }}>
+        <h2>{userInfo.name}</h2>
+        <p>{userInfo.email}</p>
+      </div>
+    )
+  );
+};
 @connect((state) => ({
   scatterplotXXaccessor: state.controls.scatterplotXXaccessor,
   scatterplotYYaccessor: state.controls.scatterplotYYaccessor,
+  userInfo: state.controls.userInfo,
+  hostedMode: state.controls.hostedMode
 }))
 class LeftSideBar extends React.Component {
   render() {
-    const { scatterplotXXaccessor, scatterplotYYaccessor } = this.props;
+    const { scatterplotXXaccessor, scatterplotYYaccessor, userInfo, hostedMode } = this.props;
+
     return (
       <div
         style={{
@@ -24,6 +63,17 @@ class LeftSideBar extends React.Component {
         }}
       >
         <TopLeftLogoAndTitle />
+        {hostedMode ? 
+        <div style={{
+          textAlign: "right",
+          float: "right",
+          width: globals.leftSidebarWidth,
+          padding: globals.leftSidebarSectionPadding
+
+        }}>
+          <Profile userInfo={userInfo}/>
+          <UserButton userInfo={userInfo}/>
+        </div> : null}
         <div
           style={{
             height: "100%",

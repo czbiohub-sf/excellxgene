@@ -9,7 +9,6 @@ import AnnoSelect from "./annoSelect";
 import LabelInput from "../labelInput";
 import { labelPrompt } from "./labelUtil";
 import actions from "../../actions";
-import { Dataframe } from "../../util/dataframe";
 
 @connect((state) => ({
   writableCategoriesEnabled: state.config?.parameters?.annotations ?? false,
@@ -24,7 +23,8 @@ import { Dataframe } from "../../util/dataframe";
   preprocessController: state.preprocessController,
   refresher: state.sankeySelection.refresher,
   numChecked: state.sankeySelection.numChecked,
-  layoutChoice: state.layoutChoice
+  layoutChoice: state.layoutChoice,
+  userLoggedIn: state.controls.userInfo ? true : false
 }))
 class Categories extends React.Component {
   constructor(props) {
@@ -71,46 +71,8 @@ class Categories extends React.Component {
     this.setState({ createAnnoModeActive: true });
   };
   handleLeidenClustering = () => {
-    const { dispatch, obsCrossfilter: prevObsCF } = this.props
-    dispatch(actions.requestLeiden()).then(item => {
-      const [val,name] = item;
-      let prevObsCrossfilter;
-      if (prevObsCF.annoMatrix.schema.annotations.obsByName[name]) {
-        prevObsCrossfilter = prevObsCF.dropObsColumn(name);
-      } else {
-        prevObsCrossfilter = prevObsCF;
-      }
-      const initialValue = new Array(val.clusters);
-      const df = new Dataframe([initialValue[0].length,1],initialValue)
-      const { categories } = df.col(0).summarizeCategorical();
-      if (!categories.includes(globals.unassignedCategoryLabel)) {
-        categories.push(globals.unassignedCategoryLabel);
-      }
-      const ctor = initialValue.constructor;
-      const newSchema = {
-        name: name,
-        type: "categorical",
-        categories,
-        writable: true,
-      };     
-      const arr = new Array(prevObsCrossfilter.annoMatrix.schema.dataframe.nObs).fill("unassigned");
-      const index = prevObsCrossfilter.annoMatrix.rowIndex.labels()
-      for (let i = 0; i < index.length; i++) {
-        arr[index[i]] = val.clusters[i] ?? "what"
-      }
-      const obsCrossfilter = prevObsCrossfilter.addObsColumn(
-        newSchema,
-        ctor,
-        arr
-      );         
-      dispatch({
-        type: "annotation: create category",
-        data: name,
-        categoryToDuplicate: null,
-        annoMatrix: obsCrossfilter.annoMatrix,
-        obsCrossfilter,
-      });            
-    })
+    const { dispatch } = this.props
+    dispatch(actions.requestLeiden())
   };
   handleDisableAnnoMode = () => {
     this.setState({
@@ -192,6 +154,10 @@ class Categories extends React.Component {
       this.setState({ expandedCats: _expandedCats });
     }
   };
+  handleSaveMetadata = () => {
+    const { dispatch } = this.props;
+    dispatch(actions.downloadMetadata())
+  }  
 
   render() {
     const {
@@ -212,7 +178,8 @@ class Categories extends React.Component {
       reembedController,
       preprocessController,
       dispatch,
-      layoutChoice
+      layoutChoice,
+      userLoggedIn
     } = this.props;
     const ontologyEnabled = ontology?.enabled ?? false;
     const loading = !!leidenController?.pendingFetch || !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
@@ -266,13 +233,30 @@ class Categories extends React.Component {
           
           {writableCategoriesEnabled ? (
             <div style={{display: "flex", flexDirection: "column"}}>
+              <div style={{
+                paddingBottom: "10px"
+              }}>
+                <Tooltip
+                content="Save selected metadata categories to a `.csv` file."
+                position="bottom"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              >                                              
+                <AnchorButton
+                    type="button"
+                    icon="floppy-disk"
+                    onClick={() => {
+                      this.handleSaveMetadata()
+                    }}
+                  /> 
+                </Tooltip>  
+                </div>               
               <div  style={{
                 display: 'inline-flex',
                 justifyContent: 'space-between',
                 margin: '0 0',
                 marginBottom: 10,
                 columnGap: "5px"
-              }}>
+              }}>               
                 <Tooltip
                   content={
                     userInfo.is_authenticated
@@ -292,7 +276,7 @@ class Categories extends React.Component {
                     data-testid="open-annotation-dialog"
                     onClick={this.handleEnableAnnoMode}
                     intent="primary"
-                    disabled={!userInfo.is_authenticated}
+                    disabled={!userInfo.is_authenticated || !userLoggedIn}
                   >
                     Create new <strong>category</strong>
                   </AnchorButton>
@@ -303,7 +287,7 @@ class Categories extends React.Component {
                     data-testid="leiden-cluster"
                     onClick={this.handleLeidenClustering}
                     intent="primary"
-                    disabled={loading}
+                    disabled={loading || !userLoggedIn}
                   >
                     <strong>Leiden</strong> cluster
                   </AnchorButton>     
@@ -347,7 +331,7 @@ class Categories extends React.Component {
                     data-testid="fuse-labels"
                     onClick={this.handleFuseLabels}
                     intent="primary"
-                    disabled={!fuseEnabled}
+                    disabled={!fuseEnabled || !userLoggedIn}
                   >
                     <strong>Fuse</strong> labels
                   </AnchorButton>   
@@ -357,7 +341,7 @@ class Categories extends React.Component {
                     data-testid="delete-labels"
                     onClick={this.handleDeleteLabels}
                     intent="primary"
-                    disabled={!deleteEnabled || layoutChoice.sankey}
+                    disabled={!deleteEnabled || layoutChoice.sankey || !userLoggedIn}
                   >
                     <strong>Delete</strong> labels
                   </AnchorButton>                     

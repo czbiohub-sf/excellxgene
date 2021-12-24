@@ -7,22 +7,58 @@ from flask import (
     Flask,
     current_app,
     make_response,
+    jsonify,
     render_template,
     Blueprint,
     request,
     send_from_directory,
+    session,
+    after_this_request,
+    send_file
 )
 from flask_restful import Api, Resource
-
 import backend.server.common.rest as common_rest
 from backend.common.errors import DatasetAccessError, RequestException
 from backend.server.common.health import health_check
 from backend.common.utils.utils import Float32JSONEncoder
+import os
 
 webbp = Blueprint("webapp", "backend.server.common.web", template_folder="templates")
 
 ONE_WEEK = 7 * 24 * 60 * 60
 
+   
+def auth0_token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = 'profile' in session
+        # return 401 if token is not passed
+        if not token and current_app.hosted_mode:
+            return jsonify({'message' : 'Authorization missing.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated
+
+def desktop_mode_only(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if current_app.hosted_mode:
+            return jsonify({'message' : 'Feature only available in desktop mode.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated    
+
+def hosted_mode_only(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_app.hosted_mode:
+            return jsonify({'message' : 'Feature only available in hosted mode.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated    
 
 def _cache_control(always, **cache_kwargs):
     """
@@ -114,12 +150,16 @@ class HealthAPI(Resource):
 
 
 class SchemaAPI(Resource):
-    # TODO @mdunitz separate dataset schema and user schema
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
     def get(self, data_adaptor):
         return common_rest.schema_get(data_adaptor)
 
+class InitializeUserAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.initialize_user(data_adaptor)
 
 class ConfigAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -143,10 +183,43 @@ class AnnotationsObsAPI(Resource):
 
     @requires_authentication
     @cache_control(no_store=True)
+    @auth0_token_required
     @rest_get_data_adaptor
     def put(self, data_adaptor):
         return common_rest.annotations_obs_put(request, data_adaptor)
 
+class UserInfoAuth0API(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    def get(self):
+        if 'profile' in session:
+            return make_response(jsonify({"response": session['profile']}), HTTPStatus.OK)
+        else:
+            return make_response(jsonify({"response": None}), HTTPStatus.OK)            
+
+class HostedModeAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    def get(self):
+        return make_response(jsonify({"response": current_app.hosted_mode}), HTTPStatus.OK)
+
+class SendFileAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def get(self,data_adaptor):
+        field = request.args.get("path", None)
+    
+        annotations = data_adaptor.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(data_adaptor)}"             
+        assert (userID in field)
+        @after_this_request
+        def f(response):
+            try:
+                os.remove(field)
+            except Exception as error:
+                print(error)
+            return response    
+        
+        return send_file(field,as_attachment=True)    
 
 class AnnotationsVarAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -158,6 +231,7 @@ class AnnotationsVarAPI(Resource):
 class DataVarAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.data_var_put(request, data_adaptor)
 
@@ -177,12 +251,15 @@ class ColorsAPI(Resource):
 class DiffExpObsAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def post(self, data_adaptor):
         return common_rest.diffexp_obs_post(request, data_adaptor)
 
 class PreprocessAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
+    @desktop_mode_only
     def put(self, data_adaptor):
         return common_rest.preprocess_put(request, data_adaptor)
 
@@ -193,34 +270,11 @@ class LayoutObsAPI(Resource):
     def get(self, data_adaptor):
         return common_rest.layout_obs_get(request, data_adaptor)
 
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.layout_obs_put(request, data_adaptor)
-
 class SankeyPlotAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
     def put(self, data_adaptor):
         return common_rest.sankey_data_put(request, data_adaptor)
-
-class LayerAPI(Resource):
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.change_layer_put(request, data_adaptor)
-
-class ReloadAPI(Resource):
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.reload_put(request, data_adaptor)
-
-class ReloadFullAPI(Resource):
-    @cache_control(no_store=True)
-    @rest_get_data_adaptor
-    def put(self, data_adaptor):
-        return common_rest.reload_full_put(request, data_adaptor)
 
 class OutputAPI(Resource):
     @cache_control(no_store=True)
@@ -228,33 +282,43 @@ class OutputAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.output_data_put(request, data_adaptor)
 
-class RenameObsAPI(Resource):
+class DownloadAnndataAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
-        return common_rest.rename_obs_put(request, data_adaptor)
+        return common_rest.save_data_put(request, data_adaptor)
 
-class DeleteObsAPI(Resource):
+class DownloadMetadataAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
     def put(self, data_adaptor):
-        return common_rest.delete_obs_put(request, data_adaptor)
+        return common_rest.save_metadata_put(request, data_adaptor)
+
+class DownloadGenedataAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    def put(self, data_adaptor):
+        return common_rest.save_genedata_put(request, data_adaptor)
 
 class DeleteObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.delete_obsm_put(request, data_adaptor)
 
 class RenameObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.rename_obsm_put(request, data_adaptor)
 
 class LeidenClusterAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.leiden_put(request, data_adaptor)
 
@@ -273,6 +337,7 @@ class ReembedParametersAPI(Resource):
     @requires_authentication
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.reembed_parameters_put(request, data_adaptor)
 
@@ -285,9 +350,9 @@ class GenesetsAPI(Resource):
     @requires_authentication
     @cache_control(no_store=True)
     @rest_get_data_adaptor
+    @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.genesets_put(request, data_adaptor)
-
 
 class SummarizeVarAPI(Resource):
     @rest_get_data_adaptor
@@ -297,6 +362,7 @@ class SummarizeVarAPI(Resource):
 
     @rest_get_data_adaptor
     @cache_control(no_store=True)
+    @auth0_token_required
     def post(self, data_adaptor):
         return common_rest.summarize_var_post(request, data_adaptor)
 
@@ -320,8 +386,12 @@ def get_api_dataroot_resources(bp_dataroot):
 
     # Initialization routes
     add_resource(SchemaAPI, "/schema")
+    add_resource(InitializeUserAPI, "/initialize")
+    add_resource(SendFileAPI, "/sendFile")
     add_resource(ConfigAPI, "/config")
     add_resource(UserInfoAPI, "/userinfo")
+    add_resource(UserInfoAuth0API, "/userInfo")
+    add_resource(HostedModeAPI, "/hostedMode")
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")
     add_resource(AnnotationsVarAPI, "/annotations/var")
@@ -331,22 +401,20 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(ReembedParametersAPI, "/reembed-parameters")
     add_resource(ReembedParametersObsmAPI, "/reembed-parameters-obsm")
 
-    add_resource(SankeyPlotAPI, "/sankey")
-    add_resource(LayerAPI, "/layer")
-    add_resource(RenameObsAPI, "/renameObs")
-    add_resource(DeleteObsAPI, "/deleteObs")
-    add_resource(OutputAPI, "/output")
-    add_resource(LeidenClusterAPI, "/leiden")
+    #add_resource(SankeyPlotAPI, "/sankey")
+    #add_resource(OutputAPI, "/output")
+    #add_resource(DownloadAnndataAPI, "/downloadAnndata")
+    add_resource(DownloadMetadataAPI, "/downloadMetadata")
+    add_resource(DownloadGenedataAPI, "/downloadGenedata")
+    #add_resource(LeidenClusterAPI, "/leiden")
     add_resource(DeleteObsmAPI, "/layout/obsm")
     add_resource(RenameObsmAPI, "/layout/rename")
-    add_resource(PreprocessAPI, "/preprocess")
-    add_resource(ReloadAPI, "/reload")
-    add_resource(ReloadFullAPI, "/reloadFull")
+    #add_resource(PreprocessAPI, "/preprocess")
     add_resource(SummarizeVarAPI, "/summarize/var")
     # Display routes
     add_resource(ColorsAPI, "/colors")
     # Computation routes
-    add_resource(DiffExpObsAPI, "/diffexp/obs")
+    #add_resource(DiffExpObsAPI, "/diffexp/obs")
     add_resource(LayoutObsAPI, "/layout/obs")
     return api
 

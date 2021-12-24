@@ -3,43 +3,13 @@ from scipy import sparse, stats
 import sklearn.utils.sparsefuncs as sf
 
 
-def diffexp_ttest(dataA,dataB, top_n=8, diffexp_lfc_cutoff=0.01):
-    """
-    Return differential expression statistics for top N variables.
-
-    Algorithm:
-    - compute log fold change (log2(meanA/meanB))
-    - compute Welch's t-test statistic and pvalue (w/ Bonferroni correction)
-    - return top N abs(logfoldchange) where lfc > diffexp_lfc_cutoff
-
-    If there are not N which meet criteria, augment by removing the logfoldchange
-    threshold requirement.
-
-    Notes on alogrithm:
-    - Welch's ttest provides basic statistics test.
-      https://en.wikipedia.org/wiki/Welch%27s_t-test
-    - p-values adjusted with Bonferroni correction.
-      https://en.wikipedia.org/wiki/Bonferroni_correction
-
-    :param adaptor: DataAdaptor instance
-    :param maskA: observation selection mask for set 1
-    :param maskB: observation selection mask for set 2
-    :param top_n: number of variables to return stats for
-    :param diffexp_lfc_cutoff: minimum
-    absolute value returning [ varindex, logfoldchange, pval, pval_adj ] for top N genes
-    :return:  for top N genes, {"positive": for top N genes, [ varindex, logfoldchange, pval, pval_adj ], "negative": for top N genes, [ varindex, logfoldchange, pval, pval_adj ]}
-    """
-    # mean, variance, N - calculate for both selections
-    meanA, vA, nA = mean_var_n(dataA)
-    meanB, vB, nB = mean_var_n(dataB)
-    res = diffexp_ttest_from_mean_var(meanA, vA, nA, meanB, vB, nB, top_n, diffexp_lfc_cutoff)
-
-    return res
+def diffexp_ttest(meanA,vA,nA,meanB,vB,nB, top_n=8, diffexp_lfc_cutoff=0.01):
+    return diffexp_ttest_from_mean_var(meanA, vA, nA, meanB, vB, nB, 1000, diffexp_lfc_cutoff)
 
 
 def diffexp_ttest_from_mean_var(meanA, varA, nA, meanB, varB, nB, top_n, diffexp_lfc_cutoff):
     n_var = meanA.shape[0]
-    top_n = min(top_n, n_var)
+    top_n = min(n_var,top_n)
 
     # variance / N
     vnA = varA / min(nA, nB)  # overestimate variance, would normally be nA
@@ -69,23 +39,10 @@ def diffexp_ttest_from_mean_var(meanA, varA, nA, meanB, varB, nB, top_n, diffexp
     lfc_above_cutoff_idx = np.nonzero(np.abs(logfoldchanges) > diffexp_lfc_cutoff)[0]
 
     # derive sort order
-    if lfc_above_cutoff_idx.shape[0] > top_n*2:
-        # partition top N
-        rel_t_partition = np.argpartition(stats_to_sort[lfc_above_cutoff_idx], (top_n, -top_n))
-        rel_t_partition_top_n = np.concatenate((rel_t_partition[-top_n:], rel_t_partition[:top_n]))
-        t_partition = lfc_above_cutoff_idx[rel_t_partition_top_n]
-        # sort the top N partition
-        rel_sort_order = np.argsort(stats_to_sort[t_partition])[::-1]
-        sort_order = t_partition[rel_sort_order]
-    else:
-        # partition and sort top N, ignoring lfc cutoff
-        partition = np.argpartition(stats_to_sort, (top_n, -top_n))
-        partition_top_n = np.concatenate((partition[-top_n:], partition[:top_n]))
-
-        rel_sort_order = np.argsort(stats_to_sort[partition_top_n])[::-1]
-        indices = np.indices(stats_to_sort.shape)[0]
-        sort_order = indices[partition_top_n][rel_sort_order]
-
+    sort_order = np.argsort(stats_to_sort)
+    sort_order = np.concatenate((sort_order[-top_n:][::-1],sort_order[:top_n][::-1]))
+    if lfc_above_cutoff_idx.shape[0] > 0:
+        sort_order = sort_order[np.in1d(sort_order,lfc_above_cutoff_idx)]
     # top n slice based upon sort order
     logfoldchanges_top_n = logfoldchanges[sort_order]
     pvals_top_n = pvals[sort_order]
@@ -99,8 +56,6 @@ def diffexp_ttest_from_mean_var(meanA, varA, nA, meanB, varB, nB, top_n, diffexp
 
     return result
 
-
-# Convenience function which handles sparse data
 def mean_var_n(X):
     """
     Two-pass variance calculation.  Numerically (more) stable
@@ -112,5 +67,5 @@ def mean_var_n(X):
         mean,v = sf.mean_variance_axis(X,axis=0)
     else:
         mean,v = X.mean(0),X.var(0)
-
-    return mean, v, n
+    meansq = v - mean**2
+    return mean, meansq, v, n

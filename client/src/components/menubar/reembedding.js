@@ -12,6 +12,7 @@ import * as globals from "../../globals";
 import actions from "../../actions";
 import styles from "./menubar.css";
 import DimredPanel from "./dimredpanel";
+import PrepPanel from "./preppanel";
 
 @connect((state) => ({
   reembedController: state.reembedController,
@@ -21,7 +22,8 @@ import DimredPanel from "./dimredpanel";
   idhash: state.config?.parameters?.["annotations-user-data-idhash"] ?? null,
   obsCrossfilter: state.obsCrossfilter,
   layoutChoice: state.layoutChoice,
-  isSubsetted: state.controls.isSubsetted
+  isSubsetted: state.controls.isSubsetted,
+  userLoggedIn: state.controls.userInfo ? true : false
 }))
 class Reembedding extends React.PureComponent {
   constructor(props) {
@@ -29,6 +31,7 @@ class Reembedding extends React.PureComponent {
     this.state = {
       setReembedDialogActive: false,
       embName: "",
+      reembeddingPanel: false,
     };
   }
 
@@ -41,7 +44,15 @@ class Reembedding extends React.PureComponent {
       setReembedDialogActive: false,
     });
   };
-
+  handleRunAndDisablePreprocessingDialog = () => {
+    const { dispatch, reembedParams } = this.props;
+    
+    dispatch(actions.requestPreprocessing(reembedParams));
+    this.setState({
+      setReembedDialogActive: false,
+    });
+    // this is where you need to trigger subset if cells were filtered.
+  };
   handleRunAndDisableReembedDialog = () => {
     const { dispatch, reembedParams, layoutChoice, obsCrossfilter, isSubsetted } = this.props;
     const { embName } = this.state
@@ -74,18 +85,22 @@ class Reembedding extends React.PureComponent {
     this.setState({embName: name.target.value})
   }
   render() {
-    const { setReembedDialogActive, embName } = this.state;
-    const { reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams } = this.props;
+    const { setReembedDialogActive, embName, reembeddingPanel } = this.state;
+    const { reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn } = this.props;
     const loading = !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const tipContent =
-      "Click to recompute UMAP embedding on the currently selected cells.";
-
+      "Click to perform preprocessing and dimensionality reduction on the currently selected cells.";
+    const cS = obsCrossfilter.countSelected();
+    
+    const runDisabled = cS > 50000;
+    
+    const title = `${reembeddingPanel ? "Reembedding" : "Preprocessing"} on ${cS}/${annoMatrix.schema.dataframe.nObs} cells.`;
     return (
       <div>
         <Dialog
           icon="info-sign"
           onClose={this.handleDisableReembedDialog}
-          title={`Reembedding on ${obsCrossfilter.countSelected()}/${annoMatrix.schema.dataframe.nObs} cells.`}
+          title={title}
           autoFocus
           canEscapeKeyClose
           canOutsideClickClose
@@ -94,16 +109,50 @@ class Reembedding extends React.PureComponent {
           isOpen={setReembedDialogActive}
           usePortal
         >        
+          {runDisabled ? <div style={{paddingBottom: "20px"}}><AnchorButton fill minimal icon="warning-sign" intent="danger"> You cannot preprocess or reembed on greater than 50,000 cells. </AnchorButton></div> : null}
+          <ControlGroup fill={true} vertical={false}>
+            <AnchorButton
+              onClick={() => {
+                this.setState({...this.state, reembeddingPanel: false})
+                }
+              } 
+              text={`Preprocessing`}
+              intent={!reembeddingPanel ? "primary" : null}
+            />           
+            <AnchorButton
+              onClick={() => {
+                this.setState({...this.state, reembeddingPanel: true})
+              }}
+              text={`Reembedding`}
+              intent={reembeddingPanel ? "primary" : null}
+            />                         
+          </ControlGroup>         
+          {!reembeddingPanel ? <div style={{
+            paddingTop: "20px",
+            marginLeft: "10px",
+            marginRight: "10px"
+          }}>
+            <PrepPanel idhash={idhash} />
+            <ControlGroup style={{paddingTop: "15px"}} fill={true} vertical={false}>
+              <Button onClick={this.handleDisableReembedDialog}>Close</Button>
+              <Button onClick={()=>{this.setState({...this.state, reembeddingPanel: true})}}>Next</Button>
+            </ControlGroup>            
+          </div>
+          :
           <div style={{
+            paddingTop: "20px",
             marginLeft: "10px",
             marginRight: "10px"
           }}>        
             <DimredPanel embName={embName} onChange={this.onNameChange} idhash={idhash} />
             <ControlGroup style={{paddingTop: "15px"}} fill={true} vertical={false}>
                 <Button onClick={this.handleDisableReembedDialog}>Close</Button>
-                <Button disabled={reembedParams.doBatch && reembedParams.batchKey===""} onClick={this.handleRunAndDisableReembedDialog} intent="primary"> Run </Button>                 
+                <Button disabled={reembedParams.doBatch && reembedParams.batchKey==="" || 
+                                  reembedParams.doBatchPrep && (reembedParams.batchPrepKey==="" || 
+                                  reembedParams.batchPrepLabel === "") || runDisabled
+                } onClick={this.handleRunAndDisableReembedDialog} intent="primary"> Preprocess and run </Button>                 
             </ControlGroup>            
-          </div>
+          </div>}
         </Dialog>
         <Tooltip
           content={tipContent}
@@ -113,6 +162,7 @@ class Reembedding extends React.PureComponent {
           <AnchorButton
             icon="new-object"
             loading={loading}
+            disabled={!userLoggedIn}
             onClick={this.handleEnableReembedDialog}
             data-testid="reembedding-options"
           />

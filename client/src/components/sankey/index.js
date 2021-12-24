@@ -3,7 +3,9 @@ import * as d3 from "d3";
 import * as d3s from "d3-sankey";
 import { connect } from "react-redux";
 import { requestSankey } from "../../actions/sankey";
-import { width } from "../scatterplot/util";
+import Canvg, {
+  presets
+} from 'canvg';
 
 @connect((state) => ({
     layoutChoice: state.layoutChoice,
@@ -29,33 +31,7 @@ class Sankey extends React.Component {
 
   handleSankey = () => {
     const { dispatch, alignmentThreshold: threshold } = this.props;
-    const prom = dispatch(requestSankey());
-    const links = []
-    const nodes = []
-    prom.then((res) => {
-      let n = []
-      res.edges.forEach(function (item, index) {
-        if (res.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
-          links.push({
-            source: item[0],
-            target: item[1],
-            value: res.weights[index]
-          })
-          n.push(item[0])
-          n.push(item[1])
-        }
-      });   
-      n = n.filter((item, i, ar) => ar.indexOf(item) === i);
-
-      n.forEach(function (item){
-        nodes.push({
-          id: item
-        })
-      })
-      const data = {links: links, nodes: nodes}
-      dispatch({type: "sankey: set data",data: data})
-      this.constructSankey()
-    });
+    dispatch(requestSankey(threshold));
   };  
 
   handleResize = () => {
@@ -66,7 +42,7 @@ class Sankey extends React.Component {
     });
   };  
   constructSankey = () => {
-    const { sankeyData: data } = this.props
+    const { sankeyData: data, layoutChoice } = this.props
     const { viewport } = this.state
     const topMargin = this.sankeyTopPadding
     const leftMargin = this.sankeyLeftPadding
@@ -218,12 +194,25 @@ class Sankey extends React.Component {
     this.setState({
       height: height
     })
+    const temp_nodes = data.nodes;
+    const un_node_ids = [];
+    for (const ino of temp_nodes) {
+      const inot = parseInt(ino.id.split('_').at(0).slice(-1));
+      if (!un_node_ids.includes(inot)){
+        un_node_ids.push(inot)
+      }
+    }
+    const map = new Map();
+    un_node_ids.forEach((item,i)=>{
+      map.set(item,i)
+    })
+    
     const sankey = d3s.sankey()
                      .size(graphSize)
                      .nodeId(d => d.id)
                      .nodeWidth(nodeWidth)
                      .nodePadding(nodePadding)
-                     .nodeAlign((n,tn)=>parseFloat(n.id.split('_').at(0).slice(-1)));
+                     .nodeAlign((n,tn)=>map.get(parseInt(n.id.split('_').at(0).slice(-1))));
 
     let graph = sankey(data);
     
@@ -311,6 +300,29 @@ class Sankey extends React.Component {
     .attr("dy", "0.35em")
     .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
     .text(d => d.id.split('_').slice(1).join('_'))
+    svg.attr("id","sankeyPlot");
+    
+    d3.select('#saveSankeyButton').on('click', function(){
+      var s = document.querySelector('#sankeyPlot');
+      var data = (new XMLSerializer()).serializeToString(s);
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      Canvg.from(ctx, data, presets.offscreen()).then((v)=>{
+        v.render().then(()=>{
+          canvas.convertToBlob().then((blob)=>{
+            var a = document.createElement("a");
+            document.body.appendChild(a);
+            a.style = "display: none";
+        
+            var url = window.URL.createObjectURL(blob);
+            a.href = url;
+            a.download = `${layoutChoice.current.split(';;').at(-1)}_sankey.png`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          });
+        })
+      });
+    });    
   }
 
   handleResize = () => {
@@ -325,10 +337,8 @@ class Sankey extends React.Component {
     this.constructSankey()
   };
   componentDidUpdate(prevProps) {
-    const { dispatch, layoutChoice, refresher, numCells, currCacheKey } = this.props
-    if (layoutChoice.current !== prevProps.layoutChoice.current){
-      this.handleSankey()
-    } else if(refresher !== prevProps.refresher) {
+    const { dispatch, refresher, numCells, currCacheKey } = this.props
+    if(refresher !== prevProps.refresher) {
       this.constructSankey()
     } else if (numCells !== prevProps.numCells){
       dispatch({type: "sankey: clear cached result",key: currCacheKey})
@@ -337,7 +347,10 @@ class Sankey extends React.Component {
   }
   componentDidMount() {
     window.addEventListener("resize", this.handleResize);
-    this.constructSankey();
+    if(this.props.sankeyData){
+      this.constructSankey();
+    }
+    
   }
 
   componentWillUnmount() {

@@ -131,6 +131,7 @@ def schema_get_helper(data_adaptor):
             curr_axis = getattr(data_adaptor.data, "var")
             for ann in curr_axis:
                 ann_schema = {"name": ann, "writable": True}
+                print(curr_axis[ann])
                 ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
                 if ann_schema['type']!='categorical':
                     ann_schema['writable']=False
@@ -415,17 +416,6 @@ def save_metadata_put(request, data_adaptor):
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
-
-def save_genedata_put(request, data_adaptor):
-    userID = _get_user_id(data_adaptor)        
-    try:
-        direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/gene-sets.csv",as_attachment=True)
-    except NotImplementedError as e:
-        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
-    except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
-
 
 def _get_user_id(data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations        

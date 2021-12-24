@@ -20,63 +20,44 @@ function abortableFetch(request, opts, timeout = 0) {
   };
 }
 
-async function doLeidenFetch(dispatch, getState) {
-    const state = getState();
-    // get current embedding
-    
-    const { layoutChoice, Leiden, annoMatrix } = state;
-    const { res } = Leiden;
-    let cells = annoMatrix.rowIndex.labels();
-    cells = Array.isArray(cells) ? cells : Array.from(cells);          
-    
-    const name = `leiden_${Math.round(new Date().getTime() / 1000).toString(16)}_r${Math.round((res+Number.EPSILON)*1000)/1000.0}`
-    const af = abortableFetch(
-      `${API.prefix}${API.version}leiden`,
-      {
-        method: "PUT",
-        headers: new Headers({
-          Accept: "application/octet-stream",
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          name: layoutChoice.current,
-          cName: name,
-          resolution: res,
-          filter: { obs: { index: cells } }    
-        }),
-        credentials: "include",
-      },
-      6000000 // 1 minute timeout
-    );
-    dispatch({
-      type: "leiden: request start",
-      abortableFetch: af,
-    });
-    const result = await af.ready();
-  
-    if (result.ok && result.headers.get("Content-Type").includes("application/json")) {
-      return [result,name];
-    }
-  
-    // else an error
-    let msg = `Unexpected HTTP response ${result.status}, ${result.statusText}`;
-    const body = await result.text();
-    if (body && body.length > 0) {
-      msg = `${msg} -- ${body}`;
-    }
-    throw new Error(msg);
+function writableAnnotations(annoMatrix) {
+  return annoMatrix.schema.annotations.obs.columns
+    .filter((s) => s.writable)
+    .map((s) => s.name);
 }
 
 export function requestLeiden() {
     return async (dispatch, getState) => {
       try {
-        const [res,name] = await doLeidenFetch(dispatch, getState);
-        const leiden = await res.json();
+        const state = getState();
+        // get current embedding
+        
+        const { layoutChoice, Leiden, annoMatrix, controls } = state;
+        const { wsLeiden } = controls;
+        const { res } = Leiden;
+        let cells = annoMatrix.rowIndex.labels();
+        cells = Array.isArray(cells) ? cells : Array.from(cells);          
+        
+        const annos = writableAnnotations(annoMatrix)
+        const nums = [];
+        annos.forEach((item)=>{
+          if (item.startsWith("leiden_v")){
+            nums.push(parseInt(item.split("leiden_v").at(-1).split("_").at(0)));
+          }
+        })
+        const latest = nums.reduce(function(a, b) {
+            return Math.max(a, b);
+        }, 0)+1;
+        const name = `leiden_v${latest}_r${Math.round((res+Number.EPSILON)*1000)/1000.0}`
+        wsLeiden.send(JSON.stringify({
+          name: layoutChoice.current,
+          cName: name,
+          resolution: res,
+          filter: { obs: { index: cells } }    
+        }))
         dispatch({
-          type: "leiden: request completed",
+          type: "leiden: request start"
         });
-
-        return [leiden,name]
       } catch (error) {
         dispatch({
           type: "leiden: request aborted",

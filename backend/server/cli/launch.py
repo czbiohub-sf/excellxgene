@@ -5,21 +5,40 @@ import sys
 import webbrowser
 import os
 import click
+from http import HTTPStatus
 from flask_compress import Compress
 from flask_cors import CORS
-
 from backend.server.default_config import default_config
 from backend.server.app.app import Server
 from backend.server.common.config.app_config import AppConfig
+from flask import redirect, session, jsonify, make_response, request, send_file, after_this_request, current_app
+from six.moves.urllib.parse import urlencode
 from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
 from flask_sock import Sock
 import multiprocessing
+from authlib.integrations.flask_client import OAuth
+from multiprocessing import shared_memory
 import sys
 import signal
 from backend.server.data_anndata.anndata_adaptor import AnndataAdaptor
 from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
+from functools import wraps
+from dotenv import load_dotenv
+load_dotenv()
+
+def auth0_token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = 'profile' in session
+        # return 401 if token is not passed
+        if not token and current_app.hosted_mode:
+            return jsonify({'message' : 'Authorization missing.'}), 401
+  
+        return  f(*args, **kwargs)
+  
+    return decorated
 
 
 def annotation_args(func):
@@ -258,6 +277,25 @@ def launch_args(func):
         show_default=True,
         help="Print default configuration settings and exit",
     )
+    @click.option(
+        "--hosted",
+        default=False,
+        is_flag=True,
+        show_default=True,
+        help="Runs ExCellxgene in hosted mode.",
+    ) 
+    @click.option(
+        "--root_embedding",
+        default=None,
+        show_default=True,
+        help="Choose the fixed, immutable embedding. If not set, the root embedding will contain all points in the center of the screen.",
+    )              
+    @click.option(
+        "--auth_url",
+        default=None,
+        show_default=True,
+        help="Provide URL to use for authorization redirects.",
+    )                  
     @click.help_option("--help", "-h", help="Show this message and exit.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -339,6 +377,9 @@ def launch(
     experimental_annotations_ontology_obo,
     config_file,
     dump_default_config,
+    hosted,
+    root_embedding,
+    auth_url
 ):
     """Launch the cellxgene data viewer.
     This web app lets you explore single-cell expression data.
@@ -363,6 +404,8 @@ def launch(
 
     # app config
     app_config = AppConfig()
+    app_config.root_embedding = root_embedding
+    app_config.hosted_mode = hosted
     server_config = app_config.server_config
 
     try:
@@ -428,18 +471,36 @@ def launch(
     handle_scripts(scripts)
 
     # create the server
+
     server = CliLaunchServer(app_config)
     sock = Sock(server.app)
     app_config.server_config.data_adaptor.socket = sock
+    server.app.hosted_mode = hosted
 
     cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
     initialize_socket(app_config.server_config.data_adaptor)
-
+    global in_handler
+    in_handler = False
     def handler(signal, frame):
         print('\nShutting down cellxgene.')
-        AnndataAdaptor.pool.terminate()
-        AnndataAdaptor.pool.join()        
-        sys.exit(0)
+        global in_handler
+        if not in_handler:
+            in_handler = True
+            if hosted:
+                app_config.server_config.data_adaptor.pool.terminate()
+                app_config.server_config.data_adaptor.pool.join()      
+
+            already_deleted = []
+            for d in [app_config.server_config.data_adaptor.shm_layers_csr,app_config.server_config.data_adaptor.shm_layers_csc]:
+                for k in d.keys():
+                    for j in [0,3,6]:
+                        if d[k][j] not in already_deleted:
+                            shm = shared_memory.SharedMemory(name=d[k][j])
+                            shm.close()
+                            shm.unlink()
+                            already_deleted.append(d[k][j])         
+
+            sys.exit(0)
 
     signal.signal(signal.SIGINT, handler)
     
@@ -458,6 +519,48 @@ def launch(
     if not server_config.app__verbose:
         f = open(os.devnull, "w")
         sys.stdout = f
+    
+    if hosted:
+        oauth = OAuth(server.app)
+        auth0 = oauth.register(
+            'auth0',
+            client_id='YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB',
+            client_secret=os.environ.get('SECRET'),
+            api_base_url='https://dev-gbiqjhha.us.auth0.com',
+            access_token_url=f'https://dev-gbiqjhha.us.auth0.com/oauth/token',
+            authorize_url=f'https://dev-gbiqjhha.us.auth0.com/authorize',
+            client_kwargs={
+                'scope': 'openid profile email',
+            }
+        )
+        if auth_url is None:
+            auth_url = cellxgene_url
+
+        @server.app.route('/callback')
+        def callback_handling():
+            auth0.authorize_access_token()
+            resp = auth0.get('userinfo')
+            userinfo = resp.json()
+            # Store the user information in flask session.
+            session['jwt_payload'] = userinfo
+            session['profile'] = userinfo
+            
+            annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
+            userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
+            app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
+            return redirect(auth_url)
+        
+        @server.app.route('/login')
+        def login():
+            return auth0.authorize_redirect(redirect_uri=auth_url+'/callback') #TODO: CHANGE FOR SERVER
+        
+        @server.app.route('/logout')
+        def logout():
+            # Clear session stored data
+            session.clear()
+            # Redirect user to logout endpoint
+            params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
+            return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
 
     try:
         server.app.run(

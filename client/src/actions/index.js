@@ -28,6 +28,8 @@ import * as embActions from "./embedding";
 import * as genesetActions from "./geneset";
 import { defaultReembedParams } from "../reducers/reembed";
 import { _switchEmbedding } from "./embedding";
+import { Dataframe } from "../util/dataframe";
+
 /*
 return promise fetching user-configured colors
 */
@@ -42,6 +44,15 @@ async function userColorsFetchAndLoad(dispatch) {
 
 async function schemaFetch() {
   return fetchJson("schema");
+}
+async function userInfoAuth0Fetch() {
+  return fetchJson("userInfo");
+}
+async function hostedModeFetch() {
+  return fetchJson("hostedMode");
+}
+async function initializeFetch() {
+  return fetchJson("initialize");
 }
 
 async function configFetch(dispatch) {
@@ -110,8 +121,10 @@ export async function reembedParamsFetch(dispatch) {
 }
 export const reembedParamsObsmFetch = (embName) => async (
   dispatch,
-  _getState
+  getState
 ) => {
+  const { controls } = getState();
+  const { username } = controls;
   const defaultResponse = defaultReembedParams;
   const res = await fetch(
     `${API.prefix}${API.version}reembed-parameters-obsm`,
@@ -138,7 +151,6 @@ export const reembedParamsObsmFetch = (embName) => async (
   }
 }
 
-
 function prefetchEmbeddings(annoMatrix) {
   /*
   prefetch requests for all embeddings
@@ -163,13 +175,131 @@ function abortableFetch(request, opts, timeout = 0) {
     },
   };
 }
+
+export const downloadData = () => async (
+  dispatch,
+  getState
+) => {
+
+    const state = getState();
+    const { annoMatrix, layoutChoice, controls } = state;
+    const { wsDownloadAnndata } = controls;
+    
+    let cells = annoMatrix.rowIndex.labels();  
+    cells = Array.isArray(cells) ? cells : Array.from(cells);
+
+    const annos = []
+    const annoNames = []
+    
+    for (const item of annoMatrix.schema.annotations?.obs?.columns) {
+      if(item?.categories){
+        let labels = await annoMatrix.fetch("obs",item.name)
+        annos.push(labels)
+        annoNames.push(item.name)
+      }
+    }
+    wsDownloadAnndata.send(JSON.stringify({
+      labelNames: annoNames,
+      labels: annos,
+      currentLayout: layoutChoice.current,
+      filter: { obs: { index: cells } }
+    }))
+
+    dispatch({
+      type: "output data: request start"
+    });    
+}
+
+export const downloadMetadata = () => async (
+  _dispatch,
+  getState
+) => {
+    const state = getState();
+    // get current embedding
+    const { layoutChoice, sankeySelection, annoMatrix, controls } = state;
+    const { selectedCategories } = sankeySelection;
+
+    let catNames;
+    if (selectedCategories.length === 0) {
+      catNames = [];
+      for (const item of annoMatrix.schema.annotations?.obs?.columns) {
+        if(item?.categories){
+          if (item.name !== "name_0"){
+            catNames.push(item.name)
+          }
+        }
+      }      
+    } else {
+      catNames = selectedCategories;
+    }
+    let cells = annoMatrix.rowIndex.labels();  
+    cells = Array.isArray(cells) ? cells : Array.from(cells);
+
+    const res = await fetch(
+      `${API.prefix}${API.version}downloadMetadata`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          labelNames: catNames,
+          filter: { obs: { index: cells } }
+        }),
+        credentials: "include",
+        }
+    );
+
+    const blob = await res.blob()
+
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    var url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = `${layoutChoice.current}_obs.csv`.split(";").join("_");
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+export const downloadGenedata = () => async (
+  _dispatch,
+  _getState
+) => {
+
+    const res = await fetch(
+      `${API.prefix}${API.version}downloadGenedata`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        credentials: "include",
+        }
+    );
+
+    const blob = await res.blob()
+
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    var url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = "gene-sets.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
 export const requestSaveAnndataToFile = (saveName) => async (
   dispatch,
   getState
 ) => {
   try{
     const state = getState();
-    const { annoMatrix, layoutChoice } = state;
+    const { annoMatrix, layoutChoice, controls } = state;
     
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
@@ -234,150 +364,11 @@ export const requestSaveAnndataToFile = (saveName) => async (
     }
   }
 }
-export function requestDataLayerChange(dataLayer) {
-  return async (_dispatch, _getState) => {
-    const res = await fetch(
-      `${API.prefix}${API.version}layer`,
-      {
-        method: "PUT",
-        headers: new Headers({
-          Accept: "application/octet-stream",
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          dataLayer: dataLayer,
-        }),
-        credentials: "include",
-        }
-    );
-    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
-      return res;
-    }
-  }
-}
-export function requestReloadBackend() {
-  return async (dispatch, getState) => {
-    try{
-      const { annoMatrix, layoutChoice } = getState()
 
-      let cells = annoMatrix.rowIndex.labels();  
-      cells = Array.isArray(cells) ? cells : Array.from(cells);
+const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
 
-      const af = abortableFetch(
-        `${API.prefix}${API.version}reload`,
-        {
-          method: "PUT",
-          headers: new Headers({
-            Accept: "application/octet-stream",
-            "Content-Type": "application/json",
-          }),
-          body: JSON.stringify({
-            currentLayout: layoutChoice.current,
-            filter: { obs: { index: cells } }
-          }),        
-          credentials: "include",
-          },
-          6000000
-      );
-      dispatch({
-        type: "output data: request start",
-        abortableFetch: af,
-      });
-      const res = await af.ready();      
-      
-      dispatch({
-        type: "app: refresh"
-      })
-
-      dispatch({
-        type: "output data: request completed",
-      });
-
-      postAsyncSuccessToast("Data has successfuly overwritten the backend.");
-
-      if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
-        return true;
-      }
-
-      // else an error
-      let msg = `Unexpected HTTP response ${res.status}, ${res.statusText}`;
-      const body = await res.text();
-      if (body && body.length > 0) {
-        msg = `${msg} -- ${body}`;
-      }
-      throw new Error(msg);
-    } catch (error) {
-      dispatch({
-        type: "ouput data: request aborted",
-      });
-      if (error.name === "AbortError") {
-        postAsyncFailureToast("Data output was aborted.");
-      } else {
-        postNetworkErrorToast(`Data output: ${error.message}`);
-      }
-    }
-  }
-}
-
-export function requestReloadFullBackend() {
-  return async (dispatch, _getState) => {
-    try{
-      const af = abortableFetch(
-        `${API.prefix}${API.version}reloadFull`,
-        {
-          method: "PUT",
-          headers: new Headers({
-            Accept: "application/octet-stream",
-            "Content-Type": "application/json",
-          }),     
-          credentials: "include",
-          },
-          6000000
-      );
-      dispatch({
-        type: "output data: request start",
-        abortableFetch: af,
-      });
-      const res = await af.ready();      
-      
-      dispatch({
-        type: "app: refresh"
-      })
-
-      dispatch({
-        type: "output data: request completed",
-      });
-
-      postAsyncSuccessToast("Data has successfuly overwritten the backend.");
-
-      if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
-        return true;
-      }
-
-      // else an error
-      let msg = `Unexpected HTTP response ${res.status}, ${res.statusText}`;
-      const body = await res.text();
-      if (body && body.length > 0) {
-        msg = `${msg} -- ${body}`;
-      }
-      throw new Error(msg);
-    } catch (error) {
-      dispatch({
-        type: "ouput data: request aborted",
-      });
-      if (error.name === "AbortError") {
-        postAsyncFailureToast("Data output was aborted.");
-      } else {
-        postNetworkErrorToast(`Data output: ${error.message}`);
-      }
-    }
-  }
-}
-
-const setupWebSockets = (dispatch,getState) => {
-  const onMessage = (event) => {
-    const data = JSON.parse(event.data)
-
+  const onMessage = async (event) => {
+    const data = JSON.parse(event.data);
     if (data.cfn === "diffexp"){
       const { annoMatrix, genesets } = getState();
       const { diffExpListsLists } = genesets;
@@ -414,29 +405,266 @@ const setupWebSockets = (dispatch,getState) => {
           });              
         }
       });  
+    } else if (data.cfn === "reembedding"){
+      const schema = data.response;
+      dispatch({
+        type: "reembed: request completed",
+      });
+      const {
+        annoMatrix: prevAnnoMatrix,
+        obsCrossfilter: prevCrossfilter,
+        layoutChoice,
+      } = getState();
+      const base = prevAnnoMatrix.base().addEmbedding(schema);
+      dispatch({
+        type: "reset subset"
+      })
+      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
+        base,
+        prevCrossfilter,
+        layoutChoice.current,
+        schema.name
+      );
+      dispatch({
+        type: "reembed: add reembedding",
+        schema,
+        annoMatrix,
+        obsCrossfilter,
+      });
+      postAsyncSuccessToast("Re-embedding has completed.");
+
+    /*} else if (data.cfn === "preprocessing"){
+      const {        
+        obsCrossfilter: prevCrossfilter,
+        layoutChoice,
+        annoMatrix: dummy
+      } = getState();
+
+      const schema = dummy.schema;
+
+      dispatch({
+        type: "preprocess: request completed",
+      });
+
+      const baseDataUrl = `${API.prefix}${API.version}`;
+      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, schema);
+      prefetchEmbeddings(annoMatrixNew);
+
+      dispatch({
+        type: "reset subset"
+      })
+
+      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
+        annoMatrixNew,
+        prevCrossfilter,
+        layoutChoice.current,
+        layoutChoice.current
+      );
+      
+      dispatch({
+        type: "annoMatrix: init complete",
+        annoMatrix,
+        obsCrossfilter
+      });      
+      postAsyncSuccessToast("Preprocessing has completed.");
+    } */ 
+    } else if (data.cfn === "sankey"){
+      const { layoutChoice } = getState();
+      const catNames = data.catNames;
+      const sankey = data.response;
+      const threshold = data.threshold;
+      dispatch({
+        type: "sankey: request completed",
+      });
+      dispatch({
+        type: "sankey: cache results",
+        sankey,
+        key: `${catNames.join(";")}_${layoutChoice.current}`
+      })
+      const links = []
+      const nodes = []
+      let n = []
+      sankey.edges.forEach(function (item, index) {
+        if (sankey.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
+          links.push({
+            source: item[0],
+            target: item[1],
+            value: sankey.weights[index]
+          })
+          n.push(item[0])
+          n.push(item[1])
+        }
+      });   
+      n = n.filter((item, i, ar) => ar.indexOf(item) === i);
+
+      n.forEach(function (item){
+        nodes.push({
+          id: item
+        })
+      })
+      const d = {links: links, nodes: nodes}
+      dispatch({type: "sankey: set data",data: d})
+    } else if (data.cfn === "leiden"){
+      const { obsCrossfilter: prevObsCF } = getState();
+      const val = data.response;
+      const name = data.cName;
+      dispatch({
+        type: "leiden: request completed",
+      });
+
+      let prevObsCrossfilter;
+      if (prevObsCF.annoMatrix.schema.annotations.obsByName[name]) {
+        prevObsCrossfilter = prevObsCF.dropObsColumn(name);
+      } else {
+        prevObsCrossfilter = prevObsCF;
+      }
+      const initialValue = new Array(val);
+      const df = new Dataframe([initialValue[0].length,1],initialValue)
+      const { categories } = df.col(0).summarizeCategorical();
+      if (!categories.includes(globals.unassignedCategoryLabel)) {
+        categories.push(globals.unassignedCategoryLabel);
+      }
+      const ctor = initialValue.constructor;
+      const newSchema = {
+        name: name,
+        type: "categorical",
+        categories,
+        writable: true,
+      };     
+      const arr = new Array(prevObsCrossfilter.annoMatrix.schema.dataframe.nObs).fill("unassigned");
+      const index = prevObsCrossfilter.annoMatrix.rowIndex.labels()
+      for (let i = 0; i < index.length; i++) {
+        arr[index[i]] = val[i] ?? "what"
+      }
+      const obsCrossfilter = prevObsCrossfilter.addObsColumn(
+        newSchema,
+        ctor,
+        arr
+      );         
+      dispatch({
+        type: "annotation: create category",
+        data: name,
+        categoryToDuplicate: null,
+        annoMatrix: obsCrossfilter.annoMatrix,
+        obsCrossfilter,
+      });       
+    } else if (data.cfn === "downloadAnndata"){
+      const { layoutChoice } = getState();
+      const res = await fetch(`${API.prefix}${API.version}sendFile?path=${data.response}`,
+            {
+              headers: new Headers({
+                "Content-Type": "application/octet-stream",
+              }),
+              credentials: "include",
+            })
+      const blob = await res.blob()
+  
+      var a = document.createElement("a");
+      document.body.appendChild(a);
+      a.style = "display: none";
+  
+      var url = window.URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
+      a.click();
+      window.URL.revokeObjectURL(url);
+  
+      dispatch({
+        type: "output data: request completed",
+      });    
     }
   }   
-  const wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
-  wsDiffExp.onmessage = onMessage
-
-  dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})
+  let wsDiffExp;
+  let wsReembedding;
+  let wsSankey;
+  let wsLeiden;
+  let wsDownloadAnndata;
+  try{
+    if (loggedIn || !hostedMode){
+      wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
+      wsDiffExp.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})    
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
+      wsReembedding.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
+    }
+  } catch (e) {}
+  /*try{
+    if (!hostedMode){
+      const wsPreprocessing = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/preprocessing`)
+      wsPreprocessing.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsPreprocessing, name: "wsPreprocessing"})
+    }
+  } catch (e) {}*/
+  try{
+    if (loggedIn || !hostedMode){
+      wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
+      wsSankey.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsSankey, name: "wsSankey"})
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
+      wsLeiden.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsLeiden, name: "wsLeiden"})
+    }
+  } catch (e) {}
+  try{
+    if (loggedIn || !hostedMode){
+      wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
+      wsDownloadAnndata.onmessage = onMessage
+      dispatch({type: "init: set up websockets",ws: wsDownloadAnndata, name: "wsDownloadAnndata"})
+    }
+  } catch (e) {}
+  if (loggedIn || !hostedMode) {
+    window.onbeforeunload = function() {
+      wsDiffExp.onclose = function () {};
+      wsDiffExp.close();
+  
+      wsReembedding.onclose = function () {};
+      wsReembedding.close();
+      
+      wsSankey.onclose = function () {};
+      wsSankey.close();
+      
+      wsLeiden.onclose = function () {};
+      wsLeiden.close();
+      
+      wsDownloadAnndata.onclose = function () {};
+      wsDownloadAnndata.close(); 
+    };  
+  }
 }
 
 const doInitialDataLoad = () =>
   catchErrorsWrap(async (dispatch, getState) => {
     dispatch({ type: "initial data load start" });
-    
+    await initializeFetch(dispatch);
     try {
-      const [config, schema] = await Promise.all([
+      const [config, schema, res, res2] = await Promise.all([
         configFetch(dispatch),
         schemaFetch(dispatch),
+        userInfoAuth0Fetch(dispatch),
+        hostedModeFetch(dispatch),
         userColorsFetchAndLoad(dispatch),
         userInfoFetch(dispatch),
       ]);
       genesetsFetch(dispatch, config);
       reembedParamsFetch(dispatch);
+      const { response: userInfo } = res;
+      const { response: hostedMode } = res2;
+      if ( hostedMode ) {
+        dispatch({type: "set user info", userInfo})
+      } else {
+        dispatch({type: "set user info", userInfo: {desktopMode: true}})
+      }
       
-      await dispatch(requestDataLayerChange("X"));
+      dispatch({type: "set hosted mode", hostedMode})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
       
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
@@ -445,21 +673,31 @@ const doInitialDataLoad = () =>
       const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
       if(layoutSchema.length > 0){
-        const name = layoutSchema[0].name
+        const preferredNames = ["root"];
+        const f = layoutSchema.filter((i) => {
+          return preferredNames.includes(i.name)
+        })
+        let name;
+        if (f.length > 0) {
+          name = f[0].name
+        } else {
+          name = layoutSchema[0].name
+        }
         const base = annoMatrix.base();
-
         const [annoMatrixNew, obsCrossfilterNew] = await _switchEmbedding(
           base,
           obsCrossfilter,
           name,
           name
         ); 
+        prefetchEmbeddings(annoMatrixNew);
+
         dispatch({
           type: "annoMatrix: init complete",
           annoMatrix: annoMatrixNew,
           obsCrossfilter: obsCrossfilterNew
         });        
-        
+        dispatch(embActions.layoutChoiceAction(name));        
       } else { 
         dispatch({
           type: "annoMatrix: init complete",
@@ -470,15 +708,7 @@ const doInitialDataLoad = () =>
 
       dispatch({ type: "initial data load complete", allGenes});
 
-      const defaultEmbedding = config?.parameters?.default_embedding;
-      if (
-        defaultEmbedding &&
-        layoutSchema.some((s) => s.name === defaultEmbedding)
-      ) {
-        dispatch(embActions.layoutChoiceAction(defaultEmbedding));
-      }
-
-      setupWebSockets(dispatch,getState)      
+      setupWebSockets(dispatch,getState,userInfo ? true : false, hostedMode)      
 
     } catch (error) {
       dispatch({ type: "initial data load error", error });
@@ -529,7 +759,7 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
   try{
     dispatch({ type: "request differential expression started" });
   
-    const { controls } = getState();
+    const { annoMatrix, controls } = getState();
     const { wsDiffExp } = controls;
 
     if (!set1) set1 = [];
@@ -541,7 +771,8 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
       count: num_genes,
       set1: { filter: { obs: { index: set1 } } },
       set2: { filter: { obs: { index: set2 } } },
-      multiplex: false
+      multiplex: false,
+      layer: annoMatrix.layer
     }))
   } catch (error) {
     return dispatch({
@@ -577,6 +808,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
       }
     }    
     labels = labels.__columns[0];
+    const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
@@ -584,9 +816,9 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
         let set2 = []
         for (let i = 0; i < labels.length; i++){
           if(labels[i] === cat){
-            set1.push(i)
+            set1.push(ix[i])
           } else {
-            set2.push(i)
+            set2.push(ix[i])
           }
         }
         set1 = Array.isArray(set1) ? set1 : Array.from(set1);
@@ -598,7 +830,8 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
           set2: { filter: { obs: { index: set2 } } },
           multiplex: true,
           grouping: categoryName,
-          nameList: allCategories
+          nameList: allCategories,
+          layer: annoMatrix.layer
         }))
       } 
     }
@@ -637,9 +870,6 @@ export default {
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,
   doInitialDataLoad,
-  requestDataLayerChange,
-  requestReloadBackend,
-  requestReloadFullBackend,
   selectAll,
   requestDifferentialExpression,
   requestSingleGeneExpressionCountsForColoringPOST,
@@ -648,6 +878,9 @@ export default {
   requestPreprocessing,
   requestSankey,
   requestLeiden,
+  downloadData,
+  downloadMetadata,
+  downloadGenedata,
   requestSaveAnndataToFile,
   setCellsFromSelectionAndInverseAction:
     selnActions.setCellsFromSelectionAndInverseAction,

@@ -23,7 +23,7 @@ export const leidenController = (
     case "leiden: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "leiden: request aborted":

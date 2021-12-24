@@ -218,7 +218,14 @@ class GeneSet extends React.Component {
         <div style={{
           textAlign: "right"
         }}>
-          {`Showing genes ${genePage*10}-${Math.min((genePage+1)*10,setGenes.length)} out of ${setGenes.length}`}
+          {`Showing genes ${genePage*10}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
+          <AnchorButton
+            type="button"
+            icon="double-chevron-left"
+            onClick={()=>{this.setState({...this.state,genePage: 0})}}
+            minimal
+            disabled={genePage === 0}
+          />          
           <AnchorButton
             type="button"
             icon="chevron-left"
@@ -232,7 +239,14 @@ class GeneSet extends React.Component {
             onClick={this.incrementGenePage}
             minimal
             disabled={genePage === maxGenePage}
-          />          
+          />  
+          <AnchorButton
+            type="button"
+            icon="double-chevron-right"
+            onClick={()=>{this.setState({...this.state,genePage: maxGenePage})}}
+            minimal
+            disabled={genePage === maxGenePage}
+          />                            
         </div>
         <hr/>
           <div style={{

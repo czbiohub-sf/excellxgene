@@ -11,7 +11,7 @@ export const outputController = (
     case "output data: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "output data: request aborted":

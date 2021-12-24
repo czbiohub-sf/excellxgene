@@ -133,7 +133,9 @@ export const annotationRenameCategoryAction = (
 };
 
 export function requestObsRename(oldCategoryName,newCategoryName) {
-  return async (_dispatch, _getState) => {
+  return async (_dispatch, getState) => {
+    const { controls } = getState()
+    const { username } = controls;
     const res = await fetch(
       `${API.prefix}${API.version}renameObs`,
       {
@@ -258,7 +260,9 @@ export const annotationDeleteCategoryAction = (categoryName) => (
   const {
     annoMatrix: prevAnnoMatrix,
     obsCrossfilter: prevObsCrossfilter,
+    controls
   } = getState();
+  const { username } = controls;
   if (!prevAnnoMatrix || !prevObsCrossfilter) return;
   if (!isUserAnnotation(prevAnnoMatrix, categoryName))
     throw new Error("not a user annotation");
@@ -272,22 +276,6 @@ export const annotationDeleteCategoryAction = (categoryName) => (
   });
 
   dispatch({type: "sankey: set", category: categoryName, value: false})
-
-  
-  fetch(
-    `${API.prefix}${API.version}deleteObs`,
-    {
-      method: "PUT",
-      headers: new Headers({
-        Accept: "application/octet-stream",
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify({
-        category: categoryName,
-      }),
-      credentials: "include",
-      }
-  );
 };
 
 export const annotationCreateLabelInCategory = (
@@ -465,7 +453,8 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   Save the user-created obs annotations IF any have changed.
   */
   const state = getState();
-  const { annotations, autosave } = state;
+  const { annotations, autosave, controls } = state;
+  const { username } = controls;
   const { dataCollectionNameIsReadOnly, dataCollectionName } = annotations;
   const { lastSavedAnnoMatrix, saveInProgress } = autosave;
 
@@ -487,8 +476,13 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   dispatch({
     type: "writable obs annotations - save started",
   });
-
-  const df = await annoMatrix.fetch("obs", writableAnnotations(annoMatrix));
+  const annos = []
+  for (const c of annoMatrix.schema.annotations.obs.columns) {
+    if (c.name !== "name_0") {
+      annos.push(c.name)
+    }
+  }
+  const df = await annoMatrix.fetch("obs", annos);
   const matrix = MatrixFBS.encodeMatrixFBS(df);
   const compressedMatrix = pako.deflate(matrix);
   try {
@@ -534,7 +528,8 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
   const state = getState();
 
   // bail if gene sets not available, or in readonly mode.
-  const { config } = state;
+  const { config, controls } = state;
+  const { username } = controls;
   const { lastTid, genesets } = state.genesets;
 
   const genesetsAreAvailable =
@@ -630,6 +625,7 @@ export const saveReembedParametersAction = () => async (dispatch, getState) => {
   const reembedParams = state.reembedParameters;
 
   try {
+    const { username } = state.controls;
     const { dataCollectionName } = state.annotations;
     const queryString = `?annotation-collection-name=${encodeURIComponent(
       dataCollectionName

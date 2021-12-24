@@ -7,7 +7,7 @@ from hashlib import blake2b
 import json
 
 import pandas as pd
-from flask import session, has_request_context, current_app
+from flask import session, has_request_context, current_app, request
 
 from backend.server import __version__ as cellxgene_version
 from backend.server.common.annotations.annotations import Annotations
@@ -200,9 +200,14 @@ class AnnotationsLocalFile(Annotations):
         Return a short hash that weakly identifies the user and dataset.
         Used to create safe annotations output file names.
         """
-        uid = current_app.auth.get_user_id() or ""
-        id = (uid + data_adaptor.get_location()).encode()
-        idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
+        if 'profile' not in session:
+            id = (data_adaptor.get_location()).encode()
+            guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")            
+            idhash = guest_idhash
+        else:
+            uid = session['profile']['sub']
+            id = (uid + data_adaptor.get_location()).encode()
+            idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
         return idhash
 
     def _get_output_dir(self):
@@ -220,39 +225,31 @@ class AnnotationsLocalFile(Annotations):
         if self.label_output_file:
             return self.label_output_file
 
-        return self._get_filename(data_adaptor, "cell-labels")
+        return self._get_filename(data_adaptor, "cell-labels")+".csv"
 
     def _get_genesets_filename(self, data_adaptor):
         """ return the current gene sets file name """
         if self.gene_sets_output_file:
             return self.gene_sets_output_file
 
-        return self._get_filename(data_adaptor, "gene-sets")
+        return self._get_filename(data_adaptor, "gene-sets")+".csv"
 
     def _get_reembed_parameters_filename(self, data_adaptor):
         """ return the current reembed parameters file name """
         if self.reembed_parameters_output_file:
             return self.reembed_parameters_output_file
-        x = self._get_filename(data_adaptor, "reembed-parameters")
-        if x is not None:
-            return '.csv'.join(x.split('.csv')[:-1])+'.json'
-        else:
-            return ''
+        return self._get_filename(data_adaptor, "reembed-parameters")+".json"
 
     def _get_filename(self, data_adaptor, anno_name):
         # we need to generate a file name, which we can only do if we have a UID and collection name
         if session is None:
             raise AnnotationsError("unable to determine file name for annotations")
 
-        collection = self.get_collection()
-        if collection is None:
-            return None
-
         if data_adaptor is None:
             raise AnnotationsError("unable to determine file name for annotations")
 
         idhash = self._get_userdata_idhash(data_adaptor)
-        return os.path.join(self._get_output_dir(), f"{collection}-{anno_name}-{idhash}.csv")
+        return os.path.join(self._get_output_dir(), f"{idhash}/{anno_name}")
 
     def _backup(self, fname, max_backups=9):
         """

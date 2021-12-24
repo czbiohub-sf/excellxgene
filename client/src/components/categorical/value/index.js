@@ -51,9 +51,12 @@ function _currentLabelAsString(ownProps) {
     annotations: state.annotations,
     schema: state.annoMatrix?.schema,
     ontology: state.ontology,
+    isSubsetted: state.controls.isSubsetted,
+    currentLayout: state.layoutChoice.current,
     isDilated,
     isSelected,
     label,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class CategoryValue extends React.Component {
@@ -180,13 +183,16 @@ class CategoryValue extends React.Component {
     If and only if true, update the component
     */
     const { props, state } = this;
-    const { categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros } = props;
+    const { categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable } = props;
     const {
       categoryIndex: newCategoryIndex,
       categorySummary: newCategorySummary,
       isSelected: newIsSelected,
       sortDirection: newSortDirection,
-      removeHistZeros: newRemoveHistZeros
+      removeHistZeros: newRemoveHistZeros,
+      currentLayout: newCurrentLayout,
+      isSubsetted: newIsSubsetted,
+      colorTable: newColorTable
     } = nextProps;
 
     const label = categorySummary.categoryValues[categoryIndex];
@@ -217,6 +223,8 @@ class CategoryValue extends React.Component {
       props.categorySummary !== nextProps.categorySummary;
     
     const removeZerosChanged = removeHistZeros !== newRemoveHistZeros;
+    const plotChanged = (isSubsetted !== newIsSubsetted) || (currentLayout !== newCurrentLayout)
+    const colorTableChanged = colorTable.rgb.length !== newColorTable.rgb.length;
     return (
       labelChanged ||
       valueSelectionChange ||
@@ -227,7 +235,9 @@ class CategoryValue extends React.Component {
       countChanged ||
       colorMightHaveChanged ||
       sortDirectionChanged ||
-      removeZerosChanged
+      removeZerosChanged || 
+      plotChanged || 
+      colorTableChanged
     );
   };
 
@@ -514,8 +524,10 @@ class CategoryValue extends React.Component {
       isDilated,
       isSelected,
       categorySummary,
-      label
+      label,
+      userLoggedIn
     } = this.props;
+
     const colorScale = colorTable?.scale;
     const ontologyEnabled = ontology?.enabled ?? false;
     const { editedLabelText } = this.state;
@@ -743,7 +755,7 @@ class CategoryValue extends React.Component {
                               crossfilter,
                               metadataField,
                               label
-                            )}
+                            ) || !userLoggedIn}
                           />
                         )}
                       </CategoryCrossfilterContext.Consumer>
@@ -754,7 +766,7 @@ class CategoryValue extends React.Component {
                           data-testclass="handleEditValue"
                           data-testid={`${metadataField}:${displayString}:edit-label`}
                           onClick={this.activateEditLabelMode}
-                          disabled={annotations.isEditingLabelName}
+                          disabled={annotations.isEditingLabelName || !userLoggedIn}
                         />
                       ) : null}
                       {displayString !== globals.unassignedCategoryLabel ? (
@@ -765,6 +777,7 @@ class CategoryValue extends React.Component {
                           data-testid={`${metadataField}:${displayString}:delete-label`}
                           onClick={this.handleDeleteValue}
                           text={`Delete this label, and reassign all cells to type '${globals.unassignedCategoryLabel}'`}
+                          disabled={!userLoggedIn}
                         />
                       ) : null}
                     </Menu>

@@ -327,7 +327,7 @@ class HistogramBrush extends React.PureComponent {
             method: "mean",
             field: "var",
             column: varIndex,
-            values: setGenes,
+            values: setGenes.slice(0,50),
           },
         },
       ];

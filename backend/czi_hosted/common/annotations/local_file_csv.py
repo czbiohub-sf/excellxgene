@@ -123,15 +123,11 @@ class AnnotationsLocalFile(Annotations):
         if session is None:
             raise AnnotationsError("unable to determine file name for annotations")
 
-        collection = self.get_collection()
-        if collection is None:
-            return None
-
         if data_adaptor is None:
             raise AnnotationsError("unable to determine file name for annotations")
 
         idhash = self._get_userdata_idhash(data_adaptor)
-        return os.path.join(self._get_output_dir(), f"{collection}-{idhash}.csv")
+        return os.path.join(self._get_output_dir(), f"{idhash}.csv")
 
     def _backup(self, fname, max_backups=9):
         """

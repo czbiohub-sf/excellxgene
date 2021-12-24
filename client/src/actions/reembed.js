@@ -8,7 +8,7 @@ import {
 import { _switchEmbedding } from "./embedding";
 import { subsetAction } from "./viewStack";
 import { AnnoMatrixLoader } from "../annoMatrix";
-
+import actions from ".";
 
 function abortableFetch(request, opts, timeout = 0) {
   const controller = new AbortController();
@@ -79,35 +79,23 @@ export function requestReembed(reembedParams,parentName,embName) {
   return async (dispatch, getState) => {
     try {
       await dispatch(subsetAction());
-      const res = await doReembedFetch(dispatch, getState, reembedParams,parentName,embName);
-      const schema = await res.json();
-      dispatch({
-        type: "reembed: request completed",
-      });
+      const state = getState();
+      const { controls } = state;
+      const { wsReembedding } = controls;
 
-      const {
-        annoMatrix: prevAnnoMatrix,
-        obsCrossfilter: prevCrossfilter,
-        layoutChoice,
-      } = getState();
-      const base = prevAnnoMatrix.base().addEmbedding(schema);
-      dispatch({
-        type: "reset subset"
-      })
-      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
-        base,
-        prevCrossfilter,
-        layoutChoice.current,
-        schema.name
-      );
-      dispatch({
-        type: "reembed: add reembedding",
-        schema,
-        annoMatrix,
-        obsCrossfilter,
-      });
+      let cells = state.annoMatrix.rowIndex.labels();
+      cells = Array.isArray(cells) ? cells : Array.from(cells);
 
-      postAsyncSuccessToast("Re-embedding has completed.");
+      wsReembedding.send(JSON.stringify({
+        method: "umap",
+        filter: { obs: { index: cells } },
+        params: reembedParams,
+        parentName: parentName,
+        embName: embName,
+      }))
+      dispatch({
+        type: "reembed: request start"
+      });
     } catch (error) {
       dispatch({
         type: "reembed: request aborted",
@@ -123,7 +111,10 @@ export function requestReembed(reembedParams,parentName,embName) {
 }
 
 
-async function doPreprocessingFetch(dispatch, _getState, reembedParams) {
+async function doPreprocessingFetch(dispatch, getState, reembedParams) {
+  const state = getState();
+  let cells = state.annoMatrix.rowIndex.labels();  
+  cells = Array.isArray(cells) ? cells : Array.from(cells);
   const af = abortableFetch(
     `${API.prefix}${API.version}preprocess`,
     {
@@ -133,7 +124,8 @@ async function doPreprocessingFetch(dispatch, _getState, reembedParams) {
         "Content-Type": "application/json",
       }),
       body: JSON.stringify({
-        params: reembedParams
+        params: reembedParams,
+        filter: { obs: { index: cells } }
       }),
       credentials: "include",
     },
@@ -165,36 +157,19 @@ export function requestPreprocessing(reembedParams) {
   return async (dispatch, getState) => {
     try {
       const {
-        obsCrossfilter: prevCrossfilter,
-        layoutChoice,
-      } = getState();
-      const res = await doPreprocessingFetch(dispatch, getState, reembedParams);
-      const schema = await res.json()
-
-      dispatch({
-        type: "preprocess: request completed",
-      });
-
-      const baseDataUrl = `${API.prefix}${API.version}`;
-      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, schema);
-      dispatch({
-        type: "reset subset"
-      })
-      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
-        annoMatrixNew,
-        prevCrossfilter,
-        layoutChoice.current,
-        layoutChoice.current
-      );
-      
-      dispatch({
-        type: "annoMatrix: init complete",
         annoMatrix,
-        obsCrossfilter
-      });      
-      
-
-      postAsyncSuccessToast("Preprocessing has completed.");
+        controls
+      } = getState();
+      const { wsPreprocessing } = controls;
+      let cells = annoMatrix.rowIndex.labels();  
+      cells = Array.isArray(cells) ? cells : Array.from(cells);
+      wsPreprocessing.send(JSON.stringify({
+        params: reembedParams,
+        filter: { obs: { index: cells } }
+      }))
+      dispatch({
+        type: "preprocess: request start",
+      });
     } catch (error) {
       dispatch({
         type: "preprocess: request aborted",

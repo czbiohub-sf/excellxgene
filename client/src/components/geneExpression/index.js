@@ -1,6 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button, Icon, Collapse, H4, AnchorButton } from "@blueprintjs/core";
+import { Button, Icon, Collapse, H4, AnchorButton, Tooltip } from "@blueprintjs/core";
 import { IconNames } from "@blueprintjs/icons";
 import ParameterInput from "../menubar/parameterinput";
 import GeneSet from "./geneSet";
@@ -18,7 +18,8 @@ import QuickGene from "./quickGene";
     colorAccessor: state.colors.colorAccessor,
     genesets: state.genesets.genesets,
     annoMatrix: state.annoMatrix,
-    reembedParams: state.reembedParameters
+    reembedParams: state.reembedParameters,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class GeneExpression extends React.Component {
@@ -88,6 +89,11 @@ class GeneExpression extends React.Component {
     return els;
   };
   
+  handleSaveGenedata = () => {
+    const { dispatch } = this.props;
+    dispatch(actions.downloadGenedata())
+  } 
+
   handleExpandGeneSets = () => {
     this.setState({
       ...this.state,
@@ -99,17 +105,31 @@ class GeneExpression extends React.Component {
     const { dispatch, reembedParams, annoMatrix } = this.props;
     if(prevProps.reembedParams.dataLayerExpr !== reembedParams.dataLayerExpr){
       // Trigger new data layer.
-      dispatch(actions.requestDataLayerChange(reembedParams.dataLayerExpr)).then(()=>{
-        const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
-        const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
-        const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
-        actions.prefetchEmbeddings(annoMatrixNew);
-        dispatch({
-          type: "annoMatrix: init complete",
-          annoMatrix: annoMatrixNew,
-          obsCrossfilter: obsCrossfilterNew
-        });      
-      })
+      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
+      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
+      annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
+      annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
+      const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
+      actions.prefetchEmbeddings(annoMatrixNew);
+
+      dispatch({
+        type: "annoMatrix: init complete",
+        annoMatrix: annoMatrixNew,
+        obsCrossfilter: obsCrossfilterNew
+      });      
+    } else if(prevProps.reembedParams.logScaleExpr !== reembedParams.logScaleExpr){
+      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
+      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
+      annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
+      annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
+      const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
+      actions.prefetchEmbeddings(annoMatrixNew);
+
+      dispatch({
+        type: "annoMatrix: init complete",
+        annoMatrix: annoMatrixNew,
+        obsCrossfilter: obsCrossfilterNew
+      });      
     }
   }
 
@@ -119,25 +139,57 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix } = this.props;
+    const { dispatch, genesets, annoMatrix, userLoggedIn } = this.props;
     const { geneSetsExpanded } = this.state;
     return (
       <div>
-        <GenesetHotkeys
+       {userLoggedIn ?  <GenesetHotkeys
           dispatch={dispatch}
           genesets={genesets}
-        />
-        <div style={{
-          marginBottom: "20px",
-          textAlign: "right"
-        }}>
-          <ParameterInput
-            label="Data layer"
-            param="dataLayerExpr"
-            options={annoMatrix.schema.layers}
-            tooltipContent={"Expression layer used for visualization and differential expression."}
-            left
-          />                   
+        /> : null}
+
+          <div style={{
+            display: "flex",
+            justifyContent: "left",
+            textAlign: "left", 
+            float: "left",
+            paddingRight: "10px"
+          }}>
+                      
+            <Tooltip
+              content="Save gene sets a `.csv` file."
+              position="bottom"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            >                                              
+              <AnchorButton
+                  type="button"
+                  icon="floppy-disk"
+                  onClick={() => {
+                    this.handleSaveGenedata()
+                  }}
+                /> 
+              </Tooltip>    
+            </div>       
+            <div style={{
+              marginBottom: "20px",
+              display: "flex",
+              justifyContent: "right",
+            }}>                 
+            <ParameterInput
+              label="Log scale"
+              param="logScaleExpr"
+              tooltipContent={"Check to display expressions in log scale."}
+              left
+            />   
+          <div style={{paddingLeft: "10px"}}>
+            <ParameterInput
+              label="Data layer"
+              param="dataLayerExpr"
+              options={annoMatrix.schema.layers}
+              tooltipContent={"Expression layer used for visualization and differential expression."}
+              left
+            /> 
+          </div>     
         </div>               
         <QuickGene/>
         <div>
@@ -165,6 +217,7 @@ class GeneExpression extends React.Component {
               data-testid="open-create-geneset-dialog"
               onClick={this.handleActivateCreateGenesetMode}
               intent="primary"
+              disabled={!userLoggedIn}
             >
               Create new
             </Button>

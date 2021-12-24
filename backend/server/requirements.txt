@@ -1,4 +1,5 @@
 anndata>0.7.4
+authlib>=0.15.4
 boto3>=1.12.18
 click>=7.1.2
 fastobo>=0.6.1
@@ -16,11 +17,13 @@ h5py<3.0.0 # h5py>=3.0.0 had a breaking change; there is a fix in anndata>=0.7.5
 jinja2>=2.11.3  # Flask sub-dependency. Added due to CVE-2020-28493
 numba>=0.51.2,<0.53.0
 numpy>=1.17.5
+python-dotenv
 leidenalg>=0.8.7
 python-igraph>=0.9.6
 packaging>=20.0
 pandas>=1.0,!=1.1  # pandas 1.1 breaks tests, https://github.com/pandas-dev/pandas/issues/35446
 PyYAML>=5.4  # CVE-2020-14343
+PyJWT>=2.3.0
 scipy>=1.4
 flask-sock>=0.4.0
 requests>=2.22.0
@@ -31,3 +34,4 @@ scanorama>=1.7.1
 scanpy>=1.7.0 # Until we move to anndata 0.7.4 scanpy needs to be pinned here
 sam-algorithm>=0.8.7
 hnswlib>=0.5.2
+

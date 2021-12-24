@@ -42,8 +42,10 @@ export function createColorQuery(colorMode, colorByAccessor, schema, genesets) {
 
       const _geneset = genesets.get(colorByAccessor);
       if (_geneset) {
-        const _setGenes = [..._geneset.genes.keys()];
-
+        let _setGenes = [..._geneset.genes.keys()];
+        if (_setGenes.length > 50){
+          _setGenes = _setGenes.slice(0,50)
+        }
         return [
           "X",
           {
@@ -164,8 +166,15 @@ function _createUserColors(data, colorAccessor, schema, userColors) {
 const createUserColors = memoize(_createUserColors);
 
 function _createColorsByCategoricalMetadata(data, colorAccessor, schema) {
-  const { categories } = schema.annotations.obsByName[colorAccessor];
-
+  let { categories } = schema.annotations.obsByName[colorAccessor];
+  const cats = [];
+  for (const c of categories) {
+    if (data.includes(c) && c !== "unassigned") {
+      cats.push(c);
+    }
+  }
+  cats.push("unassigned")
+  categories = cats;
   const scale = d3
     .scaleSequential(interpolateRainbow)
     .domain([0, categories.length]);

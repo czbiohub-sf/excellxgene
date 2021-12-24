@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, InputGroup, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, Button, InputGroup, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -67,7 +67,8 @@ function HotkeysDialog(props) {
     sankeyController: state.sankeyController,
     currCacheKey: state.sankeySelection.currCacheKey,
     maxLink: state.sankeySelection.maxLink,
-    alignmentThreshold: state.sankeySelection.alignmentThreshold
+    alignmentThreshold: state.sankeySelection.alignmentThreshold,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class MenuBar extends React.PureComponent {
@@ -107,41 +108,44 @@ class MenuBar extends React.PureComponent {
   handleSankey = (threshold,reset) => {
     const { dispatch, layoutChoice } = this.props;
     if (!layoutChoice.sankey || !reset) {
-      const prom = dispatch(requestSankey());
-      const links = []
-      const nodes = []
-      prom.then((res) => {
-        let n = []
-        res.edges.forEach(function (item, index) {
-          if (res.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
-            links.push({
-              source: item[0],
-              target: item[1],
-              value: res.weights[index]
+      const res = dispatch(requestSankey(threshold));
+      res.then((resp)=>{
+        if (resp) {
+          const sankey = resp[0];
+          const links = []
+          const nodes = []
+          let n = []
+          sankey.edges.forEach(function (item, index) {
+            if (sankey.weights[index] > threshold && item[0].split('_').slice(1).join('_') !== "unassigned" && item[1].split('_').slice(1).join('_') !== "unassigned"){
+              links.push({
+                source: item[0],
+                target: item[1],
+                value: sankey.weights[index]
+              })
+              n.push(item[0])
+              n.push(item[1])
+            }
+          });   
+          n = n.filter((item, i, ar) => ar.indexOf(item) === i);
+    
+          n.forEach(function (item){
+            nodes.push({
+              id: item
             })
-            n.push(item[0])
-            n.push(item[1])
-          }
-        });   
-        n = n.filter((item, i, ar) => ar.indexOf(item) === i);
-  
-        n.forEach(function (item){
-          nodes.push({
-            id: item
           })
-        })
-        
-        const data = {links: links, nodes: nodes}
-        dispatch({type: "sankey: set data",data: data})
-        if (reset){
-          dispatch({type: "toggle sankey"})
-          dispatch({type: "sankey: set alignment score threshold", threshold: 0})   
-          this.setState({
-            ...this.state,
-            threshold: 0
-          })
+          const d = {links: links, nodes: nodes}
+          dispatch({type: "sankey: set data",data: d})
         }
-      })      
+      })
+      if (reset){
+        dispatch({type: "toggle sankey"})
+        dispatch({type: "sankey: set alignment score threshold", threshold: 0})   
+        this.setState({
+          ...this.state,
+          threshold: 0
+        })
+      }
+      return res;      
     } else {
       dispatch({type: "sankey: reset"})
       dispatch({type: "toggle sankey"})
@@ -151,7 +155,6 @@ class MenuBar extends React.PureComponent {
         threshold: 0
       })      
     }
-
   };
   componentDidUpdate = (prevProps) => {
     if (this.props.layoutChoice.current !== prevProps.layoutChoice.current){
@@ -163,17 +166,9 @@ class MenuBar extends React.PureComponent {
   }
   handleSaveData = () => {
     const { dispatch } = this.props;
-    const { saveName } = this.state;
-    dispatch(actions.requestSaveAnndataToFile(saveName))
+    dispatch(actions.downloadData())
   }
-  handleReload = () => {
-    const { dispatch } = this.props;
-    dispatch(actions.requestReloadBackend())
-  }
-  handleReloadFull = () => {
-    const { dispatch } = this.props;
-    dispatch(actions.requestReloadFullBackend())
-  }
+
   isClipDisabled = () => {
     /*
     return true if clip button should be disabled.
@@ -327,7 +322,8 @@ class MenuBar extends React.PureComponent {
       outputController,
       sankeyController,
       currCacheKey,
-      maxLink
+      maxLink,
+      userLoggedIn
     } = this.props;
     const { pendingClipPercentiles, saveName, threshold } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
@@ -338,6 +334,7 @@ class MenuBar extends React.PureComponent {
       selectionTool === "brush"
         ? ["Brush selection", "Lasso selection"]
         : ["select", "polygon-filter"];
+
     return (
       <div
         style={{
@@ -352,7 +349,6 @@ class MenuBar extends React.PureComponent {
           zIndex: 3,
         }}
       >
-        <AuthButtons {...{ auth, userInfo }} />
         <UndoRedoReset
           dispatch={dispatch}
           undoDisabled={undoDisabled}
@@ -375,7 +371,6 @@ class MenuBar extends React.PureComponent {
           }
         />
         <ButtonGroup className={styles.menubarButton}>
-          <Preprocessing />          
           <Reembedding />
         </ButtonGroup>
         <Tooltip
@@ -415,6 +410,7 @@ class MenuBar extends React.PureComponent {
                   data: "select",
                 });
               }}
+              disabled={layoutChoice.sankey}
             />
           </Tooltip>
           <Tooltip
@@ -433,6 +429,7 @@ class MenuBar extends React.PureComponent {
                   data: "zoom",
                 });
               }}
+              disabled={layoutChoice.sankey}
             />
           </Tooltip>
           <Tooltip
@@ -450,6 +447,7 @@ class MenuBar extends React.PureComponent {
                   data: "lidar",
                 });
               }}
+              disabled={layoutChoice.sankey}
             />       
           </Tooltip>
           <Tooltip
@@ -459,12 +457,16 @@ class MenuBar extends React.PureComponent {
           >            
             <AnchorButton
                 type="button"
-                icon="duplicate"
+                icon="fork"
                 active={layoutChoice.sankey}
                 disabled={!displaySankey && !layoutChoice.sankey}
                 loading={loadingSankey}
                 onClick={() => {
                   this.handleSankey(0,true)
+                  dispatch({
+                    type: "change graph interaction mode",
+                    data: "select",
+                  });                  
                 }}
               />           
             </Tooltip>
@@ -476,7 +478,7 @@ class MenuBar extends React.PureComponent {
           handleSubset={this.handleSubset}
           handleSubsetReset={this.handleSubsetReset}
         />
-        {disableDiffexp ? null : <DiffexpButtons />}
+        {(disableDiffexp || !userLoggedIn) ? null : <DiffexpButtons />}
         <ButtonGroup className={styles.menubarButton}>        
         <Tooltip
             content="Click to display hotkey menu ( or SHIFT+?)"
@@ -495,55 +497,19 @@ class MenuBar extends React.PureComponent {
         <HotkeysDialog open={this.state.hotkeysDialogOpen}/>
         <ButtonGroup className={styles.menubarButton}>   
           <Tooltip
-            content="Reset backend to the full dataset."
+            content="Save current subset to an `.h5ad` file."
             position="bottom"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          >   
-            <AnchorButton
-                type="button"
-                icon="reset"
-                loading={loading}
-                onClick={() => {
-                  this.handleReloadFull()
-                }}
-              /> 
-          </Tooltip>             
-          <Tooltip
-            content="Write current subset into the backend."
-            position="bottom"
-            hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          >   
-          <AnchorButton
-              type="button"
-              icon="refresh"
-              loading={loading}
-              onClick={() => {
-                this.handleReload()
-              }}
-            /> 
-            </Tooltip> 
-            <Tooltip
-              content="Save current subset to an `.h5ad` file."
-              position="bottom"
-              hoverOpenDelay={globals.tooltipHoverOpenDelay}
-            >                                              
+          >                                              
             <AnchorButton
                 type="button"
                 icon="floppy-disk"
                 loading={loading}
-                disabled={saveName===""}
                 onClick={() => {
                   this.handleSaveData()
                 }}
               /> 
-            </Tooltip>
-
-            <InputGroup
-                id="save-output-name"
-                placeholder="Enter an output path to save the data to an h5ad file..."
-                value={saveName}
-                onChange={this.handleSaveChange}
-            />                       
+            </Tooltip>               
           </ButtonGroup>
 
           {layoutChoice.sankey ? 
@@ -552,7 +518,8 @@ class MenuBar extends React.PureComponent {
         <div style={{
           width: "20%",
           textAlign: "right",
-          justifyContent: "right"
+          display: "flex",
+          justifyContent: "right",
         }}>
           <AnchorButton
           type="button"
@@ -564,7 +531,15 @@ class MenuBar extends React.PureComponent {
           disabled={loadingSankey}
         >
           Recalculate sankey
-        </AnchorButton> </div> : null} 
+        </AnchorButton>
+        <div style={{paddingLeft: "10px"}}>
+        <AnchorButton
+          type="button"
+          disabled={loadingSankey}
+          icon="floppy-disk"
+          id="saveSankeyButton"
+        /></div>
+         </div> : null} 
         {layoutChoice.sankey ? 
         <div style={{
           width: "80%",
@@ -576,20 +551,27 @@ class MenuBar extends React.PureComponent {
           justifyContent: "space-between",
           display: "flex"
         }}>
-          <div style={{paddingRight: "15px"}}>Edge threshold:</div> 
+          <div style={{paddingRight: "15px"}}>{<Tooltip
+          content="Edges with weights below this threshold are filtered out."
+          position="bottom"
+          style={{
+            width: "inherit"
+          }}
+        >Edge threshold:</Tooltip>}</div> 
           <div style={{
             width: "inherit"
           }}>
-          <Slider
-            min={0}
-            max={maxLink}
-            stepSize={parseFloat((maxLink/100).toFixed(2))}
-            labelStepSize={maxLink}
-            showTrackFill={false}
-            onRelease={this.onRelease}
-            onChange={this.onSliderChange}
-            value={threshold}
-          /> </div></div>: null}         
+        <Slider
+        min={0}
+        max={maxLink}
+        stepSize={Math.max(parseFloat((maxLink/100).toFixed(2)),0.001)}
+        labelStepSize={Math.max(maxLink,0.001)}
+        showTrackFill={false}
+        onRelease={this.onRelease}
+        onChange={this.onSliderChange}
+        value={threshold}
+      />
+           </div></div>: null}         
       </div>
     );
   }

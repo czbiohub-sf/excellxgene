@@ -116,7 +116,6 @@ class Autosave extends React.Component {
         }}
       >
         {this.statusMessage()}
-        <FilenameDialog />
       </div>
     );
   }

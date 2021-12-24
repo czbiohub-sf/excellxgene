@@ -11,7 +11,7 @@ export const reembedController = (
     case "reembed: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "reembed: request aborted":
@@ -38,7 +38,7 @@ export const preprocessController = (
     case "preprocess: request start": {
       return {
         ...state,
-        pendingFetch: action.abortableFetch,
+        pendingFetch: true,
       };
     }
     case "preprocess: request aborted":
@@ -67,7 +67,7 @@ export const defaultPrepParams = {
   doBatchPrep: false,
   batchPrepKey: "",
   batchPrepLabel: "",
-  dataLayer: "orig.exprs",
+  dataLayer: "orig.X",
   logTransform: false,
   sumNormalizeCells: false  
 };
@@ -92,7 +92,8 @@ const defaultDimredParams = {
   scaleData: false,
   weightModeSAM: "rms",
   umapMinDist: 0.1,
-  dataLayerExpr: "X"
+  dataLayerExpr: "X",
+  logScaleExpr: false
 };
 export const defaultReembedParams = {
   ...defaultPrepParams,
@@ -103,10 +104,10 @@ export const defaultReembedParams = {
 export const reembedParameters = (state = defaultReembedParams, action) => {
   switch (action.type) {
     case "reembed: load": {
-      const { dataLayerExpr: layerExpr } = state;
-      const { params} = action;
-      const {dataLayerExpr: _, ...newParams} = params;
-      return {...newParams, dataLayerExpr: layerExpr};
+      const { dataLayerExpr: layerExpr, logScaleExpr: logExpr } = state;
+      const { params } = action;
+      const {dataLayerExpr: a, logScaleExpr: b, ...newParams} = params;
+      return {...newParams, dataLayerExpr: layerExpr, logScaleExpr: logExpr};
     }
     case "reembed: set parameter": {
       const { batchPrepParams, batchPrepKey, batchPrepLabel } = state;
