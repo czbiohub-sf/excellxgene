@@ -1,2 +1,0 @@
-python-igraph
-louvain>=0.6
