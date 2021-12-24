@@ -1,4 +1,4 @@
-<img src="./docs/cellxgene-logo.png" width="300">
+<img src="./cellxgene-logo.png" width="300">
 
 # Exploratory CellxGene (ExCellxGene)
 This fork implements some of the key features that have been highly requested by the data science team at CZBiohub.
