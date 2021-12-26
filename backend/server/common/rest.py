@@ -114,7 +114,12 @@ def schema_get_helper(data_adaptor):
     
     if "X" not in layers:
         layers = ["X"] + layers
-            
+    
+    var_keys = []
+    for v in list(data_adaptor.data.var.keys()):
+        if ';;tMean' not in v and v != 'name_0':
+            var_keys.append(v)
+
     schema = {
         "dataframe": {"nObs": data_adaptor.cell_count, "nVar": data_adaptor.gene_count, "type": str(data_adaptor.data.X.dtype)},
         "annotations": {
@@ -122,7 +127,8 @@ def schema_get_helper(data_adaptor):
             "var": {"index": data_adaptor.parameters.get("var_names"), "columns": []},
         },
         "layout": {"obs": []},
-        "layers": layers
+        "layers": layers,
+        "var_keys": var_keys
     }
     userID = _get_user_id(data_adaptor)   
     
@@ -162,6 +168,13 @@ def schema_get(data_adaptor):
     schema = schema_get_helper(data_adaptor)
     return make_response(jsonify({"schema": schema}), HTTPStatus.OK)
 
+def gene_info_get(request,data_adaptor):
+    gene = request.args.get("gene", None)
+    varM = request.args.get("varM", None)    
+    if varM is not None and gene is not None:
+        return make_response(jsonify({"response": data_adaptor.data.var.set_index("name_0")[varM][gene]}), HTTPStatus.OK)
+    else:
+        return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
 
 def config_get(app_config, data_adaptor):
     config = get_client_config(app_config, data_adaptor)

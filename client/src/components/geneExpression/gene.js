@@ -1,7 +1,8 @@
 import React from "react";
 import { connect } from "react-redux";
-
-import { Button, Icon } from "@blueprintjs/core";
+import * as globals from "../../globals";
+import { AnchorButton, Button, Icon, MenuItem, Position, Tooltip, } from "@blueprintjs/core";
+import { Select } from "@blueprintjs/select";
 import Truncate from "../util/truncate";
 import HistogramBrush from "../brushableHistogram";
 
@@ -13,6 +14,7 @@ const MINI_HISTOGRAM_WIDTH = 110;
   const { gene } = ownProps;
 
   return {
+    var_keys: state.annoMatrix.schema.var_keys,
     isColorAccessor: state.colors.colorAccessor === gene,
     isScatterplotXXaccessor: state.controls.scatterplotXXaccessor === gene,
     isScatterplotYYaccessor: state.controls.scatterplotYYaccessor === gene,
@@ -23,6 +25,8 @@ class Gene extends React.Component {
     super(props);
     this.state = {
       geneIsExpanded: false,
+      geneInfo: "",
+      varMetadata: ""
     };
   }
 
@@ -66,11 +70,11 @@ class Gene extends React.Component {
       isScatterplotXXaccessor,
       isScatterplotYYaccessor,
       removeHistZeros,
-      removeGene
+      removeGene,
+      var_keys,
     } = this.props;
-    const { geneIsExpanded } = this.state;
+    const { geneIsExpanded, varMetadata, geneInfo } = this.state;
     const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0);
-
     return (
       <div>
         <div
@@ -186,6 +190,62 @@ class Gene extends React.Component {
             />
           </div>
         </div>
+        {geneIsExpanded && 
+          <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              width: "inherit",
+              paddingTop:"5px",
+              paddingBotton: "5px"
+            }}>
+              <Tooltip
+                content={"The gene metadata to display."}
+                position={Position.BOTTOM}
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+              >   
+                <Select
+                items={
+                  var_keys
+                }
+                filterable={false}
+                itemRenderer={(d, { handleClick }) => {
+                  return (
+                    <MenuItem
+                      onClick={handleClick}
+                      key={d}
+                      text={d}
+                    />
+                  );
+                }}
+                onItemSelect={(d) => {
+                  this.setState({
+                    ...this.state,
+                    varMetadata: d
+                  })
+                  dispatch(actions.fetchGeneInfo(gene, d)).then((res) => {
+                    this.setState({
+                      ...this.state,
+                      geneInfo: res
+                    })
+                  })                  
+                }}
+              >
+                <AnchorButton
+                  text={`Metadata: ${varMetadata}`}
+                  rightIcon="double-caret-vertical"
+                />
+              </Select>
+            </Tooltip>
+            <div style={{margin: "auto 0"}}>
+            {geneInfo} 
+            </div>
+            
+          </div>}          
+ 
         {geneIsExpanded && <HistogramBrush isUserDefined field={gene} removeHistZeros={removeHistZeros} />}
       </div>
     );

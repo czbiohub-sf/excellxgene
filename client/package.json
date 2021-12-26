@@ -1,9 +1,9 @@
 {
-  "name": "cellxgene",
-  "version": "0.16.7",
+  "name": "excellxgene",
+  "version": "2.1.1",
   "license": "MIT",
   "description": "cellxgene is a web application for the interactive exploration of single cell sequence data.",
-  "repository": "https://github.com/chanzuckerberg/cellxgene",
+  "repository": "https://github.com/czbiohub/excellxgene",
   "scripts": {
     "build": "npm run clean && webpack --config",
     "clean": "rimraf build",

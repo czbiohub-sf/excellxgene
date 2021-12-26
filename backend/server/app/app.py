@@ -328,6 +328,12 @@ class ReembedParametersObsmAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.reembed_parameters_obsm_put(request, data_adaptor)
 
+class GeneInfoAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.gene_info_get(request, data_adaptor)
+
 class ReembedParametersAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
@@ -392,6 +398,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(UserInfoAPI, "/userinfo")
     add_resource(UserInfoAuth0API, "/userInfo")
     add_resource(HostedModeAPI, "/hostedMode")
+    add_resource(GeneInfoAPI, "/geneInfo")
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")
     add_resource(AnnotationsVarAPI, "/annotations/var")

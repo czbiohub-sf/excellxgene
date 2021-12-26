@@ -721,6 +721,22 @@ function requestSingleGeneExpressionCountsForColoringPOST(gene) {
     gene,
   };
 }
+export function fetchGeneInfo(gene,varMetadata) {
+  return async (_dispatch, _getState) => {
+    const res = await fetch(
+      `${API.prefix}${API.version}geneInfo?gene=${gene}&varM=${varMetadata}`,
+      {
+         headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        credentials: "include",
+      },
+    );  
+    const r = await res.json()
+    return r.response;  
+  }
+}
 
 const requestUserDefinedGene = (gene) => ({
   type: "request user defined gene success",
@@ -866,6 +882,7 @@ function fetchJson(pathAndQuery) {
 }
 
 export default {
+  fetchGeneInfo,
   prefetchEmbeddings,
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,
