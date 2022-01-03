@@ -28,7 +28,7 @@ const Controls = (
   For now, log anything looking like an error to the console.
   */
   if (action.error || /error/i.test(action.type)) {
-    console.error(action.error);
+    console.error(action?.error ?? "Error.");
   }
 
   switch (action.type) {

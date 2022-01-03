@@ -5,6 +5,7 @@ import numpy as np
 from packaging import version
 import pandas as pd
 import scipy as sp
+import traceback
 from pandas.core.dtypes.dtypes import CategoricalDtype
 from scipy import sparse
 from server_timing import Timing as ServerTiming
@@ -75,21 +76,22 @@ def anndata_version_is_pre_070():
     minor = anndata_version[1] if len(anndata_version) > 1 else 0
     return major == 0 and minor < 7
 
-def _callback_fn(res,ws,cfn,data,post_processing):
+def _callback_fn(res,ws,cfn,data,post_processing,tstart):
     if post_processing is not None:
         res = post_processing(res)
-    d = {"response": res,"cfn": cfn}
+    d = {"response": res,"cfn": cfn, "fail": False}
     d.update(data)
     ws.send(jsonify_numpy(d))
     global process_count
     process_count = process_count + 1
-    print("Process count:",process_count)
+    print("Process count:",process_count,"Time elsapsed:",time.time()-tstart,"seconds")
 
 
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
-    _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing)
+    _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing,tstart=time.time())
+    _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn)
     if current_app.hosted_mode:
-        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_error_callback)
+        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
     else:
         try:
             res = fn(*args)
@@ -97,8 +99,10 @@ def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
         except Exception as e:
             _error_callback(e)
 
-def _error_callback(e):
-    print("ERROR",e)
+def _error_callback(e, ws, cfn):
+    ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
+    traceback.print_exception(type(e), e, e.__traceback__)
+
     
 def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff):
     to_remove = []
@@ -260,7 +264,6 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
     obs_mask = AnnDataDict['obs_mask']    
     with ServerTiming.time("layout.compute"):        
         adata = compute_preprocess(shm, shm_csc, AnnDataDict, reembedParams, userID)
-
         if adata.isbacked:
             raise NotImplementedError("Backed mode is incompatible with re-embedding")
 
@@ -536,7 +539,6 @@ def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID):
     obs = AnnDataDict['obs']
     root = AnnDataDict['X_root']
     obs_mask = AnnDataDict['obs_mask']
-    
     kkk=layers[0]
     a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
     to_remove.extend([a,b,c])
@@ -793,7 +795,6 @@ def initialize_socket(da):
                         "X_root":da._obsm_init["X_root"],
                         "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
                     }
-
                     def post_processing(res):
                         da.schema["layout"]["obs"].append(res)
                         return res

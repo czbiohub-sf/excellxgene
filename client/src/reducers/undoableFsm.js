@@ -173,6 +173,12 @@ const createFsmTransitions = (
       action: stashPending,
     },
     {
+      event: "request differential expression error",
+      from: "diffexp in progress",
+      to: "done",
+      action: cancelPending,
+    },    
+    {
       event: "request user defined gene error",
       from: "diffexp in progress",
       to: "done",

@@ -369,7 +369,35 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
 
   const onMessage = async (event) => {
     const data = JSON.parse(event.data);
-    if (data.cfn === "diffexp"){
+    if (data.fail) {
+      if (data.cfn === "diffexp") {
+        dispatch({
+          type: "request differential expression error",
+        });
+        postAsyncFailureToast("Differential expression error.");
+      } else if (data.cfn === "reembedding") {
+        dispatch({
+          type: "reembed: request aborted",
+        });        
+        postAsyncFailureToast("Reembedding error.");
+      } else if (data.cfn === "sankey") {
+        dispatch({
+          type: "sankey: request aborted",
+        });        
+        postAsyncFailureToast("Sankey calculation error.");
+      } else if (data.cfn === "leiden") {
+        dispatch({
+          type: "leiden: request aborted",
+        });        
+        postAsyncFailureToast("Leiden clustering error.");
+      } else if (data.cfn === "downloadAnndata") {
+        dispatch({
+          type: "output data: request aborted",
+        });        
+        postAsyncFailureToast("Data output error.");
+      }
+
+    } else if (data.cfn === "diffexp"){
       const { annoMatrix, genesets } = getState();
       const { diffExpListsLists } = genesets;
       const n = data?.nameList?.length-1 ?? -1
