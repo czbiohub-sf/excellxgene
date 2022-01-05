@@ -16,7 +16,6 @@ gunicorn>=20.0.4
 h5py<3.0.0 # h5py>=3.0.0 had a breaking change; there is a fix in anndata>=0.7.5
 jinja2>=2.11.3  # Flask sub-dependency. Added due to CVE-2020-28493
 numba>=0.51.2,<0.53.0
-numpy>=1.17.5
 python-dotenv
 leidenalg>=0.8.7
 python-igraph>=0.9.6
@@ -26,12 +25,15 @@ PyYAML>=5.4  # CVE-2020-14343
 PyJWT>=2.3.0
 scipy>=1.4
 flask-sock>=0.4.0
-requests>=2.22.0
 scikit-misc
 s3fs==0.4.2
 bbknn>=1.5.1
 scanorama>=1.7.1
 scanpy>=1.7.0 # Until we move to anndata 0.7.4 scanpy needs to be pinned here
 sam-algorithm>=0.8.7
-hnswlib>=0.5.2
-
+hnswlib==0.5.2
+numpy==1.21.5
+Pillow==8.4.0
+requests==2.26.0
+scikit-learn==1.0.1
+tables==3.6.1
