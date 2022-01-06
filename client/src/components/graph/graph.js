@@ -79,6 +79,7 @@ function createModelTF() {
   pointDilation: state.pointDilation,
   genesets: state.genesets.genesets,
   multiselect: state.graphSelection.multiselect,
+  modifyingLayouts: state.controls.modifyingLayouts
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -598,57 +599,61 @@ class Graph extends React.Component {
       crossfilter,
       pointDilation,
       viewport,
+      modifyingLayouts
     } = props.watchProps;
-    const { modelTF } = this.state;
+    if (!(modifyingLayouts)){
+      const { modelTF } = this.state;
+      const [layoutDf, colorDf, pointDilationDf] = await this.fetchData(
+        annoMatrix,
+        layoutChoice,
+        colorsProp,
+        pointDilation
+      );
 
-    const [layoutDf, colorDf, pointDilationDf] = await this.fetchData(
-      annoMatrix,
-      layoutChoice,
-      colorsProp,
-      pointDilation
-    );
+      const { currentDimNames } = layoutChoice;
+      const X = layoutDf.col(currentDimNames[0]).asArray();
+      const Y = layoutDf.col(currentDimNames[1]).asArray();
 
-    const { currentDimNames } = layoutChoice;
-    const X = layoutDf.col(currentDimNames[0]).asArray();
-    const Y = layoutDf.col(currentDimNames[1]).asArray();
+      const positions = this.computePointPositions(X, Y, modelTF);
+      const colorTable = this.updateColorTable(colorsProp, colorDf);
+      const colors = this.computePointColors(colorTable.rgb);
 
-    const positions = this.computePointPositions(X, Y, modelTF);
-    const colorTable = this.updateColorTable(colorsProp, colorDf);
-    const colors = this.computePointColors(colorTable.rgb);
+      const { colorAccessor } = colorsProp;
+      const colorByData = colorDf?.col(colorAccessor)?.asArray();
 
-    const { colorAccessor } = colorsProp;
-    const colorByData = colorDf?.col(colorAccessor)?.asArray();
+      const {
+        metadataField: pointDilationCategory,
+        categoryField: pointDilationLabel,
+      } = pointDilation;
+      const pointDilationData = pointDilationDf
+        ?.col(pointDilationCategory)
+        ?.asArray();
 
-    const {
-      metadataField: pointDilationCategory,
-      categoryField: pointDilationLabel,
-    } = pointDilation;
-    const pointDilationData = pointDilationDf
-      ?.col(pointDilationCategory)
-      ?.asArray();
+      const flags = this.computePointFlags(
+        crossfilter,
+        colorByData,
+        colorsProp.colorMode,
+        colorDf,
+        pointDilationData,
+        pointDilationLabel
+      );
+      this.setState((state) => {
+        return { ...state, colorState: { colors, colorDf, colorTable } };
+      });
 
-    const flags = this.computePointFlags(
-      crossfilter,
-      colorByData,
-      colorsProp.colorMode,
-      colorDf,
-      pointDilationData,
-      pointDilationLabel
-    );
-    this.setState((state) => {
-      return { ...state, colorState: { colors, colorDf, colorTable } };
-    });
-
-    const { width, height } = viewport;
+      const { width, height } = viewport;
 
 
-    return {
-      positions,
-      colors,
-      flags,
-      width,
-      height,
-    };
+      return {
+        positions,
+        colors,
+        flags,
+        width,
+        height,
+      };
+    } else {
+      return this.cachedAsyncProps;
+    }
   };
 
   async fetchData(annoMatrix, layoutChoice, colors, pointDilation) {
@@ -1116,7 +1121,8 @@ class Graph extends React.Component {
       layoutChoice,
       pointDilation,
       crossfilter,
-      sankeyPlotMode
+      sankeyPlotMode,
+      modifyingLayouts
     } = this.props;
     const {
       modelTF,
@@ -1243,6 +1249,7 @@ class Graph extends React.Component {
             pointDilation,
             crossfilter,
             viewport,
+            modifyingLayouts
           }}
         >
           <Async.Pending initial>

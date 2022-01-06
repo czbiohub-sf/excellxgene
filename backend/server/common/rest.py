@@ -116,9 +116,11 @@ def schema_get_helper(data_adaptor):
         layers = ["X"] + layers
     
     latent_spaces = []
+    initial_embeddings = []
     for k in data_adaptor._obsm_init.keys():
         if data_adaptor._obsm_init[k].shape[1] > 2:
             latent_spaces.append(k)
+        initial_embeddings.append(k if k[:2]!="X_" else k[2:])
     
     var_keys = []
     for v in list(data_adaptor.data.var.keys()):
@@ -134,7 +136,8 @@ def schema_get_helper(data_adaptor):
         "layout": {"obs": []},
         "layers": layers,
         "var_keys": var_keys,
-        "latent_spaces": latent_spaces
+        "latent_spaces": latent_spaces,
+        "initial_embeddings": initial_embeddings
     }
     userID = _get_user_id(data_adaptor)   
     
@@ -460,13 +463,14 @@ def delete_obsm_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     if embNames is not None:
         for embName in embNames:
-            
             if os.path.exists(f"{userID}/emb/{embName}.p"):
                 os.remove(f"{userID}/emb/{embName}.p")
             if os.path.exists(f"{userID}/nnm/{embName}.p"):
                 os.remove(f"{userID}/nnm/{embName}.p")
             if os.path.exists(f"{userID}/params/{embName}.p"):
                 os.remove(f"{userID}/params/{embName}.p")                
+            if os.path.exists(f"{userID}/pca/{embName}.p"):
+                os.remove(f"{userID}/pca/{embName}.p")                                
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
@@ -474,7 +478,7 @@ def delete_obsm_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
 
-def initialize_user(data_adaptor):
+def initialize_user(data_adaptor):            
     userID = _get_user_id(data_adaptor)
     data_adaptor._initialize_user_folders(userID)           
 
@@ -494,9 +498,14 @@ def rename_obsm_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     if embNames is not None and oldName is not None and newName is not None:
         for embName in embNames:
-            os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{embName.replace(oldName,newName)}.p")
-            os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{embName.replace(oldName,newName)}.p")
-            os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{embName.replace(oldName,newName)}.p")
+            if os.path.exists(f"{userID}/emb/{embName}.p"):
+                os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{embName.replace(oldName,newName)}.p")
+            if os.path.exists(f"{userID}/nnm/{embName}.p"):
+                os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{embName.replace(oldName,newName)}.p")
+            if os.path.exists(f"{userID}/params/{embName}.p"):
+                os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{embName.replace(oldName,newName)}.p")
+            if os.path.exists(f"{userID}/pca/{embName}.p"):
+                os.rename(f"{userID}/pca/{embName}.p",f"{userID}/pca/{embName.replace(oldName,newName)}.p")
     try:
         return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:

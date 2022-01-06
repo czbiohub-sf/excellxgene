@@ -62,7 +62,7 @@ def desktop_mode_only(f):
 def auth0_token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = 'profile' in session
+        token = 'excxg_profile' in session
         # return 401 if token is not passed
         if not token and current_app.hosted_mode:
             return jsonify({'message' : 'Authorization missing.'}), 401
@@ -1523,13 +1523,12 @@ class AnndataAdaptor(DataAdaptor):
     def annotation_to_fbs_matrix(self, axis, fields=None, labels=None):
         if axis == Axis.OBS:
             if labels is not None and not labels.empty:
-                labels["name_0"] = self.data.obs["name_0"]
+                labels["name_0"] = list(self.data.obs["name_0"])
                 df = labels
             else:
                 df = self.data.obs
         else:
             df = self.data.var
-
         if fields is not None and len(fields) > 0:
             df = df[fields]
         return encode_matrix_fbs(df, col_idx=df.columns)

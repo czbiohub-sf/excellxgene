@@ -31,7 +31,7 @@ ONE_WEEK = 7 * 24 * 60 * 60
 def auth0_token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = 'profile' in session
+        token = 'excxg_profile' in session
         # return 401 if token is not passed
         if not token and current_app.hosted_mode:
             return jsonify({'message' : 'Authorization missing.'}), 401
@@ -191,8 +191,8 @@ class AnnotationsObsAPI(Resource):
 class UserInfoAuth0API(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     def get(self):
-        if 'profile' in session:
-            return make_response(jsonify({"response": session['profile']}), HTTPStatus.OK)
+        if 'excxg_profile' in session:
+            return make_response(jsonify({"response": session['excxg_profile']}), HTTPStatus.OK)
         else:
             return make_response(jsonify({"response": None}), HTTPStatus.OK)            
 

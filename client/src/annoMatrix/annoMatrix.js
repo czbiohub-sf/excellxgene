@@ -51,7 +51,7 @@ export default class AnnoMatrix {
     /*
     return the fields present in the AnnoMatrix instance.
     */
-    return ["obs", "var", "emb", "X", "layers", "var_keys", "latent_spaces"];
+    return ["obs", "var", "emb", "X", "layers", "var_keys", "latent_spaces", "initial_embeddings"];
   }
 
   constructor(schema, nObs, nVar, rowIndex = null) {
@@ -453,6 +453,7 @@ export default class AnnoMatrix {
 
     /* find cached columns we need, and GC the rest */
     const cachedColumns = this._resolveCachedQueries(field, queries);
+    
     this._gcFetchCleanup(field, cachedColumns);
 
     /* find any query not already cached */

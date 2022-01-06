@@ -31,7 +31,7 @@ load_dotenv()
 def auth0_token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = 'profile' in session
+        token = 'excxg_profile' in session
         # return 401 if token is not passed
         if not token and current_app.hosted_mode:
             return jsonify({'message' : 'Authorization missing.'}), 401
@@ -543,8 +543,7 @@ def launch(
             userinfo = resp.json()
             # Store the user information in flask session.
             session['jwt_payload'] = userinfo
-            session['profile'] = userinfo
-            session['profile']['excxgLoggedIn'] = True
+            session['excxg_profile'] = userinfo
             
             annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
             userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
@@ -562,7 +561,7 @@ def launch(
             # Redirect user to logout endpoint
             params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
             return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
-
+        
     try:
         server.app.run(
             host=server_config.app__host,

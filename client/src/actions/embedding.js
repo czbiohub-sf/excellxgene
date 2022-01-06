@@ -65,10 +65,11 @@ export const requestDeleteEmbedding = (toDelete) => async (
 
 export const requestRenameEmbedding = (toRename,oldName,newName) => async (
   dispatch,
-  getState
+  _getState
 ) => {
-const { controls } = getState();
-const { username } = controls;
+  
+dispatch({type: "modifying layouts", modifyingLayouts: true})
+
 const res = await fetch(
   `${API.prefix}${API.version}layout/rename`,
   {
@@ -85,8 +86,8 @@ const res = await fetch(
     credentials: "include",
   }
 );
-const schema = await res.json();
 
+const schema = await res.json();
 const baseDataUrl = `${API.prefix}${API.version}`;
 const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
 const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);   
@@ -96,6 +97,8 @@ dispatch({
   annoMatrix: annoMatrix,
   obsCrossfilter: obsCrossfilter,
 });   
+
+dispatch({type: "modifying layouts", modifyingLayouts: false})
 
 if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
   return schema;

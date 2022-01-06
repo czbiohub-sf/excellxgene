@@ -200,18 +200,14 @@ class AnnotationsLocalFile(Annotations):
         Return a short hash that weakly identifies the user and dataset.
         Used to create safe annotations output file names.
         """
-        useGuest = False
-        if 'profile' not in session:
-            useGuest = True
-        elif 'excxgLoggedIn' not in session['profile']:
-            useGuest = True
+        useGuest = 'excxg_profile' not in session
 
         if useGuest:
             id = (data_adaptor.get_location()).encode()
             guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")            
             idhash = guest_idhash
         else:
-            uid = session['profile']['sub']
+            uid = session['excxg_profile']['sub']
             id = (uid + data_adaptor.get_location()).encode()
             idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
         return idhash

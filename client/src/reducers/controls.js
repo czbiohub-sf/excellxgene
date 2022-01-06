@@ -20,7 +20,8 @@ const Controls = (
     allGenes: null,
     datasetDrawer: false,
     userInfo: null,
-    hostedMode: false
+    hostedMode: false,
+    modifyingLayouts: false
   },
   action
 ) => {
@@ -51,7 +52,13 @@ const Controls = (
         ...state,
         [action.name]: action.ws
       };
-    }    
+    }   
+    case "modifying layouts": {
+      return {
+        ...state,
+        modifyingLayouts: action.modifyingLayouts
+      }
+    } 
     case "reset subset": {
       return {
         ...state,

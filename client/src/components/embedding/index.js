@@ -146,6 +146,7 @@ class Embedding extends React.PureComponent {
   }
   render() {
     const { layoutChoice, schema, crossfilter } = this.props;
+    
     const { newLayoutText, isEmbeddingExpanded } = this.state;
     const { annoMatrix } = crossfilter;
     return (
@@ -205,6 +206,7 @@ class Embedding extends React.PureComponent {
                 activateEditLayoutMode={this.activateEditLayoutMode}
                 isEmbeddingExpanded={isEmbeddingExpanded}
                 handleEmbeddingExpansionChange={this.handleEmbeddingExpansionChange}
+                initEmbeddings={annoMatrix.schema?.initial_embeddings ?? []}
               />
               <AnnoDialog
                 isActive={
@@ -272,7 +274,7 @@ so i can use current indented embedding tree, but the node I give it is going to
 
 */
 
-const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange) => {
+const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange, initEmbeddings) => {
   const children = tree[node]?.children;
   els.push(
     (isEmbeddingExpanded?.[tree[node].parent] ?? tree[tree[node].parent].expandedByDefault) ? <Radio
@@ -301,7 +303,7 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
         }}                    
         /> : null}
 
-        {node !== "root" ?
+        {(node !== "root" && !initEmbeddings.includes(node)) ?
       <AnchorButton
           icon="more"
           data-testid={`${node}:edit-layout-mode`}
@@ -313,7 +315,7 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
             marginTop: "-5px"
           }}                    
         /> : null}
-        {node !== currView && node !== "root"  && !roots.includes(node) ?
+        {(node !== currView && node !== "root"  && !roots.includes(node) && !initEmbeddings.includes(node))?
 
         <AnchorButton
           icon="small-cross"
@@ -332,12 +334,12 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
   )  
   if (children){
     for (const child of children){
-      IndentedEmbeddingTree(child,roots,tree,padding+26, els, currView, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange)
+      IndentedEmbeddingTree(child,roots,tree,padding+26, els, currView, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange, initEmbeddings)
     }
   }
 }
 
-const EmbeddingChoices = ({ onChange, annoMatrix, layoutChoice, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange }) => {
+const EmbeddingChoices = ({ onChange, annoMatrix, layoutChoice, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange, initEmbeddings }) => {
   const [ data, setData ] = React.useState(null)
   const [ renderedEmbeddingTree, setRenderedEmbeddingTree ] = React.useState(null)
   React.useEffect(() => {
@@ -406,7 +408,7 @@ const EmbeddingChoices = ({ onChange, annoMatrix, layoutChoice, onDeleteEmbeddin
         }
         
         for (const c of iterable){
-          IndentedEmbeddingTree(c,roots??iterable.filter((item)=>item!==c),embeddingTree,0, els, name, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange)    
+          IndentedEmbeddingTree(c,roots??iterable.filter((item)=>item!==c),embeddingTree,0, els, name, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange, initEmbeddings)    
         }
         setRenderedEmbeddingTree(
           <RadioGroup onChange={onChange} selectedValue={layoutChoice.current}>
