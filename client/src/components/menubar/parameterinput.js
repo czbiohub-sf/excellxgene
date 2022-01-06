@@ -60,6 +60,7 @@ class ParameterInput extends React.PureComponent {
     }
     switch (typeof params[param]) {
       case "boolean": {
+        const { disabled } = this.props;
         return (
           <div>
             <Tooltip
@@ -71,6 +72,8 @@ class ParameterInput extends React.PureComponent {
                   preventOverflow: { enabled: false },
                   hide: { enabled: false },
                 }}
+                targetTagName="span"
+                wrapperTagName="span"
               >               
                 <Checkbox checked={params[param]} label={label} style={{"paddingTop":"10px"}}
                   onChange={() => {
@@ -81,6 +84,7 @@ class ParameterInput extends React.PureComponent {
                       })
                     }
                   } 
+                  disabled={disabled}
                 /> 
             </Tooltip>
           </div>          
@@ -97,6 +101,8 @@ class ParameterInput extends React.PureComponent {
                 preventOverflow: { enabled: false },
                 hide: { enabled: false },
               }}
+              targetTagName="span"
+              wrapperTagName="span"
             >   
               <Select
               disabled={disabled}
@@ -144,6 +150,8 @@ class ParameterInput extends React.PureComponent {
                 preventOverflow: { enabled: false },
                 hide: { enabled: false },
               }}
+              targetTagName="span"
+              wrapperTagName="span"
             >               
               <NumericInput
                 disabled={disabled}

@@ -115,6 +115,11 @@ def schema_get_helper(data_adaptor):
     if "X" not in layers:
         layers = ["X"] + layers
     
+    latent_spaces = []
+    for k in data_adaptor._obsm_init.keys():
+        if data_adaptor._obsm_init[k].shape[1] > 2:
+            latent_spaces.append(k)
+    
     var_keys = []
     for v in list(data_adaptor.data.var.keys()):
         if ';;tMean' not in v and v != 'name_0':
@@ -128,7 +133,8 @@ def schema_get_helper(data_adaptor):
         },
         "layout": {"obs": []},
         "layers": layers,
-        "var_keys": var_keys
+        "var_keys": var_keys,
+        "latent_spaces": latent_spaces
     }
     userID = _get_user_id(data_adaptor)   
     
@@ -216,8 +222,10 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
     new_label_df = decode_matrix_fbs(fbs)
     if not new_label_df.empty:
         new_label_df = data_adaptor.check_new_labels(new_label_df)
-    userID = _get_user_id(data_adaptor)
-    pickle.dump(new_label_df,open(f"{userID}/obs.p","wb"))
+    if not new_label_df.empty:
+        userID = _get_user_id(data_adaptor)
+        pickle.dump(new_label_df,open(f"{userID}/obs.p","wb"))
+
 
 
 def inflate(data):

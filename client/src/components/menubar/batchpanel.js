@@ -14,7 +14,7 @@ import DefaultsButton from "./defaultsio";
 class BatchPanel extends React.PureComponent {
   
   render() {
-    const { reembedParams, annoMatrix, dispatch } = this.props;
+    const { reembedParams, annoMatrix, dispatch, disabled: allDisabled } = this.props;
     const allCategoryNames = ControlsHelpers.selectableCategoryNames(
       annoMatrix.schema
     ).sort();
@@ -89,23 +89,24 @@ class BatchPanel extends React.PureComponent {
             label="Batch correct?"
             param="doBatch"
             tooltipContent={"Check to perform batch correction."}
+            disabled={allDisabled}
           />
           <ParameterInput 
-            disabled={disabled}
+            disabled={disabled || allDisabled}
             label="Method"
             param="batchMethod"
             options={["BBKNN","Harmony","Scanorama"]}
             tooltipContent={"The batch correction method."}
           />      
           <ParameterInput 
-            disabled={disabled}        
+            disabled={disabled || allDisabled}        
             label="Batch key"
             param="batchKey"
             options={allCategoryNames}
             tooltipContent={"The categorical variable with the batches to be corrected."}
           />    
         </ControlGroup>  
-      {panel}      
+      {allDisabled ? null : panel}
     </div>
     );
   }

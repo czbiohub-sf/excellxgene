@@ -44,6 +44,7 @@ class Reembedding extends React.PureComponent {
       setReembedDialogActive: false,
     });
   };
+
   handleRunAndDisablePreprocessingDialog = () => {
     const { dispatch, reembedParams } = this.props;
     
@@ -149,8 +150,9 @@ class Reembedding extends React.PureComponent {
                 <Button onClick={this.handleDisableReembedDialog}>Close</Button>
                 <Button disabled={reembedParams.doBatch && reembedParams.batchKey==="" || 
                                   reembedParams.doBatchPrep && (reembedParams.batchPrepKey==="" || 
-                                  reembedParams.batchPrepLabel === "") || runDisabled
-                } onClick={this.handleRunAndDisableReembedDialog} intent="primary"> Preprocess and run </Button>                 
+                                  reembedParams.batchPrepLabel === "") || runDisabled ||
+                                  (reembedParams.embeddingMode === "Run UMAP" && reembedParams.latentSpace === "")
+                } onClick={this.handleRunAndDisableReembedDialog} intent="primary"> {reembedParams.embeddingMode} </Button>                 
             </ControlGroup>            
           </div>}
         </Dialog>

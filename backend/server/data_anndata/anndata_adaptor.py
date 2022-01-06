@@ -97,7 +97,7 @@ def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
             res = fn(*args)
             _new_callback_fn(res)
         except Exception as e:
-            _error_callback(e)
+            _error_callback(e,ws,cfn)
 
 def _error_callback(e, ws, cfn):
     ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
@@ -168,15 +168,20 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
     embs = {}
     nnms = {}
     params={}
+    pcas = {}
     for f in fnames:
         n = f.split('/')[-1][:-2]
-        if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p"):
+        if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p") and exists(f"{direc}/{userID}/pca/{n}.p"):
             embs[n] = pickle.load(open(f,'rb'))
             nnms[n] = pickle.load(open(f"{direc}/{userID}/nnm/{n}.p",'rb'))
             params[n] = pickle.load(open(f"{direc}/{userID}/params/{n}.p",'rb'))
-        else:
-            if exists(f):
-                embs[n] = pickle.load(open(f,'rb'))
+            pcas[n] = pickle.load(open(f"{direc}/{userID}/pca/{n}.p",'rb'))
+        elif exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p"):
+            embs[n] = pickle.load(open(f,'rb'))
+            nnms[n] = pickle.load(open(f"{direc}/{userID}/nnm/{n}.p",'rb'))
+            params[n] = pickle.load(open(f"{direc}/{userID}/params/{n}.p",'rb'))
+        elif exists(f):
+            embs[n] = pickle.load(open(f,'rb'))
     
     X = embs[currentLayout]
     f = np.isnan(X).sum(1)==0    
@@ -215,6 +220,8 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
                 del nnms[k]
             if k in params.keys():
                 del params[k]
+            if k in pcas.keys():
+                del pcas[k]                
 
     temp = {}
     for key in nnms.keys():
@@ -225,6 +232,8 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
         adata.uns["N_"+key+"_params"]=params[key]
     for key in embs.keys():
         adata.obsm["X_"+key] = embs[key][filt] 
+    for key in pcas.keys():
+        adata.obsm["X_"+key+"_pca"] = pcas[key][filt]         
 
     keys = list(adata.var.keys())
     for k in keys:
@@ -262,17 +271,110 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
 
 def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embName, userID):    
     obs_mask = AnnDataDict['obs_mask']    
-    with ServerTiming.time("layout.compute"):        
-        adata = compute_preprocess(shm, shm_csc, AnnDataDict, reembedParams, userID)
-        if adata.isbacked:
-            raise NotImplementedError("Backed mode is incompatible with re-embedding")
+    embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
+    
+    if embeddingMode == "Preprocess and run":
+        with ServerTiming.time("layout.compute"):        
+            adata = compute_preprocess(shm, shm_csc, AnnDataDict, reembedParams, userID)
+            if adata.isbacked:
+                raise NotImplementedError("Backed mode is incompatible with re-embedding")
 
-        for k in list(adata.obsm.keys()):
-            del adata.obsm[k]
-        
-        doSAM = reembedParams.get("doSAM",False)
-        nTopGenesHVG = reembedParams.get("nTopGenesHVG",2000)
-        nBinsHVG = reembedParams.get("nBins",20)
+            for k in list(adata.obsm.keys()):
+                del adata.obsm[k]
+            
+            doSAM = reembedParams.get("doSAM",False)
+            nTopGenesHVG = reembedParams.get("nTopGenesHVG",2000)
+            nBinsHVG = reembedParams.get("nBins",20)
+            doBatch = reembedParams.get("doBatch",False)
+            batchMethod = reembedParams.get("batchMethod","Scanorama")
+            batchKey = reembedParams.get("batchKey","")
+            scanoramaKnn = reembedParams.get("scanoramaKnn",20)
+            scanoramaSigma = reembedParams.get("scanoramaSigma",15)
+            scanoramaAlpha = reembedParams.get("scanoramaAlpha",0.1)
+            scanoramaBatchSize = reembedParams.get("scanoramaBatchSize",5000)
+            bbknnNeighborsWithinBatch = reembedParams.get("bbknnNeighborsWithinBatch",3)
+            numPCs = reembedParams.get("numPCs",150)
+            pcaSolver = reembedParams.get("pcaSolver","randomized")
+            neighborsKnn = reembedParams.get("neighborsKnn",20)
+            neighborsMethod = reembedParams.get("neighborsMethod","umap")
+            distanceMetric = reembedParams.get("distanceMetric","cosine")
+            nnaSAM = reembedParams.get("nnaSAM",50)
+            weightModeSAM = reembedParams.get("weightModeSAM","dispersion")
+            umapMinDist = reembedParams.get("umapMinDist",0.1)
+            scaleData = reembedParams.get("scaleData",False)
+            
+            if not doSAM:
+                try:
+                    sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(nTopGenesHVG,adata.shape[1]), n_bins=nBinsHVG)                
+                    adata = adata[:,adata.var['highly_variable']]                
+                except:
+                    print('Error during HVG selection - some of your expressions are probably negative.')
+                X = adata.X
+                if scaleData:
+                    sc.pp.scale(adata,max_value=10)
+
+                sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
+                adata.X = X
+            else:            
+                sam=SAM(counts = adata, inplace=True)
+                X = sam.adata.X
+                preprocessing = "StandardScaler" if scaleData else "Normalizer"
+                sam.run(projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM)
+                sam.adata.X = X        
+                adata=sam.adata
+
+            if doBatch:
+                if doSAM:
+                    adata_batch = sam.adata
+                else:
+                    adata_batch = adata
+                
+                if batchMethod == "Harmony":
+                    sce.pp.harmony_integrate(adata_batch,batchKey,adjusted_basis="X_pca")
+                elif batchMethod == "BBKNN":
+                    sce.pp.bbknn(adata_batch, batch_key=batchKey, metric=distanceMetric, n_pcs=numPCs, neighbors_within_batch=bbknnNeighborsWithinBatch)
+                elif batchMethod == "Scanorama":
+                    sce.pp.scanorama_integrate(adata_batch, batchKey, basis='X_pca', adjusted_basis='X_pca',
+                                        knn=scanoramaKnn, sigma=scanoramaSigma, alpha=scanoramaAlpha,
+                                        batch_size=scanoramaBatchSize)               
+                if doSAM:
+                    sam.adata = adata_batch
+                else:
+                    adata = adata_batch
+
+            if not doSAM or doSAM and batchMethod == "BBKNN":
+                if not doBatch or doBatch and batchMethod != "BBKNN":
+                    sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric)    
+                sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
+            else:
+                sam.run_umap(metric=distanceMetric,min_dist=umapMinDist)
+                adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
+                adata.obsp['connectivities'] = sam.adata.obsp['connectivities']
+                
+            umap = adata.obsm["X_umap"]
+            result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
+            result[obs_mask] = umap
+            X_umap,nnm = result, adata.obsp['connectivities'] 
+            obsm = adata.obsm['X_pca']
+            pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
+            pca[obs_mask] = obsm
+                    
+    elif embeddingMode == "Create embedding from subset":
+        direc = pathlib.Path().absolute()    
+        umap = pickle.load(open(f"{direc}/{userID}/emb/{parentName}.p",'rb'))                     
+        result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
+        result[obs_mask] = umap[obs_mask] 
+        X_umap = result  
+        nnm = pickle.load(open(f"{direc}/{userID}/nnm/{parentName}.p",'rb'))[obs_mask][:,obs_mask]
+
+        try:
+            obsm = pickle.load(open(f"{direc}/{userID}/pca/{parentName}.p",'rb'))
+        except:
+            obsm = np.zeros(X_umap.shape)
+        pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
+        pca[obs_mask] = obsm[obs_mask]       
+
+    elif embeddingMode == "Run UMAP":
         doBatch = reembedParams.get("doBatch",False)
         batchMethod = reembedParams.get("batchMethod","Scanorama")
         batchKey = reembedParams.get("batchKey","")
@@ -281,68 +383,40 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
         scanoramaAlpha = reembedParams.get("scanoramaAlpha",0.1)
         scanoramaBatchSize = reembedParams.get("scanoramaBatchSize",5000)
         bbknnNeighborsWithinBatch = reembedParams.get("bbknnNeighborsWithinBatch",3)
-        numPCs = reembedParams.get("numPCs",150)
-        pcaSolver = reembedParams.get("pcaSolver","randomized")
         neighborsKnn = reembedParams.get("neighborsKnn",20)
         neighborsMethod = reembedParams.get("neighborsMethod","umap")
         distanceMetric = reembedParams.get("distanceMetric","cosine")
-        nnaSAM = reembedParams.get("nnaSAM",50)
-        weightModeSAM = reembedParams.get("weightModeSAM","dispersion")
         umapMinDist = reembedParams.get("umapMinDist",0.1)
-        scaleData = reembedParams.get("scaleData",False)
+        latentSpace = reembedParams.get("latentSpace","")
 
-        if not doSAM:
-            try:
-                sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(nTopGenesHVG,adata.shape[1]), n_bins=nBinsHVG)                
-                adata = adata[:,adata.var['highly_variable']]                
-            except:
-                print('Error during HVG selection - some of your expressions are probably negative.')
-            X = adata.X
-            if scaleData:
-                sc.pp.scale(adata,max_value=10)
 
-            sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
-            adata.X = X
-        else:            
-            sam=SAM(counts = adata, inplace=True)
-            X = sam.adata.X
-            preprocessing = "StandardScaler" if scaleData else "Normalizer"
-            sam.run(projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM)
-            sam.adata.X = X        
-            adata=sam.adata
+        direc = pathlib.Path().absolute()    
+        n = latentSpace.split("X_")[-1]
+        obsm = pickle.load(open(f"{direc}/{userID}/emb/{n}.p",'rb'))   
+        adata = AnnData(X=np.zeros(obsm.shape)[obs_mask],obsm={"X_pca":obsm[obs_mask]})    
 
         if doBatch:
-            if doSAM:
-                adata_batch = sam.adata
-            else:
-                adata_batch = adata
-            
             if batchMethod == "Harmony":
-                sce.pp.harmony_integrate(adata_batch,batchKey,adjusted_basis="X_pca")
+                sce.pp.harmony_integrate(adata,batchKey,adjusted_basis="X_pca")
             elif batchMethod == "BBKNN":
-                sce.pp.bbknn(adata_batch, batch_key=batchKey, metric=distanceMetric, n_pcs=numPCs, neighbors_within_batch=bbknnNeighborsWithinBatch)
+                sce.pp.bbknn(adata, batch_key=batchKey, metric=distanceMetric, n_pcs=obsm.shape[1], neighbors_within_batch=bbknnNeighborsWithinBatch)
             elif batchMethod == "Scanorama":
-                sce.pp.scanorama_integrate(adata_batch, batchKey, basis='X_pca', adjusted_basis='X_pca',
+                sce.pp.scanorama_integrate(adata, batchKey, basis='X_pca', adjusted_basis='X_pca',
                                     knn=scanoramaKnn, sigma=scanoramaSigma, alpha=scanoramaAlpha,
                                     batch_size=scanoramaBatchSize)               
-            if doSAM:
-                sam.adata = adata_batch
-            else:
-                adata = adata_batch
-
-        if not doSAM or doSAM and batchMethod == "BBKNN":
-            if not doBatch or doBatch and batchMethod != "BBKNN":
-                sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric)    
-            sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
-        else:
-            sam.run_umap(metric=distanceMetric,min_dist=umapMinDist)
-            adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
-            adata.obsp['connectivities'] = sam.adata.obsp['connectivities']
-            
+        
+        if not doBatch or doBatch and batchMethod != "BBKNN":
+            sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric)    
+        sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
         umap = adata.obsm["X_umap"]
+        nnm = adata.obsp["connectivities"]
         result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
-        result[obs_mask] = umap
-        X_umap,nnm = result, adata.obsp['connectivities']            
+        result[obs_mask] = umap 
+        X_umap = result
+        
+        obsm = adata.obsm['X_pca']
+        pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
+        pca[obs_mask] = obsm        
 
     if embName == "":
         embName = f"umap_{str(hex(int(time.time())))[2:]}"
@@ -380,14 +454,11 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
     if (parentParams is not None):
         reembedParams[f"parentParams"]=parentParams
 
-    reembedParams['sample_ids']=np.array(list(adata.obs_names))
-    reembedParams['feature_ids']=np.array(list(adata.var_names))
-    if doSAM:
-        reembedParams['feature_weights']=np.array(list(sam.adata.var['weights']))
-        
     pickle.dump(nnm, open(f"{direc}/{userID}/nnm/{name}.p","wb"))
     pickle.dump(X_umap, open(f"{direc}/{userID}/emb/{name}.p","wb"))
     pickle.dump(reembedParams, open(f"{direc}/{userID}/params/{name}.p","wb"))
+    pickle.dump(pca, open(f"{direc}/{userID}/pca/{name}.p","wb"))
+
     return layout_schema
 
 def compute_leiden(obs_mask,name,resolution,userID):
@@ -795,6 +866,7 @@ def initialize_socket(da):
                         "X_root":da._obsm_init["X_root"],
                         "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
                     }
+
                     def post_processing(res):
                         da.schema["layout"]["obs"].append(res)
                         return res
@@ -1329,6 +1401,7 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/nnm/")
             os.makedirs(f"{userID}/emb/")
             os.makedirs(f"{userID}/params/")
+            os.makedirs(f"{userID}/pca/")
 
             pickle.dump(self._obs_init,open(f"{userID}/obs.p",'wb'))
             for k in self._obsm_init.keys():

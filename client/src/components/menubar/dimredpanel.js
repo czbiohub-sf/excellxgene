@@ -4,8 +4,13 @@ import {
   AnchorButton,
   Collapse,
   ControlGroup,
-  InputGroup
+  InputGroup,
+  RadioGroup,
+  Radio,
+  Position,
+  Tooltip
 } from "@blueprintjs/core";
+import * as globals from "../../globals";
 import ParameterInput from "./parameterinput";
 import DefaultsButton from "./defaultsio";
 import BatchPanel from "./batchpanel";
@@ -20,17 +25,67 @@ class DimredPanel extends React.PureComponent {
     this.state = {
       cfshown: false,
       gfshown: false,
-      hvgshown: false,
+      hvgshown: props.reembedParams.embeddingMode === "Run UMAP",
       samshown: false,
       trshown: false,
+      aboDisabled: props.reembedParams.embeddingMode === "Run UMAP",
+      allDisabled: props.reembedParams.embeddingMode === "Create embedding from subset"
     };
   }
-
+  
+  componentDidUpdate = (prevProps) => {
+    const { reembedParams } = this.props;
+    const { embeddingMode } = reembedParams;
+    if (embeddingMode !== prevProps.reembedParams.embeddingMode) {
+      if (embeddingMode === "Run UMAP") {
+        this.setState({
+          cfshown: false,
+          gfshown: false,
+          hvgshown: true,
+          samshown: false,
+          trshown: false,
+          aboDisabled: true,
+          allDisabled: false
+        })
+      } else if (embeddingMode === "Preprocess and run") {
+        this.setState({
+          cfshown: false,
+          gfshown: false,
+          hvgshown: false,
+          samshown: false,
+          trshown: false,
+          aboDisabled: false,
+          allDisabled: false
+        })
+      } else if (embeddingMode === "Create embedding from subset") {
+        this.setState({
+          cfshown: false,
+          gfshown: false,
+          hvgshown: false,
+          samshown: false,
+          trshown: false,
+          aboDisabled: false,
+          allDisabled: true
+        })
+      }
+    }
+  }
+  
   render() {
     const {
-      cfshown, gfshown, hvgshown, samshown, trshown
+      cfshown, gfshown, hvgshown, samshown, trshown, aboDisabled, allDisabled
     } = this.state;
     const { reembedParams, annoMatrix, dispatch, embName, onChange } = this.props;
+    const latentSpaces = annoMatrix.schema.latent_spaces;
+    const disabled = allDisabled || aboDisabled;
+    let tem;
+    if (allDisabled){
+      tem = "`Create embedding from subset` copies the current selection into a new embedding.";
+    } else if (aboDisabled) {
+      tem = "`Run UMAP` runs UMAP on an existing latent space (e.g. PCA).";
+    } else {
+      tem = "`Preprocess and run` ";
+    }
     return (
       <div>
       <DefaultsButton dispatch={dispatch}/>  
@@ -39,7 +94,6 @@ class DimredPanel extends React.PureComponent {
         paddingBottom: "10px",
         paddingTop: "10px"
       }}>
-      <BatchPanel/>
       <InputGroup
           id="emb-name-input"
           placeholder="New embedding name..."
@@ -47,21 +101,97 @@ class DimredPanel extends React.PureComponent {
           value={embName}
       />
       </div>
-      <ControlGroup fill={true} vertical={false}>
+      <hr/>
+      <div style={{"margin":"auto 0", paddingTop: "10px"}}>
+      <RadioGroup
+          label={<b>Select embedding mode</b>}
+          onChange={(item)=>{
+            dispatch({type: "reembed: set parameter", key: "embeddingMode", value: item.target.value})
+          }}
+          selectedValue={reembedParams.embeddingMode}
+          inline
+        >
+            <Radio label={
+                <Tooltip
+                content="Execute the full analysis pipeline on the current selection."
+                position={Position.BOTTOM}
+                boundary="viewport"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+                targetTagName="span"
+                wrapperTagName="span"
+                >                   
+                  Preprocess and run
+                </Tooltip>
+              } value="Preprocess and run"/>       
+            
+            <Radio label={
+                <Tooltip
+                content="Copy the current selection into a new embedding."
+                position={Position.BOTTOM}
+                boundary="viewport"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+                targetTagName="span"
+                wrapperTagName="span"
+                >                   
+                  Create embedding from subset
+                </Tooltip>
+              } value="Create embedding from subset"/>
+          
+          {latentSpaces.length > 0 ?
+              <Radio label={
+                <Tooltip
+                content="Run UMAP on the current selection using precomputed latent spaces (e.g. PCA)."
+                position={Position.BOTTOM}
+                boundary="viewport"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+                targetTagName="span"
+                wrapperTagName="span"
+                >  
+                  Run UMAP
+                </Tooltip>    
+              } value="Run UMAP"/> 
+            : null}
+        </RadioGroup>
+      </div>    
+      {allDisabled ? null : <><hr/>
+      <div
+      style={{
+        paddingBottom: "10px",
+        paddingTop: "10px"
+      }}>
+        <BatchPanel disabled={allDisabled}/>           
+      </div>
+      </>}
+      {disabled ? null : <ControlGroup fill={true} vertical={false}>
         <ParameterInput 
           label="Use SAM?"
           param="doSAM"
           tooltipContent={"Check to use the SAM algorithm for dimensionality reduction."}
+          disabled={disabled}
         />                     
         <ParameterInput
           label="Scale data?"
           param="scaleData"
           tooltipContent={"Scale the data such that genes have zero mean and unit variance prior to PCA."}
+          disabled={disabled}
         />
-      </ControlGroup>
-      <AnchorButton
+      </ControlGroup>}
+      {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
+            ...this.state,
             trshown: !this.state.trshown,
             cfshown: false,
             gfshown: false,
@@ -72,8 +202,8 @@ class DimredPanel extends React.PureComponent {
         text={`Highly variable gene selection`}
         fill outlined
         rightIcon={trshown ? "chevron-down" : "chevron-right"} small
-        disabled = {reembedParams.doSAM}
-      />   
+        disabled = {reembedParams.doSAM || disabled}
+      />}   
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={trshown && !reembedParams.doSAM}>   
           <ControlGroup fill={true} vertical={false}>
@@ -88,9 +218,10 @@ class DimredPanel extends React.PureComponent {
           </ControlGroup>                    
         </Collapse>  
       </div>                 
-      <AnchorButton
+      {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
+            ...this.state,
             hvgshown: false,
             cfshown: !this.state.cfshown,
             gfshown: false,
@@ -101,7 +232,8 @@ class DimredPanel extends React.PureComponent {
         text="PCA"
         fill outlined
         rightIcon={cfshown ? "chevron-down" : "chevron-right"} small
-      />                    
+        disabled={disabled}
+      />}                    
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={cfshown}>
           <ControlGroup fill={true} vertical={false}>
@@ -122,9 +254,10 @@ class DimredPanel extends React.PureComponent {
           </ControlGroup>
         </Collapse>
       </div>     
-      <AnchorButton
+      {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
+            ...this.state,
             hvgshown: false,
             gfshown: !this.state.gfshown,
             cfshown: false,
@@ -134,8 +267,9 @@ class DimredPanel extends React.PureComponent {
         }}
         text={`Neighbors`}
         fill outlined
+        disabled={disabled}
         rightIcon={gfshown ? "chevron-down" : "chevron-right"} small
-      />   
+      />}   
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={gfshown}>
           <ControlGroup fill={true} vertical={false}>
@@ -164,9 +298,10 @@ class DimredPanel extends React.PureComponent {
             </ControlGroup>         
         </Collapse>
       </div>
-      <AnchorButton
+      {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
+            ...this.state,
             hvgshown: false,
             cfshown: false,
             gfshown: false,
@@ -177,8 +312,8 @@ class DimredPanel extends React.PureComponent {
         text={`SAM`}
         fill outlined
         rightIcon={samshown ? "chevron-down" : "chevron-right"} small
-        disabled = {!reembedParams.doSAM}
-      />   
+        disabled = {!reembedParams.doSAM || disabled}
+      />}   
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={samshown}>    
           <ControlGroup fill={true} vertical={false}>
@@ -202,27 +337,52 @@ class DimredPanel extends React.PureComponent {
           </ControlGroup>                 
         </Collapse>  
       </div>         
-      <AnchorButton
+      {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
+            ...this.state,
             hvgshown: !this.state.hvgshown,
             cfshown: false,
             gfshown: false,
             samshown: false,
+            trshown: false
           });
         }}
         text={`UMAP`}
         fill outlined
+        disabled={allDisabled}
         rightIcon={hvgshown ? "chevron-down" : "chevron-right"} small
-      />   
+      />}   
       <div style={{"paddingLeft":"10px"}}>
-        <Collapse isOpen={hvgshown}>      
-          <ParameterInput
-            min={0.0}
-            label="min_dist"
-            param="umapMinDist"
-            tooltipContent={"Minimum distance between points in the UMAP projection. Increase for less crowding."}
-          />            
+        <Collapse isOpen={hvgshown}>     
+          <ControlGroup fill={true} vertical={false}>
+            {aboDisabled ? 
+            <div style={{"margin":"auto 0"}}>
+              <ParameterInput
+                label="Latent space"
+                param="latentSpace"
+                options={latentSpaces}
+                tooltipContent={"Minimum distance between points in the UMAP projection. Increase for less crowding."}
+              />
+            </div>            
+            : 
+            null} 
+            {aboDisabled ?             
+            <div style={{"margin":"auto 0"}}>
+              <ParameterInput
+                label="metric"
+                param="distanceMetric"
+                options={["euclidean","correlation","cosine"]}
+                tooltipContent={"The distance metric for computing nearest neighbors."}
+                />
+            </div> : null}
+            <ParameterInput
+              min={0.0}
+              label="min_dist"
+              param="umapMinDist"
+              tooltipContent={"Minimum distance between points in the UMAP projection. Increase for less crowding."}
+            />        
+          </ControlGroup>    
         </Collapse>  
       </div>                  
     </div>

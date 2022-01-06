@@ -544,6 +544,7 @@ def launch(
             # Store the user information in flask session.
             session['jwt_payload'] = userinfo
             session['profile'] = userinfo
+            session['profile']['excxgLoggedIn'] = True
             
             annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
             userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"

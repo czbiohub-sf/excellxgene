@@ -183,7 +183,7 @@ class CategoryValue extends React.Component {
     If and only if true, update the component
     */
     const { props, state } = this;
-    const { categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable } = props;
+    const { categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable, categoryData } = props;
     const {
       categoryIndex: newCategoryIndex,
       categorySummary: newCategorySummary,
@@ -192,7 +192,8 @@ class CategoryValue extends React.Component {
       removeHistZeros: newRemoveHistZeros,
       currentLayout: newCurrentLayout,
       isSubsetted: newIsSubsetted,
-      colorTable: newColorTable
+      colorTable: newColorTable,
+      categoryData: newCategoryData
     } = nextProps;
 
     const label = categorySummary.categoryValues[categoryIndex];
@@ -225,6 +226,7 @@ class CategoryValue extends React.Component {
     const removeZerosChanged = removeHistZeros !== newRemoveHistZeros;
     const plotChanged = (isSubsetted !== newIsSubsetted) || (currentLayout !== newCurrentLayout)
     const colorTableChanged = colorTable.rgb.length !== newColorTable.rgb.length;
+    const categoryDataChanged = categoryData !== newCategoryData;
     return (
       labelChanged ||
       valueSelectionChange ||
@@ -237,7 +239,8 @@ class CategoryValue extends React.Component {
       sortDirectionChanged ||
       removeZerosChanged || 
       plotChanged || 
-      colorTableChanged
+      colorTableChanged ||
+      categoryDataChanged
     );
   };
 

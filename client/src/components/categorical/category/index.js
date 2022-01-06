@@ -7,6 +7,7 @@ import {
   Classes,
   Position,
   Tooltip,
+  InputGroup
 } from "@blueprintjs/core";
 import { Flipper, Flipped } from "react-flip-toolkit";
 import Async from "react-async";
@@ -62,7 +63,8 @@ class Category extends React.PureComponent {
     this.state = {
       sortDirection: null,
       removeHistZeros: false,
-      indexOfSankeyCategory: -1   
+      indexOfSankeyCategory: -1,
+      filterValue: "" 
     }
   }
   static getSelectionState(
@@ -170,8 +172,8 @@ class Category extends React.PureComponent {
             averages.set(key, value / categorySummary.categoryValueCounts[categorySummary.categoryValueIndices.get(key)])
           }
           for (const item of categorySummary.allCategoryValues){
-            if (!(item in averages)) {
-              averages[item] = 0;
+            if (!(averages.has(item))) {
+              averages.set(item,0);
             }
           }
           this.setState({
@@ -352,7 +354,7 @@ class Category extends React.PureComponent {
     const continuousColoring = (colorMode === "color by continuous metadata" || colorMode === "color by geneset mean expression" || colorMode =="color by expression")
     const checkboxID = `category-select-${metadataField}`;
     const sankeyCheckboxID = `sankey-select-${metadataField}`;
-    const { sortDirection, continuousAverages, removeHistZeros, indexOfSankeyCategory } = this.state;
+    const { sortDirection, continuousAverages, removeHistZeros, indexOfSankeyCategory, filterValue } = this.state;
 
     return (
       <CategoryCrossfilterContext.Provider value={crossfilter}>
@@ -426,6 +428,8 @@ class Category extends React.PureComponent {
                   }}               
                   indexOfSankeyCategory={indexOfSankeyCategory}
                   sankeyLoading={sankeyLoading}    
+                  filterValue={filterValue}
+                  filterValueSetter={(e)=>{this.setState({...this.state,filterValue: e})}}
                 />
               );
             }}
@@ -720,7 +724,9 @@ const CategoryRender = React.memo(
     removeHistZeros,
     histToggler,
     indexOfSankeyCategory,
-    sankeyLoading
+    sankeyLoading,
+    filterValue,
+    filterValueSetter
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -783,6 +789,18 @@ const CategoryRender = React.memo(
           {
             /* values*/
             isExpanded ? (
+              <>
+              <div style={{paddingBottom: "5px"}}>
+                <InputGroup
+                  onChange={(e) => {
+                    const filt = e.target.value;
+                    filterValueSetter(filt)
+                  }}
+                  placeholder="Filter annotations"
+                  value={filterValue}
+                  
+                />
+              </div>
               <CategoryValueList
                 isUserAnno={isUserAnno}
                 metadataField={metadataField}
@@ -794,7 +812,9 @@ const CategoryRender = React.memo(
                 sortDirection={sortDirection}
                 continuousAverages={continuousAverages}
                 removeHistZeros={removeHistZeros}
+                filterValue={filterValue}
               />
+              </>
             ) : null
           }
         </div>
@@ -819,7 +839,8 @@ const CategoryValueList = React.memo(
     colorTable,
     sortDirection,
     continuousAverages,
-    removeHistZeros
+    removeHistZeros,
+    filterValue
   }) => {
     const categoryValueCountsObj = {}
     categorySummary.categoryValueCounts.forEach((item,index)=>{
@@ -854,23 +875,36 @@ const CategoryValueList = React.memo(
         newTuples = [];
         let z = 0;
         for (let i = 0; i < tuples.length; i++) {
-          if (categoryValueCountsObj[tuples[i][0]]>0 || tuples[i][0] === "unassigned"){
+          if (categoryValueCountsObj[tuples[i][0]]>0 && tuples[i][0] !== "unassigned"){
+            newTuples.push([tuples[i][0],z])
+            z = z + 1;
+          } 
+        }
+        for (let i = 0; i < tuples.length; i++) {
+          if (categoryValueCountsObj[tuples[i][0]] === 0  && tuples[i][0] !== "unassigned") {
             newTuples.push([tuples[i][0],z])
             z = z + 1;
           }
-        }      
+        }  
+        newTuples.push(["unassigned",newTuples.length])            
       }
     } else {
       newTuples = [];
       let z = 0;
       for (let i = 0; i < tuples.length; i++) {
-        if (categoryValueCountsObj[tuples[i][0]]>0 || tuples[i][0] === "unassigned"){
+        if (categoryValueCountsObj[tuples[i][0]]>0 && tuples[i][0] !== "unassigned"){
+          newTuples.push([tuples[i][0],z])
+          z = z + 1;
+        } 
+      }
+      for (let i = 0; i < tuples.length; i++) {
+        if (categoryValueCountsObj[tuples[i][0]] === 0  && tuples[i][0] !== "unassigned") {
           newTuples.push([tuples[i][0],z])
           z = z + 1;
         }
-      }
+      }  
+      newTuples.push(["unassigned",newTuples.length])  
     }    
-
     const newCategoryValues = [];
 
     const newCategoryValueCounts = []
@@ -894,6 +928,7 @@ const CategoryValueList = React.memo(
       return (
         <>
           {newTuples.map(([value, index]) => (
+            value.toString().includes(filterValue) ?
             <Value
               key={value}
               isUserAnno={isUserAnno}
@@ -907,17 +942,17 @@ const CategoryValueList = React.memo(
               sortDirection={sortDirection}     
               continuousAverages={continuousAverages}   
               removeHistZeros={removeHistZeros}      
-            />
+            /> : null
           ))}
         </>
       );
     }
-
     /* User annotation */
     const flipKey = [...categorySummary.categoryValueIndices].map((t) => t[0]).join("");
     return (
       <Flipper flipKey={flipKey}>
         {newTuples.map(([value, index]) => (
+          value.toString().includes(filterValue) ?
           <Flipped key={value} flipId={value}>
             <Value
               isUserAnno={isUserAnno}
@@ -932,7 +967,7 @@ const CategoryValueList = React.memo(
               continuousAverages={continuousAverages}
               removeHistZeros={removeHistZeros}
             />
-          </Flipped>
+          </Flipped> : null
         ))}
       </Flipper>
     );

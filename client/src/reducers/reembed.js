@@ -93,7 +93,9 @@ const defaultDimredParams = {
   weightModeSAM: "rms",
   umapMinDist: 0.1,
   dataLayerExpr: "X",
-  logScaleExpr: false
+  logScaleExpr: false,
+  embeddingMode: "Preprocess and run",
+  latentSpace: ""
 };
 export const defaultReembedParams = {
   ...defaultPrepParams,
