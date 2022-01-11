@@ -1,19 +1,20 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, Button, InputGroup, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
 import actions from "../../actions";
 import Clip from "./clip";
-import AuthButtons from "./authButtons";
 import Subset from "./subset";
 import UndoRedoReset from "./undoRedo";
 import DiffexpButtons from "./diffexpButtons";
 import Reembedding from "./reembedding";
-import Preprocessing from "./preprocessing";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
+import Canvg, {
+  presets
+} from 'canvg';
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -539,7 +540,33 @@ class MenuBar extends React.PureComponent {
           icon="floppy-disk"
           id="saveSankeyButton"
         /></div>
-         </div> : null} 
+         </div> : null /*<div style={{
+          width: "20%",
+          textAlign: "right",
+          display: "flex",
+          justifyContent: "right",
+        }}>
+        <AnchorButton
+          type="button"
+          icon="floppy-disk"
+          onClick={()=>{
+            const s = document.getElementById('embedding-layout');
+            console.log(s)
+            s.toBlob(function(blob) {
+              console.log(blob)
+              var a = document.createElement("a");
+              document.body.appendChild(a);
+              a.style = "display: none";
+          
+              var url = window.URL.createObjectURL(blob);
+              a.href = url;
+              a.download = `${layoutChoice.current.split(';;').at(-1)}_umap.png`;
+              a.click();
+              window.URL.revokeObjectURL(url);
+            });
+          }}
+        />
+        </div>*/ } 
         {layoutChoice.sankey ? 
         <div style={{
           width: "80%",

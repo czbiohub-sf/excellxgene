@@ -803,33 +803,21 @@ def initialize_socket(da):
             data = ws.receive()
             if data is not None:  
                 data = json.loads(data)
-                obsFilterA = data.get("set1", None)
-                obsFilterB = data.get("set2", None)
-
+                obsFilterA = data.get("set1", {"filter": {}})["filter"]
+                obsFilterB = data.get("set2", {"filter": {}})["filter"]
                 layer = data.get("layer","X")
                 top_n = data.get("count", 100)
                 lfc_cutoff = 0.01
                 shape = da.get_shape()
 
-                if (obsFilterA is not None) and (obsFilterB is not None):
-                    obsFilterA = obsFilterA["filter"]
-                    obsFilterB = obsFilterB["filter"]
-                    obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
-                    obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])
-                else:
-                    labels = data.get("labels",None)
-                    category = data.get("category",None)
-                    if (labels is not None) and (category is not None):
-                        labels = np.array(labels,dtype='object')
-                        obs_mask_A = labels==category
-                        obs_mask_B = labels!=category
-                    else:
-                        raise Exception("Error.")
+                obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
+                obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])      
 
                 tMean = da.data.var[f'{layer};;tMean'].values
                 tMeanSq = da.data.var[f'{layer};;tMeanSq'].values                      
 
                 _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,da.shm_layers_csr,da.shm_layers_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)
+    
     @sock.route("/reembedding")
     @auth0_token_required
     def reembedding(ws):

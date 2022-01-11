@@ -839,7 +839,6 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
     });
   }
 }
-
 const requestDifferentialExpressionAll = (num_genes = 100) => async (
   dispatch,
   getState
@@ -866,21 +865,31 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
       }
     }    
     labels = labels.__columns[0];
-    console.log(labels)
     const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
-        console.log(cat)
+        let set1 = []
+        let set2 = []
+        for (let i = 0; i < labels.length; i++){
+          if(labels[i] === cat){
+            set1.push(ix[i])
+          } else {
+            set2.push(ix[i])
+          }
+        }
+        set1 = Array.isArray(set1) ? set1 : Array.from(set1);
+        set2 = Array.isArray(set2) ? set2 : Array.from(set2);
         wsDiffExp.send(JSON.stringify({
           mode: "topN",
           count: num_genes,
+          set1: { filter: { obs: { index: set1 } } },
+          set2: { filter: { obs: { index: set2 } } },
           multiplex: true,
           grouping: categoryName,
           nameList: allCategories,
           layer: annoMatrix.layer,
-          category: cat,
-          labels: labels
+          category: cat
         }))
       } 
     }
@@ -891,6 +900,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     });
   }
 };
+
 export const requestRenameGeneset = (oldName,newName) => async (
   dispatch,
   getState

@@ -1213,6 +1213,7 @@ class Graph extends React.Component {
             shapeRendering: "crispEdges",
           }}
           className="graph-canvas"
+          id="embedding-layout"
           data-testid="layout-graph"
           ref={this.setReglCanvas}
           onMouseDown={this.handleCanvasEvent}
