@@ -43,7 +43,6 @@ from numba import njit, prange, config, threading_layer
 from numba.core import types
 from numba.typed import Dict
 #config.THREADING_LAYER = 'tbb'
-
 global process_count
 process_count = 0
 
@@ -104,7 +103,7 @@ def _error_callback(e, ws, cfn):
     traceback.print_exception(type(e), e, e.__traceback__)
 
     
-def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff):
+def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff,ihm):
     to_remove = []
     a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
     to_remove.extend([a,b,c])
@@ -155,11 +154,11 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
         meanBsq/=nB
         vB = meanBsq - meanB**2
         vB[vB<0]=0   
-
-    _unregister_shm(to_remove)        
+    
+    _unregister_shm(to_remove, ihm)        
     return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
 
-def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID):
+def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID,ihm):
     to_remove = []
 
     direc = pathlib.Path().absolute()        
@@ -253,29 +252,28 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
 
     for k in AnnDataDict["Xs"]:
         if k != "X":
-            if not (shm["X"][0] == shm["orig.X"][0] and k=="orig.X"):
-                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[k]
-                to_remove.extend([a,b,c])
-                shm1 = shared_memory.SharedMemory(name=a)
-                shm2 = shared_memory.SharedMemory(name=b)
-                shm3 = shared_memory.SharedMemory(name=c)    
-                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-                X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
-                adata.layers[k] = X[filt]
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[k]
+            to_remove.extend([a,b,c])
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+            adata.layers[k] = X[filt]
 
     adata.write_h5ad(f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad")
-    _unregister_shm(to_remove)
+    _unregister_shm(to_remove, ihm)
     return f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad"
 
-def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embName, userID):    
+def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embName, userID, ihm):    
     obs_mask = AnnDataDict['obs_mask']    
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
     
     if embeddingMode == "Preprocess and run":
         with ServerTiming.time("layout.compute"):        
-            adata = compute_preprocess(shm, shm_csc, AnnDataDict, reembedParams, userID)
+            adata = compute_preprocess(shm, shm_csc, AnnDataDict, reembedParams, userID, ihm)
             if adata.isbacked:
                 raise NotImplementedError("Backed mode is incompatible with re-embedding")
 
@@ -604,7 +602,7 @@ def compute_sankey_df(labels, name, obs_mask, userID):
     cs = list(cs)        
     return {"edges":ps,"weights":cs}
 
-def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID):
+def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID, ihm):
     to_remove = []
     layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
@@ -784,16 +782,17 @@ def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID):
         "sumNormalizeCells":sumNormalizeCells,        
     }        
     pickle.dump(prepParams, open(f"{direc}/{userID}/params/latest.p","wb"))  
-    _unregister_shm(to_remove) 
+    _unregister_shm(to_remove, ihm) 
     return adata_raw
 
-def _unregister_shm(to_remove):
-    to_remove = list(np.unique(to_remove))
-    already_deleted=[]
-    for s in to_remove:
-        if s not in already_deleted:
-            resource_tracker.unregister("/"+s,"shared_memory")      
-            already_deleted.append(s)     
+def _unregister_shm(to_remove, is_hosted_mode):
+    if is_hosted_mode:
+        to_remove = list(np.unique(to_remove))
+        already_deleted=[]
+        for s in to_remove:
+            if s not in already_deleted:
+                resource_tracker.unregister("/"+s,"shared_memory")      
+                already_deleted.append(s)     
 
 def initialize_socket(da):
     sock = da.socket
@@ -804,21 +803,33 @@ def initialize_socket(da):
             data = ws.receive()
             if data is not None:  
                 data = json.loads(data)
-                obsFilterA = data.get("set1", {"filter": {}})["filter"]
-                obsFilterB = data.get("set2", {"filter": {}})["filter"]
+                obsFilterA = data.get("set1", None)
+                obsFilterB = data.get("set2", None)
+
                 layer = data.get("layer","X")
                 top_n = data.get("count", 100)
                 lfc_cutoff = 0.01
                 shape = da.get_shape()
 
-                obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
-                obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])      
+                if (obsFilterA is not None) and (obsFilterB is not None):
+                    obsFilterA = obsFilterA["filter"]
+                    obsFilterB = obsFilterB["filter"]
+                    obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
+                    obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])
+                else:
+                    labels = data.get("labels",None)
+                    category = data.get("category",None)
+                    if (labels is not None) and (category is not None):
+                        labels = np.array(labels,dtype='object')
+                        obs_mask_A = labels==category
+                        obs_mask_B = labels!=category
+                    else:
+                        raise Exception("Error.")
 
                 tMean = da.data.var[f'{layer};;tMean'].values
                 tMeanSq = da.data.var[f'{layer};;tMeanSq'].values                      
 
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,da.shm_layers_csr,da.shm_layers_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff)
-    
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,da.shm_layers_csr,da.shm_layers_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)
     @sock.route("/reembedding")
     @auth0_token_required
     def reembedding(ws):
@@ -836,24 +847,21 @@ def initialize_socket(da):
                     annotations = da.dataset_config.user_annotations        
                     userID = f"{annotations._get_userdata_idhash(da)}"  
                     layers = []
-                    if current_app.hosted_mode:
-                        doBatchPrep = reembedParams.get("doBatchPrep",False)
-                        batchPrepParams = reembedParams.get("batchPrepParams",{})
-                        batchPrepKey = reembedParams.get("batchPrepKey","")
-                        batchPrepLabel = reembedParams.get("batchPrepLabel","")
-                        dataLayer = reembedParams.get("dataLayer","X")
-                        if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
-                            cl = np.array(list(da.data.obs[batchPrepKey]))
-                            batches = np.unique(cl)
-                            for k in batches:
-                                params = batchPrepParams[batchPrepKey].get(k,{})
-                                k = params.get("dataLayer","X")
-                                layers.append(k)
-                        else:
-                            layers.append(dataLayer)
+                    doBatchPrep = reembedParams.get("doBatchPrep",False)
+                    batchPrepParams = reembedParams.get("batchPrepParams",{})
+                    batchPrepKey = reembedParams.get("batchPrepKey","")
+                    batchPrepLabel = reembedParams.get("batchPrepLabel","")
+                    dataLayer = reembedParams.get("dataLayer","X")
+                    if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
+                        cl = np.array(list(da.data.obs[batchPrepKey]))
+                        batches = np.unique(cl)
+                        for k in batches:
+                            params = batchPrepParams[batchPrepKey].get(k,{})
+                            k = params.get("dataLayer","X")
+                            layers.append(k)
                     else:
-                        dataLayer = reembedParams.get("dataLayer","X")
                         layers.append(dataLayer)
+
                     layers = list(np.unique(layers))
                     direc = pathlib.Path().absolute()  
                     obs = pickle.load(open(f"{direc}/{userID}/obs.p",'rb'))
@@ -871,68 +879,8 @@ def initialize_socket(da):
                         da.schema["layout"]["obs"].append(res)
                         return res
         
-                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict, reembedParams, parentName, embName, userID)
-    """
-    @sock.route("/preprocessing")
-    @desktop_mode_only
-    def preprocessing(ws):
-        while True:
-            data = ws.receive()
-            if data is not None and not current_app.hosted_mode:  
-                data = json.loads(data)
-
-                filter = data["filter"] if data else None
-                reembedParams = data["params"] if data else {}
+                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
     
-                annotations = da.dataset_config.user_annotations        
-                userID = f"{annotations._get_userdata_idhash(da)}"  
-
-                layers = []
-                doBatchPrep = reembedParams.get("doBatchPrep",False)
-                batchPrepParams = reembedParams.get("batchPrepParams",{})
-                batchPrepKey = reembedParams.get("batchPrepKey","")
-                batchPrepLabel = reembedParams.get("batchPrepLabel","")
-                dataLayer = reembedParams.get("dataLayer","X")
-                if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
-                    cl = np.array(list(da.data.obs[batchPrepKey]))
-                    batches = np.unique(cl)
-                    for k in batches:
-                        params = batchPrepParams[batchPrepKey].get(k,{})
-                        k = params.get("dataLayer","X")
-                        layers.append(k)
-                else:
-                    layers.append(dataLayer)
-                layers = list(np.unique(layers))
-                
-                AnnDataDict = {
-                    "Xs":layers,
-                    "obs":da.data.obs,
-                    "X_root":da._obsm_init["X_root"],
-                    "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
-                }
-
-                def post_processing(res):
-                    if da.shm_layers_csr["X"][0] != da.shm_layers_csr["orig.X"][0]:
-                        for j in [0,3,6]:
-                            s = shared_memory.SharedMemory(name=da.shm_layers_csr["X"][j])
-                            s.close()
-                            s.unlink()     
-                    if da.shm_layers_csc["X"][0] != da.shm_layers_csc["orig.X"][0]:
-                        for j in [0,3,6]:
-                            s = shared_memory.SharedMemory(name=da.shm_layers_csc["X"][j])
-                            s.close()
-                            s.unlink()                              
-                    da.shm_layers_csr["X"] = res["X_shm"]                    
-                    da.shm_layers_csc["X"] = res["X_shm_csc"]
-
-                    da.data.X = res["X"]
-                    da.data.layers["X"] = res["X"]
-                    da.data.var["X;;tMean"] = res['mean']
-                    da.data.var["X;;tMeanSq"] = res['meansq']
-                    return da.get_schema()
-
-                _multiprocessing_wrapper(da,ws,compute_preprocess, "preprocessing",data,post_processing,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict,reembedParams,userID, False)
-    """
     @sock.route("/sankey")
     def sankey(ws):
         while True:
@@ -973,7 +921,7 @@ def initialize_socket(da):
 
                 AnnDataDict={"Xs":layers,"obs":da.data.obs, "var": da.data.var, "varm": varm}
 
-                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID)
+                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID, current_app.hosted_mode)
 
  
     @sock.route("/leiden")
@@ -1341,12 +1289,6 @@ class AnndataAdaptor(DataAdaptor):
                 for k in adata.layers.keys():
                     self.shm_layers_csc[k] = _create_shm_from_data(adata.layers[k])                    
                 
-                if 'orig.X' not in adata.layers.keys(): 
-                    adata.layers['orig.X'] = adata.X   
-                    adata.var['orig.X;;tMean'] = adata.var['X;;tMean']
-                    adata.var['orig.X;;tMeanSq'] = adata.var['X;;tMeanSq']
-                    self.shm_layers_csr['orig.X'] = self.shm_layers_csr['X']
-                    self.shm_layers_csc['orig.X'] = self.shm_layers_csc['X']
 
                 if adata.raw is not None:
                     X = adata.raw.X

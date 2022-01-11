@@ -695,6 +695,35 @@ def genesets_put(request, data_adaptor):
     except (ObsoleteRequest, TypeError) as e:
         return abort(HTTPStatus.NOT_FOUND, description=str(e))
 
+def genesets_rename_put(request, data_adaptor):
+    annotations = data_adaptor.dataset_config.user_annotations
+    if not annotations.gene_sets_save_enabled():
+        return abort(HTTPStatus.NOT_IMPLEMENTED)
+
+    anno_collection = request.args.get("annotation-collection-name", default=None)
+    if anno_collection is not None:
+        if not annotations.is_safe_collection_name(anno_collection):
+            return abort(HTTPStatus.BAD_REQUEST, "Bad annotation collection name")
+        annotations.set_collection(anno_collection)
+
+    args = request.get_json()
+    try:
+        oldName = args.get("oldName", None)
+        newName = args.get("newName", None)
+        if oldName is None or newName is None:
+            abort(HTTPStatus.BAD_REQUEST)
+
+        genesets, _ = annotations.read_gene_sets(data_adaptor)
+        for k in genesets.keys():
+            geneset = genesets[k]
+            if geneset["geneset_description"] == oldName:
+                geneset["geneset_description"] = newName
+
+        annotations.write_gene_sets(genesets, annotations.last_geneset_tid+1, data_adaptor)
+        return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
+    except (ValueError, DisabledFeatureError, KeyError, Exception) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def summarize_var_helper(request, data_adaptor, key, raw_query):
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])

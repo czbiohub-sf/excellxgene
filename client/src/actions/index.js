@@ -399,7 +399,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
 
     } else if (data.cfn === "diffexp"){
       const { annoMatrix, genesets } = getState();
-      const { diffExpListsLists } = genesets;
+      const { diffExpListsLists, diffExpListsNames } = genesets;
       const n = data?.nameList?.length-1 ?? -1
       const varIndexName = annoMatrix.schema.annotations.var.index;
 
@@ -418,10 +418,23 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
           });      
         } else if (data?.multiplex && (diffExpListsLists.length+1) === n) {
           diffExpListsLists.push(diffexpLists)
+          diffExpListsNames.push(data.category)
+          const diffExpListsMap = new Map();
+          diffExpListsNames.forEach((name,ix) => {
+            diffExpListsMap.set(name,diffExpListsLists[ix])
+          })
+          const dataList = [];
+          const nameList = [];
+          for (const name of data.nameList) {
+            if(name!=="unassigned"){
+              dataList.push(diffExpListsMap.get(name));
+              nameList.push(name);
+            }
+          }
           dispatch({
             type: "request differential expression all success",
-            dataList: diffExpListsLists,
-            nameList: data.nameList,
+            dataList,
+            nameList,
             dateString: new Date().toLocaleString(),
             grouping: data.grouping,
           });    
@@ -430,6 +443,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
           dispatch({
             type: "request differential expression push list",
             data: diffexpLists,
+            name: data.category
           });              
         }
       });  
@@ -852,30 +866,21 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
       }
     }    
     labels = labels.__columns[0];
+    console.log(labels)
     const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
-        let set1 = []
-        let set2 = []
-        for (let i = 0; i < labels.length; i++){
-          if(labels[i] === cat){
-            set1.push(ix[i])
-          } else {
-            set2.push(ix[i])
-          }
-        }
-        set1 = Array.isArray(set1) ? set1 : Array.from(set1);
-        set2 = Array.isArray(set2) ? set2 : Array.from(set2);
+        console.log(cat)
         wsDiffExp.send(JSON.stringify({
           mode: "topN",
           count: num_genes,
-          set1: { filter: { obs: { index: set1 } } },
-          set2: { filter: { obs: { index: set2 } } },
           multiplex: true,
           grouping: categoryName,
           nameList: allCategories,
-          layer: annoMatrix.layer
+          layer: annoMatrix.layer,
+          category: cat,
+          labels: labels
         }))
       } 
     }
@@ -886,6 +891,53 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     });
   }
 };
+export const requestRenameGeneset = (oldName,newName) => async (
+  dispatch,
+  getState
+) => {
+  
+const res = await fetch(
+  `${API.prefix}${API.version}genesets/rename`,
+  {
+    method: "PUT",
+    headers: new Headers({
+      Accept: "application/octet-stream",
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify({
+      oldName: oldName,
+      newName: newName
+    }),
+    credentials: "include",
+  }
+);
+
+/*const { lastTid } = getState().genesets;
+const tid = (lastTid ?? 0) + 1;
+dispatch({
+  type: "geneset: set tid",
+  tid,
+})*/
+fetchJson("genesets").then((response) => {
+  dispatch({
+    type: "geneset: initial load",
+    data: response,
+  });
+});
+
+if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
+  return true;
+}
+
+// else an error
+let msg = `Unexpected HTTP response ${res.status}, ${res.statusText}`;
+const body = await res.text();
+if (body && body.length > 0) {
+  msg = `${msg} -- ${body}`;
+}
+throw new Error(msg);
+}
+
 const selectAll = () => async (dispatch, getState) => {
   dispatch({ type: "select all observations" });
   try {
@@ -910,6 +962,7 @@ function fetchJson(pathAndQuery) {
 }
 
 export default {
+  requestRenameGeneset,
   fetchGeneInfo,
   prefetchEmbeddings,
   reembedParamsObsmFetch,

@@ -11,6 +11,8 @@ import CreateGenesetDialogue from "./menus/createGenesetDialogue";
 import * as globals from "../../globals";
 import { AnnoMatrixLoader, AnnoMatrixObsCrossfilter } from "../../annoMatrix";
 import QuickGene from "./quickGene";
+import AnnoDialog from "../annoDialog";
+import LabelInput from "../labelInput";
 
 @connect((state) => {
   return {
@@ -25,7 +27,46 @@ import QuickGene from "./quickGene";
 class GeneExpression extends React.Component {
   constructor(props){
     super(props);
-    this.state={geneSetsExpanded: true};
+    this.state={
+      geneSetsExpanded: true,
+      isEditingSetName: false,
+      newNameText: "",
+      nameBeingEdited: ""
+    };
+  }
+
+  handleChangeOrSelect = (name) => {
+    this.setState({
+      newNameText: name,
+    });
+  };
+
+  activateEditNameMode = (e, name) => {
+    this.setState({
+      newNameText: name,
+      isEditingSetName: true,
+      nameBeingEdited: name,
+    })
+    e.preventDefault();
+  };
+  disableEditNameMode = () => {
+    this.setState({
+      newNameText: "",
+      isEditingSetName: false,
+      nameBeingEdited: ""
+    })
+  };
+  handleEditName = (e) => {
+    const { dispatch } = this.props;
+    const { newNameText, nameBeingEdited } = this.state
+
+    const oldName = nameBeingEdited;
+    const newName = newNameText;
+
+    if (oldName !== newName) {
+      dispatch(actions.requestRenameGeneset(oldName,newName))
+    }
+    this.disableEditNameMode()
   }
 
   renderGeneSets = () => {
@@ -69,16 +110,36 @@ class GeneExpression extends React.Component {
               fill
               minimal
               rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
-            />        
+            />  
+            <Tooltip
+            content="Edit geneset group name"
+            position="top"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+            >             
             <AnchorButton
-              icon="small-cross"
+              icon={<Icon icon="edit" iconSize={10} />}     
+              minimal
+              style={{
+                cursor: "pointer",
+              }}
+              onClick={(e) => this.activateEditNameMode(e,groupName)}
+              />  
+            </Tooltip>                 
+            <Tooltip
+            content="Delete geneset group"
+            position="top"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+            >
+            <AnchorButton
+              icon={<Icon icon="trash" iconSize={10} />}     
               minimal
               intent="danger"
               style={{
                 cursor: "pointer",
               }}
               onClick={() => dispatch(actions.genesetDeleteGroup(key))}
-            />   
+            />    
+            </Tooltip>                        
           </div>         
           <Collapse isOpen={this.state[groupName]??false}>
             {sets[key]}
@@ -140,7 +201,8 @@ class GeneExpression extends React.Component {
 
   render() {
     const { dispatch, genesets, annoMatrix, userLoggedIn } = this.props;
-    const { geneSetsExpanded } = this.state;
+    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited } = this.state;
+
     return (
       <div>
        {userLoggedIn ?  <GenesetHotkeys
@@ -229,6 +291,39 @@ class GeneExpression extends React.Component {
             geneSetsExpanded && <div>{this.renderGeneSets()}</div>
           }
         </div>
+        <AnnoDialog
+          isActive={
+            isEditingSetName
+          }
+          inputProps={{
+            "data-testid": `edit-set-name-dialog`,
+          }}
+          primaryButtonProps={{
+            "data-testid": `submit-set-name-edit`,
+          }}
+          title="Edit geneset group name"
+          instruction={"Choose a new geneset group name"}
+          cancelTooltipContent="Close this dialog without editing the name."
+          primaryButtonText="Edit geneset group name"
+          text={newNameText}
+          handleSubmit={this.handleEditName}
+          handleCancel={this.disableEditNameMode}
+          validationError={newNameText==="" || newNameText===nameBeingEdited}
+          annoInput={
+            <LabelInput
+              label={newNameText}
+              inputProps={{
+                "data-testid": `edit-set-name-text`,
+                leftIcon: "tag",
+                intent: "none",
+                autoFocus: true,
+              }}
+              onChange={this.handleChangeOrSelect}
+              onSelect={this.handleChangeOrSelect}                    
+              newLabelMessage="New layout name"
+            />
+          }
+        />        
       </div>
     );
   }

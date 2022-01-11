@@ -360,6 +360,15 @@ class GenesetsAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.genesets_put(request, data_adaptor)
 
+class GenesetsRenameAPI(Resource):
+    @requires_authentication
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.genesets_rename_put(request, data_adaptor)
+
+
 class SummarizeVarAPI(Resource):
     @rest_get_data_adaptor
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -404,6 +413,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(AnnotationsVarAPI, "/annotations/var")
     add_resource(DataVarAPI, "/data/var")
     add_resource(GenesetsAPI, "/genesets")
+    add_resource(GenesetsRenameAPI, "/genesets/rename")
     
     add_resource(ReembedParametersAPI, "/reembed-parameters")
     add_resource(ReembedParametersObsmAPI, "/reembed-parameters-obsm")

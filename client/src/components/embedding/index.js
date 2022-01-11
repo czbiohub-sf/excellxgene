@@ -11,6 +11,7 @@ import {
   AnchorButton,
   MenuItem,
   Menu,
+  Icon,
   Tooltip,
 } from "@blueprintjs/core";
 import * as globals from "../../globals";
@@ -304,8 +305,13 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
         /> : null}
 
         {(node !== "root" && !initEmbeddings.includes(node)) ?
+      <Tooltip
+        content="Edit embedding name"
+        position="top"
+        hoverOpenDelay={globals.tooltipHoverOpenDelay}      
+      >
       <AnchorButton
-          icon="more"
+          icon={<Icon icon="edit" iconSize={10} />}     
           data-testid={`${node}:edit-layout-mode`}
           onClick={(e) => activateEditLayoutMode(e,node)}
           minimal
@@ -314,11 +320,15 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
             marginLeft: "auto",
             marginTop: "-5px"
           }}                    
-        /> : null}
+        /></Tooltip> : null}
         {(node !== currView && node !== "root"  && !roots.includes(node) && !initEmbeddings.includes(node))?
-
+        <Tooltip
+        content="Delete embedding"
+        position="top"
+        hoverOpenDelay={globals.tooltipHoverOpenDelay}
+        >
         <AnchorButton
-          icon="small-cross"
+        icon={<Icon icon="trash" iconSize={10} />}     
           minimal
           intent="danger"
           style={{
@@ -327,7 +337,9 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
             marginTop: "-5px"
           }}
           onClick={(e) => onDeleteEmbedding(e,node)}
-        /> : null}  
+        /> 
+        </Tooltip>
+        : null}  
       </div> 
       }
     />  : null

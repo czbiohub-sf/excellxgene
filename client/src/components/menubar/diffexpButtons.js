@@ -66,7 +66,7 @@ class DiffexpButtons extends React.PureComponent {
 
     return (
       <ButtonGroup className={styles.menubarButton}>
-        <DgeHotkeys dispatch={dispatch} differential={differential} />
+        {differential.loading ? null : <DgeHotkeys dispatch={dispatch} differential={differential} />}
         <CellSetButton eitherCellSetOneOrTwo={1} />
         <CellSetButton eitherCellSetOneOrTwo={2} />
         <Tooltip

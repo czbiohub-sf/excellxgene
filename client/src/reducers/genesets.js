@@ -27,7 +27,8 @@ const GeneSets = (
     initialized: false,
     lastTid: undefined,
     genesets: new Map(),
-    diffExpListsLists: []
+    diffExpListsLists: [],
+    diffExpListsNames: []
   },
   action
 ) => {
@@ -407,15 +408,18 @@ const GeneSets = (
       return {
         ...state,
         genesets,
-        diffExpListsLists: []
+        diffExpListsLists: [],
+        diffExpListsNames: []
       };
     }
     case "request differential expression push list": {
-      const { diffExpListsLists } = state;
+      const { diffExpListsLists, diffExpListsNames } = state;
       diffExpListsLists.push(action.data)
+      diffExpListsNames.push(action.name)
       return {
         ...state,
-        diffExpListsLists
+        diffExpListsLists,
+        diffExpListsNames
       }
     }
     case "request differential expression success": {
@@ -453,7 +457,8 @@ const GeneSets = (
       return {
         ...state,
         genesets,
-        diffExpListsLists: []
+        diffExpListsLists: [],
+        diffExpListsNames: []
       };
     }
 

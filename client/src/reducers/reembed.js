@@ -67,7 +67,7 @@ export const defaultPrepParams = {
   doBatchPrep: false,
   batchPrepKey: "",
   batchPrepLabel: "",
-  dataLayer: "orig.X",
+  dataLayer: "X",
   logTransform: false,
   sumNormalizeCells: false  
 };
