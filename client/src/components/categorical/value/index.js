@@ -541,7 +541,6 @@ class CategoryValue extends React.Component {
     /* this is the color scale, so add swatches below */
     const isColorBy = metadataField === colorAccessor;
     const { categoryValueIndices } = categorySummary;
-
     const editModeActive =
       isUserAnno &&
       annotations.labelEditable.category === metadataField &&
@@ -715,7 +714,7 @@ class CategoryValue extends React.Component {
                 width: 15,
                 height: 15,
                 backgroundColor:
-                  isColorBy && categoryValueIndices
+                  isColorBy && categoryValueIndices && (count>0)
                     ? colorScale(categoryValueIndices.get(label))
                     : "inherit",
               }}

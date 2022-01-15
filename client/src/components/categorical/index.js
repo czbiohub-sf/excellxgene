@@ -1,5 +1,5 @@
 import React from "react";
-import { AnchorButton, Tooltip, Position, NumericInput, Collapse, H4, Dialog, Checkbox, InputGroup } from "@blueprintjs/core";
+import { AnchorButton, Tooltip, Position, NumericInput, Collapse, H4, H6, Dialog, Checkbox, InputGroup } from "@blueprintjs/core";
 import { connect } from "react-redux";
 import * as globals from "../../globals";
 import Category from "./category";
@@ -9,14 +9,10 @@ import AnnoSelect from "./annoSelect";
 import LabelInput from "../labelInput";
 import { labelPrompt } from "./labelUtil";
 import actions from "../../actions";
-import { isTypedArray, isFpTypedArray } from "../../util/typeHelpers";
 import {
   Dataframe,
-  IdentityInt32Index,
-  DenseInt32Index,
-  KeyIndex,
 } from "../../util/dataframe";
-import _ from "lodash";
+import Truncate from "../util/truncate";
 
 @connect((state) => ({
   annoMatrix: state.annoMatrix,
@@ -402,7 +398,8 @@ class Categories extends React.Component {
       clashingAnnos,
       newAnnos,
       selectedAnnos,
-      newAnnoNames
+      newAnnoNames,
+      annoDtypes
     } = this.state;
     const {
       writableCategoriesEnabled,
@@ -423,7 +420,7 @@ class Categories extends React.Component {
     const allCategoryNames = ControlsHelpers.selectableCategoryNames(
       schema
     ).sort();
-
+    const disableLoad = !this.validateNewLabels();
     return (
         <div
           style={{
@@ -494,6 +491,7 @@ class Categories extends React.Component {
                 <AnchorButton
                     type="button"
                     icon="upload"
+                    disabled={!userLoggedIn}
                     onClick={() => {
                       this.setState({...this.state,uploadMetadataOpen: true})
                     }}
@@ -511,18 +509,27 @@ class Categories extends React.Component {
                     <div style={{
                       display: "flex",
                       flexDirection: "column",
-                      margin: "0 auto",
-                      paddingTop: "10px"
+                      paddingLeft: "10px",
+                      paddingTop: "10px",
+                      width: "90%",
+                      margin: "0 auto"
                     }}>
                       <label className="bp3-file-input">
                         <input type="file" id="dealCsv"/>
                         <span className="bp3-file-upload-input">{fileName}</span>
                       </label>           
+
                       <div style={{display: "flex", flexDirection: "column"}}>
-                      {newAnnos?.map((name)=>{
+                      {newAnnos ? 
+                        <div style={{paddingBottom: "10px"}}><hr/>
+                        <b>Select which annotations to load...</b></div> : null}  
+                      {annoDtypes?.includes("cat") ? <H6>Categorical</H6> : null}
+                      {newAnnos?.map((name,ix)=>{
+                        if (annoDtypes[ix] !== "cat") return null;
                         return (
-                          <div key={`${name}-anno-div`} style={{display: "flex", flexDirection: "row"}}>
-                          <Checkbox key={`${name}-new-anno`} checked={selectedAnnos?.[name] ?? true} label={name} style={{"paddingTop":"10px"}}
+                          <div key={`${name}-anno-div`} style={{display: "flex", flexDirection: "row", justifyContent: "space-between", width: "60%"}}>
+                          <Checkbox key={`${name}-new-anno`} checked={selectedAnnos?.[name] ?? true} label={name}
+                            style={{margin: "auto 0", paddingRight: "10px"}}
                             onChange={() => {
                                 const sannos = selectedAnnos ?? {};
                                 const {[name]: _, ...sannosExc } = sannos;
@@ -533,23 +540,52 @@ class Categories extends React.Component {
                           {clashingAnnos?.[name] ? <InputGroup
                             key={`${name}-input-cat`}
                             id={`${name}-input-anno`}
-                            placeholder="New, unique name..."
+                            placeholder="Enter a unique name..."
                             onChange={(e)=>{
                               const nan = newAnnoNames ?? {};
                               const {[name]: _, ...nanExc } = nan;   
                               this.setState({...this.state,newAnnoNames: {[name]: e.target.value, ...nanExc}})
                             }}
                             value={newAnnoNames?.[name] ?? ""}
-                          /> : null}       
+                          /> : null}      
                           </div>                                          
                         );
                       }) ?? null}
+                      {annoDtypes?.includes("cont") ? <H6>Continuous</H6> : null}
+                      {newAnnos?.map((name,ix)=>{
+                        if (annoDtypes[ix] !== "cont") return null;
+                        return (
+                          <div key={`${name}-anno-div`} style={{display: "flex", flexDirection: "row", justifyContent: "space-between", width: "60%"}}>
+                          <Checkbox key={`${name}-new-anno`} checked={selectedAnnos?.[name] ?? true} label={name}
+                            style={{margin: "auto 0", paddingRight: "10px"}}
+                            onChange={() => {
+                                const sannos = selectedAnnos ?? {};
+                                const {[name]: _, ...sannosExc } = sannos;
+                                this.setState({...this.state,selectedAnnos: {[name]: !(sannos?.[name] ?? true), ...sannosExc}})
+                              }
+                            } 
+                          />    
+                          {clashingAnnos?.[name] ? <InputGroup
+                            key={`${name}-input-cat`}
+                            id={`${name}-input-anno`}
+                            placeholder="Enter a unique name..."
+                            onChange={(e)=>{
+                              const nan = newAnnoNames ?? {};
+                              const {[name]: _, ...nanExc } = nan;   
+                              this.setState({...this.state,newAnnoNames: {[name]: e.target.value, ...nanExc}})
+                            }}
+                            value={newAnnoNames?.[name] ?? ""}
+                          /> : null}      
+                          </div>                                          
+                        );
+                      }) ?? null}                      
+                      <br/>
                       {newAnnos ? <AnchorButton
-                        intent="primary"
-                        disabled={!this.validateNewLabels()}
+                        intent={!disableLoad ? "primary" : "danger"}
+                        disabled={disableLoad}
                         onClick={this.handleFileUpload}
                       >
-                        Load
+                        {disableLoad ? "Label name collision": "Load"}
                       </AnchorButton> : null}
                       </div>
                     </div>                                
