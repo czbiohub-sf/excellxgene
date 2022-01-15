@@ -158,6 +158,11 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
     _unregister_shm(to_remove, ihm)        
     return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
 
+def pickle_loader(fn):
+    with open(fn,"rb") as f:
+        x = pickle.load(f)
+    return x
+
 def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID,ihm):
     to_remove = []
 
@@ -171,16 +176,16 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
     for f in fnames:
         n = f.split('/')[-1][:-2]
         if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p") and exists(f"{direc}/{userID}/pca/{n}.p"):
-            embs[n] = pickle.load(open(f,'rb'))
-            nnms[n] = pickle.load(open(f"{direc}/{userID}/nnm/{n}.p",'rb'))
-            params[n] = pickle.load(open(f"{direc}/{userID}/params/{n}.p",'rb'))
-            pcas[n] = pickle.load(open(f"{direc}/{userID}/pca/{n}.p",'rb'))
+            embs[n] = pickle_loader(f)
+            nnms[n] = pickle_loader(f"{direc}/{userID}/nnm/{n}.p")
+            params[n] = pickle_loader(f"{direc}/{userID}/params/{n}.p")
+            pcas[n] = pickle_loader(f"{direc}/{userID}/pca/{n}.p")
         elif exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p"):
-            embs[n] = pickle.load(open(f,'rb'))
-            nnms[n] = pickle.load(open(f"{direc}/{userID}/nnm/{n}.p",'rb'))
-            params[n] = pickle.load(open(f"{direc}/{userID}/params/{n}.p",'rb'))
+            embs[n] = pickle_loader(f)
+            nnms[n] = pickle_loader(f"{direc}/{userID}/nnm/{n}.p")
+            params[n] = pickle_loader(f"{direc}/{userID}/params/{n}.p")
         elif exists(f):
-            embs[n] = pickle.load(open(f,'rb'))
+            embs[n] = pickle_loader(f)
     
     X = embs[currentLayout]
     f = np.isnan(X).sum(1)==0    
@@ -359,14 +364,14 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
                     
     elif embeddingMode == "Create embedding from subset":
         direc = pathlib.Path().absolute()    
-        umap = pickle.load(open(f"{direc}/{userID}/emb/{parentName}.p",'rb'))                     
+        umap = pickle_loader(f"{direc}/{userID}/emb/{parentName}.p")                     
         result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
         result[obs_mask] = umap[obs_mask] 
         X_umap = result  
-        nnm = pickle.load(open(f"{direc}/{userID}/nnm/{parentName}.p",'rb'))[obs_mask][:,obs_mask]
+        nnm = pickle_loader(f"{direc}/{userID}/nnm/{parentName}.p")[obs_mask][:,obs_mask]
 
         try:
-            obsm = pickle.load(open(f"{direc}/{userID}/pca/{parentName}.p",'rb'))
+            obsm = pickle_loader(f"{direc}/{userID}/pca/{parentName}.p")
         except:
             obsm = np.zeros(X_umap.shape)
         pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
@@ -390,7 +395,7 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
 
         direc = pathlib.Path().absolute()    
         n = latentSpace.split("X_")[-1]
-        obsm = pickle.load(open(f"{direc}/{userID}/emb/{n}.p",'rb'))   
+        obsm = pickle_loader(f"{direc}/{userID}/emb/{n}.p")   
         adata = AnnData(X=np.zeros(obsm.shape)[obs_mask],obsm={"X_pca":obsm[obs_mask]})    
 
         if doBatch:
@@ -436,12 +441,12 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
 
     direc = pathlib.Path().absolute()        
     if exists(f"{direc}/{userID}/params/latest.p"):
-        latestPreParams = pickle.load(open(f"{direc}/{userID}/params/latest.p","rb"))
+        latestPreParams = pickle_loader(f"{direc}/{userID}/params/latest.p")
     else:
         latestPreParams = None
 
     if exists(f"{userID}/params/{parentName}.p"):
-        parentParams = pickle.load(open(f"{direc}/{userID}/params/{parentName}.p","rb"))
+        parentParams = pickle_loader(f"{direc}/{userID}/params/{parentName}.p")
     else:
         parentParams = None
 
@@ -452,16 +457,20 @@ def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embNa
     if (parentParams is not None):
         reembedParams[f"parentParams"]=parentParams
 
-    pickle.dump(nnm, open(f"{direc}/{userID}/nnm/{name}.p","wb"))
-    pickle.dump(X_umap, open(f"{direc}/{userID}/emb/{name}.p","wb"))
-    pickle.dump(reembedParams, open(f"{direc}/{userID}/params/{name}.p","wb"))
-    pickle.dump(pca, open(f"{direc}/{userID}/pca/{name}.p","wb"))
+    pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
+    pickle_dumper(X_umap, f"{direc}/{userID}/emb/{name}.p")
+    pickle_dumper(reembedParams, f"{direc}/{userID}/params/{name}.p")
+    pickle_dumper(pca, f"{direc}/{userID}/pca/{name}.p")
 
     return layout_schema
 
+def pickle_dumper(x,fn):
+    with open(fn,"wb") as f:
+        pickle.dump(x,f)
+
 def compute_leiden(obs_mask,name,resolution,userID):
     direc = pathlib.Path().absolute() 
-    nnm = pickle.load(open(f"{direc}/{userID}/nnm/{name}.p","rb"))            
+    nnm = pickle_loader(f"{direc}/{userID}/nnm/{name}.p")            
     nnm = nnm[obs_mask][:,obs_mask]
 
     X = nnm
@@ -505,7 +514,7 @@ def compute_sankey_df(labels, name, obs_mask, userID):
         return x,y
     
     direc = pathlib.Path().absolute() 
-    nnm = pickle.load(open(f"{direc}/{userID}/nnm/{name}.p","rb"))              
+    nnm = pickle_loader(f"{direc}/{userID}/nnm/{name}.p")              
     nnm = nnm[obs_mask][:,obs_mask]
 
     cl=[]
@@ -781,7 +790,7 @@ def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID, ihm):
         "dataLayer":dataLayer,
         "sumNormalizeCells":sumNormalizeCells,        
     }        
-    pickle.dump(prepParams, open(f"{direc}/{userID}/params/latest.p","wb"))  
+    pickle_dumper(prepParams, f"{direc}/{userID}/params/latest.p")
     _unregister_shm(to_remove, ihm) 
     return adata_raw
 
@@ -852,7 +861,7 @@ def initialize_socket(da):
 
                     layers = list(np.unique(layers))
                     direc = pathlib.Path().absolute()  
-                    obs = pickle.load(open(f"{direc}/{userID}/obs.p",'rb'))
+                    obs = pickle_loader(f"{direc}/{userID}/obs.p")
 
                     obs['name_0'] = obs.index
                     obs.index = pd.Index(np.arange(obs.shape[0]))
@@ -1333,23 +1342,23 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/params/")
             os.makedirs(f"{userID}/pca/")
 
-            pickle.dump(self._obs_init,open(f"{userID}/obs.p",'wb'))
+            pickle_dumper(self._obs_init,f"{userID}/obs.p")
             for k in self._obsm_init.keys():
                 k2 = "X_".join(k.split("X_")[1:])
-                pickle.dump(self._obsm_init[k],open(f"{userID}/emb/{k2}.p",'wb'))
+                pickle_dumper(self._obsm_init[k],f"{userID}/emb/{k2}.p")
                 r = self._obsp_init.get("N_"+k2,self._obsp_init.get("connectivities",None))
                 p = self._uns_init.get("N_"+k2+"_params",{})
                 if r is not None:
-                    pickle.dump(r,open(f"{userID}/nnm/{k2}.p",'wb'))
-                    pickle.dump(p,open(f"{userID}/params/{k2}.p",'wb'))
+                    pickle_dumper(r,f"{userID}/nnm/{k2}.p")
+                    pickle_dumper(p,f"{userID}/params/{k2}.p")
         else:
-            obs = pickle.load(open(f"{userID}/obs.p",'rb'))
+            obs = pickle_loader(f"{userID}/obs.p")
             for ann in obs:
                 dtype = obs[ann].dtype
                 if hasattr(dtype,'numpy_dtype'):
                     dtype = dtype.numpy_dtype
-                obs[ann] = obs[ann].astype(dtype)     
-            pickle.dump(obs,open(f"{userID}/obs.p",'wb'))
+                obs[ann] = obs[ann].astype(dtype)  
+            pickle_dumper(obs,f"{userID}/obs.p")
 
 
             
@@ -1371,6 +1380,17 @@ class AnndataAdaptor(DataAdaptor):
         self.gene_count = self.data.shape[1]
         self._create_schema()
 
+        for k in self.data.obs.columns:
+            x = np.array(list(self.data.obs[k]))
+            if not np.issubdtype(x.dtype,np.number):
+                x = x.astype('str')
+                self.data.obs[k] = pd.Categorical(x)
+            else:
+                if np.any(np.isnan(x)):
+                    x = x.astype('str')
+                    self.data.obs[k] = pd.Categorical(x)
+        
+            #sam.adata.obs[k] = pd.Categorical(sam.adata.obs[k].astype('str'))        
         self._obsm_init = self.data.obsm
         self._obs_init = self.data.obs
         self._uns_init = self.data.uns
@@ -1496,7 +1516,7 @@ class AnndataAdaptor(DataAdaptor):
         annotations = self.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(self)}"
         try:
-            full_embedding = pickle.load(open(f"{userID}/emb/{ename}.p",'rb'))
+            full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")
         except:
             full_embedding = self._obsm_init[f"X_{ename}"]
         return full_embedding[:, 0:dims]

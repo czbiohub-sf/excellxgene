@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { Button, ButtonGroup, Tooltip, Icon } from "@blueprintjs/core";
+import { AnchorButton, Button, ButtonGroup, Tooltip, Icon } from "@blueprintjs/core";
 import { IconNames } from "@blueprintjs/icons";
 import * as globals from "../../globals";
 
@@ -65,19 +65,6 @@ const HistogramHeader = React.memo(
             </ButtonGroup>
           </span>
         ) : null}
-        {onRemoveClick ? (
-          <Button
-            minimal
-            onClick={onRemoveClick}
-            style={{
-              color: globals.blue,
-              cursor: "pointer",
-              marginLeft: 7,
-            }}
-          >
-            remove
-          </Button>
-        ) : null}
         <Tooltip
           content="Use as color scale"
           position="bottom"
@@ -92,6 +79,18 @@ const HistogramHeader = React.memo(
             icon="tint"
           />
         </Tooltip>
+        {onRemoveClick ? <Tooltip
+          content="Delete this histogram"
+          position="bottom"
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
+        >
+          <Button
+          icon="trash"
+          intent="danger"
+          minimal
+          onClick={()=>onRemoveClick(fieldId)}
+          /> 
+        </Tooltip> : null}
       </div>
     );
   }

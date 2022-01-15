@@ -260,19 +260,16 @@ export const annotationDeleteCategoryAction = (categoryName) => (
   const {
     annoMatrix: prevAnnoMatrix,
     obsCrossfilter: prevObsCrossfilter,
-    controls
   } = getState();
-  const { username } = controls;
+  
   if (!prevAnnoMatrix || !prevObsCrossfilter) return;
-  if (!isUserAnnotation(prevAnnoMatrix, categoryName))
-    throw new Error("not a user annotation");
   
   const obsCrossfilter = prevObsCrossfilter.dropObsColumn(categoryName);
   dispatch({
     type: "annotation: delete category",
     annoMatrix: obsCrossfilter.annoMatrix,
     obsCrossfilter,
-    metadataField: categoryName,
+    metadataField: categoryName
   });
 
   dispatch({type: "sankey: set", category: categoryName, value: false})

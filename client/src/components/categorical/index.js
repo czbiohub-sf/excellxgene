@@ -1,5 +1,5 @@
 import React from "react";
-import { AnchorButton, Tooltip, Position, NumericInput } from "@blueprintjs/core";
+import { AnchorButton, Tooltip, Position, NumericInput, Collapse, H4, Dialog, Checkbox, InputGroup } from "@blueprintjs/core";
 import { connect } from "react-redux";
 import * as globals from "../../globals";
 import Category from "./category";
@@ -9,8 +9,17 @@ import AnnoSelect from "./annoSelect";
 import LabelInput from "../labelInput";
 import { labelPrompt } from "./labelUtil";
 import actions from "../../actions";
+import { isTypedArray, isFpTypedArray } from "../../util/typeHelpers";
+import {
+  Dataframe,
+  IdentityInt32Index,
+  DenseInt32Index,
+  KeyIndex,
+} from "../../util/dataframe";
+import _ from "lodash";
 
 @connect((state) => ({
+  annoMatrix: state.annoMatrix,
   writableCategoriesEnabled: state.config?.parameters?.annotations ?? false,
   schema: state.annoMatrix?.schema,
   ontology: state.ontology,
@@ -38,6 +47,10 @@ class Categories extends React.Component {
       value: resolution,
       deleteEnabled: false,
       fuseEnabled: false,
+      leidenOpen: true,
+      catsOpen: true,
+      uploadMetadataOpen: false,
+      fileName: "Choose file..."
     };
   }
   clamp = (num, min=Number.POSITIVE_INFINITY, max=Number.NEGATIVE_INFINITY) => {
@@ -66,7 +79,190 @@ class Categories extends React.Component {
       this.setState({deleteEnabled: numChecked>0, fuseEnabled: numChecked>1})
     }
   }
+  resetFileState = () => {
+    this.setState({...this.state, 
+      fileName: "Choose file...", 
+      uploadMetadataOpen: false,
+      newAnnos: null,
+      clashingAnnos: null,
+      annoArrays: null,
+      selectedAnnos: null,
+      newAnnoNames: null,
+      annoDtypes: null
+    })
+  }
+  handleFileUpload = () => {
+      let { obsCrossfilter: crossfilter, annoMatrix, dispatch } = this.props;
+      const { annoArrays, annoDtypes, newAnnoNames, newAnnos, clashingAnnos, selectedAnnos } = this.state;
+      const colIdx = [];
+      const arrays = [];
+      const dtypes= [];
+      newAnnos.forEach((item,ix)=>{
+        if (selectedAnnos?.[item] ?? true){
+          let name;
+          if (clashingAnnos?.[item]){
+            name = newAnnoNames[item];
+          } else {
+            name = item;
+          }
+          colIdx.push(name);
+          arrays.push(annoArrays[ix]);
+          dtypes.push(annoDtypes[ix])
+        }
+      });
 
+      arrays.forEach((arr,ix)=>{
+        if (dtypes[ix] === "cat"){
+          const item = new Array(arr);
+          const df = new Dataframe([item[0].length,1],item)
+          const { categories: cat } = df.col(0).summarizeCategorical();
+          if (!cat.includes(globals.unassignedCategoryLabel)) {
+            cat.push(globals.unassignedCategoryLabel);
+          }
+          const ctor = item.constructor;
+          const newSchema = {
+            name: colIdx[ix],
+            type: "categorical",
+            categories: cat,
+            writable: true,
+          };       
+          crossfilter = crossfilter.addObsColumn(
+            newSchema,
+            ctor,
+            arr
+          );  
+          annoMatrix = crossfilter.annoMatrix;
+        } else {
+          const item = new Float32Array(arr);
+          const ctor = item.constructor;
+          const newSchema = {
+            name: colIdx[ix],
+            type: "float32",
+            writable: true,
+          };      
+          crossfilter = crossfilter.addObsColumn(
+            newSchema,
+            ctor,
+            item
+          );  
+          annoMatrix = crossfilter.annoMatrix;            
+        } 
+      });
+      
+    colIdx.forEach((item)=>{
+      dispatch({
+        type: "annotation: create category",
+        data: item,
+        categoryToDuplicate: null,
+        annoMatrix,
+        obsCrossfilter: crossfilter,
+      });          
+    })              
+    this.resetFileState()
+  }
+  setupFileInput = () => {
+    const context = this;
+    const { schema } = this.props;
+
+    function uploadDealcsv () {};
+    uploadDealcsv.prototype.getCsv = function(e) {
+      let input = document.getElementById('dealCsv');
+      input.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+
+            var myFile = this.files[0];
+            var reader = new FileReader();
+            context.setState({...context.state,fileName: myFile.name})
+            reader.addEventListener('load', function (e) {
+                
+                let csvdata = e.target.result; 
+                parseCsv.getParsecsvdata(csvdata); // calling function for parse csv data 
+            });
+            
+            reader.readAsBinaryString(myFile);
+        }
+      });
+    }
+    uploadDealcsv.prototype.getParsecsvdata = function(data) {
+      let parsedata = [];
+
+      let newLinebrk = data.split("\n");
+      if (newLinebrk.at(-1)===""){
+        newLinebrk = newLinebrk.slice(0,-1)
+      }
+      let numCols;
+      for(let i = 0; i < newLinebrk.length; i++) {
+        const x = newLinebrk[i].split(",");
+        if (numCols ?? false){
+          if (x.length !== numCols || x.length === 1){
+            context.resetFileState();
+            throw new Error("CSV file improperly formatted");
+          }
+        }
+        numCols = x.length;
+        parsedata.push(x)
+      }
+      const colIdx = parsedata[0].slice(1);
+      parsedata = parsedata.slice(1);
+      const columns = [];
+      const clashing = {};
+      colIdx.forEach((item)=>{
+        columns.push(new Map())
+        if (schema.annotations.obsByName[item]) {
+          clashing[item] = true;
+        } else {
+          clashing[item] = false;
+        }
+      })     
+      const dtypes=[];
+      parsedata.forEach((row,rowix)=>{
+        row.slice(1).forEach((item,ix)=>{
+          let dtype;
+          if (!isNaN(item)){
+            if (item.toString().indexOf('.') != -1){
+              dtype="cont";
+              columns[ix].set(row[0],parseFloat(item))
+            } else {
+              dtype="cat";
+              columns[ix].set(row[0],parseInt(item))
+            }
+          } else {
+            dtype="cat";
+            columns[ix].set(row[0],item.toString())
+          }
+          if (rowix > 0){
+            if (dtypes[ix] === "cont" && dtype !== "cont"){
+              context.resetFileState();
+              throw new Error("Each value in a continuous metadata column must be a float.");
+            }
+          } else {
+            dtypes.push(dtype)
+          }
+
+        })
+      })
+
+      context.props.annoMatrix.fetch("obs", "name_0").then((nameDf)=>{
+        const rowNames = nameDf.__columns[0];      
+        const arrays = [];
+        columns.forEach(()=>{
+          arrays.push([])
+        })
+        rowNames.forEach((item) => {
+          columns.forEach((map,ix)=>{
+            if (dtypes[ix] === "cat"){
+              arrays[ix].push(map.get(item) ?? "unassigned");
+            } else {
+              arrays[ix].push(map.get(item) ?? 0.0);
+            }
+          })
+        })
+        context.setState({...context.state, clashingAnnos: clashing, newAnnos: colIdx, annoArrays: arrays, annoDtypes: dtypes})        
+      })
+    }
+    var parseCsv = new uploadDealcsv();
+    parseCsv.getCsv();
+  }
   handleEnableAnnoMode = () => {
     this.setState({ createAnnoModeActive: true });
   };
@@ -115,7 +311,38 @@ class Categories extends React.Component {
     /* otherwise, no error */
     return false;
   };
-
+  validateNewLabels = () => {
+    const { newAnnoNames, newAnnos, clashingAnnos, selectedAnnos} = this.state;
+    const { schema } = this.props;
+    if (!newAnnos){
+      return false;
+    } else {
+      const names = [];
+      for (const name of newAnnos) {
+        if (clashingAnnos?.[name] && (selectedAnnos?.[name] ?? true)) {
+          if (!newAnnoNames?.[name]) {
+            return false;
+          } else if (newAnnoNames?.[name] === "") {
+            return false;
+          }
+          names.push(newAnnoNames?.[name])
+        } else {
+          names.push(name)
+        }
+      }
+      for (const item of schema.annotations.obs.columns) {
+        names.push(item.name)
+      }
+      for (const name of newAnnos) {
+        if (names.indexOf(newAnnoNames?.[name]) !== names.lastIndexOf(newAnnoNames?.[name]) && (selectedAnnos?.[name] ?? true)
+            && (selectedAnnos?.[newAnnoNames?.[name]] ?? true)
+          ) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
   handleChange = (name) => {
     this.setState({ newCategoryText: name });
   };
@@ -167,7 +394,15 @@ class Categories extends React.Component {
       expandedCats,
       value,
       deleteEnabled,
-      fuseEnabled
+      fuseEnabled,
+      leidenOpen,
+      catsOpen,
+      uploadMetadataOpen,
+      fileName,
+      clashingAnnos,
+      newAnnos,
+      selectedAnnos,
+      newAnnoNames
     } = this.state;
     const {
       writableCategoriesEnabled,
@@ -234,7 +469,9 @@ class Categories extends React.Component {
           {writableCategoriesEnabled ? (
             <div style={{display: "flex", flexDirection: "column"}}>
               <div style={{
-                paddingBottom: "10px"
+                paddingBottom: "10px",
+                columnGap: "5px",
+                display: "flex"
               }}>
                 <Tooltip
                 content="Save selected metadata categories to a `.csv` file."
@@ -248,8 +485,77 @@ class Categories extends React.Component {
                       this.handleSaveMetadata()
                     }}
                   /> 
-                </Tooltip>  
-                </div>               
+                </Tooltip> 
+                <Tooltip
+                content="Upload metadata from a `.csv` file."
+                position="bottom"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              >                                              
+                <AnchorButton
+                    type="button"
+                    icon="upload"
+                    onClick={() => {
+                      this.setState({...this.state,uploadMetadataOpen: true})
+                    }}
+                  /> 
+                </Tooltip>                 
+                  <Dialog
+                    title="Upload metadata csv file"
+                    isOpen={uploadMetadataOpen}
+                    onOpened={()=>this.setupFileInput()}
+                    onClose={()=>{
+                      this.resetFileState();
+                      }
+                    }
+                  >
+                    <div style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      margin: "0 auto",
+                      paddingTop: "10px"
+                    }}>
+                      <label className="bp3-file-input">
+                        <input type="file" id="dealCsv"/>
+                        <span className="bp3-file-upload-input">{fileName}</span>
+                      </label>           
+                      <div style={{display: "flex", flexDirection: "column"}}>
+                      {newAnnos?.map((name)=>{
+                        return (
+                          <div key={`${name}-anno-div`} style={{display: "flex", flexDirection: "row"}}>
+                          <Checkbox key={`${name}-new-anno`} checked={selectedAnnos?.[name] ?? true} label={name} style={{"paddingTop":"10px"}}
+                            onChange={() => {
+                                const sannos = selectedAnnos ?? {};
+                                const {[name]: _, ...sannosExc } = sannos;
+                                this.setState({...this.state,selectedAnnos: {[name]: !(sannos?.[name] ?? true), ...sannosExc}})
+                              }
+                            } 
+                          />    
+                          {clashingAnnos?.[name] ? <InputGroup
+                            key={`${name}-input-cat`}
+                            id={`${name}-input-anno`}
+                            placeholder="New, unique name..."
+                            onChange={(e)=>{
+                              const nan = newAnnoNames ?? {};
+                              const {[name]: _, ...nanExc } = nan;   
+                              this.setState({...this.state,newAnnoNames: {[name]: e.target.value, ...nanExc}})
+                            }}
+                            value={newAnnoNames?.[name] ?? ""}
+                          /> : null}       
+                          </div>                                          
+                        );
+                      }) ?? null}
+                      {newAnnos ? <AnchorButton
+                        intent="primary"
+                        disabled={!this.validateNewLabels()}
+                        onClick={this.handleFileUpload}
+                      >
+                        Load
+                      </AnchorButton> : null}
+                      </div>
+                    </div>                                
+                  </Dialog> 
+                </div>    
+
               <div  style={{
                 display: 'inline-flex',
                 justifyContent: 'space-between',
@@ -351,10 +657,34 @@ class Categories extends React.Component {
 
         {/* READ ONLY CATEGORICAL FIELDS */}
         {/* this is duplicative but flat, could be abstracted */}
-        {allCategoryNames.map((catName) =>
+        <AnchorButton
+              onClick={() => {
+                this.setState({ 
+                  leidenOpen: !leidenOpen
+                });
+              }}
+              text={<span><H4>Leiden clustering</H4></span>}
+              fill
+              minimal
+              rightIcon={leidenOpen ? "chevron-down" : "chevron-right"} small
+        />               
+        <Collapse isOpen={leidenOpen}>
+          {allCategoryNames.map((catName) =>
+            schema.annotations.obsByName[catName].writable && catName.startsWith('leiden_v') ? (
+              <Category
+                key={catName}
+                metadataField={catName}
+                onExpansionChange={this.onExpansionChange}
+                isExpanded={expandedCats.has(catName)}
+                createAnnoModeActive={createAnnoModeActive}
+              />
+            ) : null
+          )}
+        </Collapse>        
+        {/*{allCategoryNames.map((catName) =>
           !schema.annotations.obsByName[catName].writable &&
           (schema.annotations.obsByName[catName].categories?.length > 1 ||
-            !schema.annotations.obsByName[catName].categories) ? (
+            !schema.annotations.obsByName[catName].categories) && !catName.startsWith('leiden_v') ? (
             <Category
               key={catName}
               metadataField={catName}
@@ -363,10 +693,23 @@ class Categories extends React.Component {
               createAnnoModeActive={createAnnoModeActive}
             />
           ) : null
-        )}
+        )}*/}
+        <hr/>
+        <AnchorButton
+              onClick={() => {
+                this.setState({ 
+                  catsOpen: !catsOpen
+                });
+              }}
+              text={<span><H4>Categorical</H4></span>}
+              fill
+              minimal
+              rightIcon={catsOpen ? "chevron-down" : "chevron-right"} small
+        />          
         {/* WRITEABLE FIELDS */}
+        <Collapse isOpen={catsOpen}>
         {allCategoryNames.map((catName) =>
-          schema.annotations.obsByName[catName].writable ? (
+          schema.annotations.obsByName[catName].writable && !catName.startsWith('leiden_v') ? (
             <Category
               key={catName}
               metadataField={catName}
@@ -375,7 +718,7 @@ class Categories extends React.Component {
               createAnnoModeActive={createAnnoModeActive}
             />
           ) : null
-        )}       
+        )}</Collapse>       
       </div>
     );
   }

@@ -85,9 +85,6 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
     /*
 		drop column from field
 		*/
-    const colSchema = _getColumnSchema(this.schema, "obs", col);
-    _writableCheck(colSchema); // throws on error
-
     const newAnnoMatrix = this._clone();
     newAnnoMatrix._cache.obs = this._cache.obs.dropCol(col);
     newAnnoMatrix.schema = removeObsAnnoColumn(this.schema, col);

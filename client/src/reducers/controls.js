@@ -21,7 +21,8 @@ const Controls = (
     datasetDrawer: false,
     userInfo: null,
     hostedMode: false,
-    modifyingLayouts: false
+    modifyingLayouts: false,
+    screenCap: false
   },
   action
 ) => {
@@ -53,6 +54,18 @@ const Controls = (
         [action.name]: action.ws
       };
     }   
+    case "graph: screencap start": {
+      return {
+        ...state,
+        screenCap: true
+      }
+    }
+    case "graph: screencap end": {
+      return {
+        ...state,
+        screenCap: false
+      }
+    }    
     case "modifying layouts": {
       return {
         ...state,

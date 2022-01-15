@@ -14,7 +14,7 @@ class RenameGeneset extends React.PureComponent {
   constructor(props) {
     super(props);
     this.state = {
-      newGenesetName: props.parentGeneset,
+      newGenesetName: props.parentGeneset.split(' : (').at(0),
       newGenesetDescription: props.parentGenesetDescription,
     };
   }
@@ -54,7 +54,7 @@ class RenameGeneset extends React.PureComponent {
   };
 
   handleChange = (e) => {
-    this.setState({ newGenesetName: e });
+    this.setState({ newGenesetName: `${e.split(' : (').at(0)} : (${new Date().toLocaleString()})`});
   };
 
   handleChangeDescription = (e) => {
@@ -64,7 +64,10 @@ class RenameGeneset extends React.PureComponent {
   render() {
     const { newGenesetName, newGenesetDescription } = this.state;
     const { genesetsUI, parentGeneset, parentGenesetDescription } = this.props;
-
+    let name = "";
+    if (genesetsUI.isEditingGenesetName) {
+      name = genesetsUI.isEditingGenesetName;
+    }
     return (
       <>
         <AnnoDialog
@@ -76,7 +79,7 @@ class RenameGeneset extends React.PureComponent {
             "data-testid": `${genesetsUI.isEditingGenesetName}:submit-geneset`,
           }}
           title="Edit gene set name and description"
-          instruction={`Rename ${genesetsUI.isEditingGenesetName}`}
+          instruction={`Rename ${name.split(' : (').at(0)}`}
           cancelTooltipContent="Close this dialog without renaming the gene set."
           primaryButtonText="Edit gene set name and description"
           text={newGenesetName}
@@ -87,7 +90,7 @@ class RenameGeneset extends React.PureComponent {
           }
           annoInput={
             <LabelInput
-              label={newGenesetName}
+              label={newGenesetName.split(' : (').at(0)}
               onChange={this.handleChange}
               inputProps={{
                 "data-testid": "rename-geneset-modal",

@@ -79,7 +79,8 @@ function createModelTF() {
   pointDilation: state.pointDilation,
   genesets: state.genesets.genesets,
   multiselect: state.graphSelection.multiselect,
-  modifyingLayouts: state.controls.modifyingLayouts
+  modifyingLayouts: state.controls.modifyingLayouts,
+  screenCap: state.controls.screenCap
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -599,7 +600,8 @@ class Graph extends React.Component {
       crossfilter,
       pointDilation,
       viewport,
-      modifyingLayouts
+      modifyingLayouts,
+      screenCap
     } = props.watchProps;
     if (!(modifyingLayouts)){
       const { modelTF } = this.state;
@@ -650,6 +652,7 @@ class Graph extends React.Component {
         flags,
         width,
         height,
+        screenCap
       };
     } else {
       return this.cachedAsyncProps;
@@ -861,6 +864,7 @@ class Graph extends React.Component {
       camera,
       projectionTF,
     } = this.state;
+    const { screenCap } = this.props;
     this.renderPoints(
       regl,
       drawPoints,
@@ -868,12 +872,13 @@ class Graph extends React.Component {
       pointBuffer,
       flagBuffer,
       camera,
-      projectionTF
+      projectionTF,
+      screenCap
     );
   });
 
   updateReglAndRender(asyncProps, prevAsyncProps) {
-    const { positions, colors, flags, height, width } = asyncProps;
+    const { positions, colors, flags, height, width, screenCap } = asyncProps;
     this.cachedAsyncProps = asyncProps;
     const { pointBuffer, colorBuffer, flagBuffer } = this.state;
     let needToRenderCanvas = false;
@@ -893,6 +898,9 @@ class Graph extends React.Component {
       flagBuffer({ data: flags, dimension: 1 });
       needToRenderCanvas = true;
     }
+    if (screenCap !== prevAsyncProps?.screenCap && screenCap) {
+      needToRenderCanvas = true;
+    } 
     if (needToRenderCanvas) this.renderCanvas();
   }
 
@@ -1086,9 +1094,10 @@ class Graph extends React.Component {
     pointBuffer,
     flagBuffer,
     camera,
-    projectionTF
+    projectionTF,
+    screenCap
   ) {
-    const { annoMatrix } = this.props;
+    const { annoMatrix, dispatch, layoutChoice } = this.props;
     if (!this.reglCanvas || !annoMatrix) return;
 
     const { schema } = annoMatrix;
@@ -1110,6 +1119,20 @@ class Graph extends React.Component {
       nPoints: schema.dataframe.nObs,
       minViewportDimension: Math.min(width, height),
     });
+    if (screenCap) {
+      regl._gl.canvas.toBlob(function(blob) {
+        var a = document.createElement("a");
+        document.body.appendChild(a);
+        a.style = "display: none";
+    
+        var url = window.URL.createObjectURL(blob);
+        a.href = url;
+        a.download = `${layoutChoice.current.split(';;').at(-1)}_emb.png`;
+        a.click();
+        window.URL.revokeObjectURL(url); 
+        dispatch({type: "graph: screencap end"}) 
+      });                
+    }
     regl._gl.flush();
   }
 
@@ -1122,7 +1145,8 @@ class Graph extends React.Component {
       pointDilation,
       crossfilter,
       sankeyPlotMode,
-      modifyingLayouts
+      modifyingLayouts,
+      screenCap
     } = this.props;
     const {
       modelTF,
@@ -1250,7 +1274,8 @@ class Graph extends React.Component {
             pointDilation,
             crossfilter,
             viewport,
-            modifyingLayouts
+            modifyingLayouts,
+            screenCap
           }}
         >
           <Async.Pending initial>
@@ -1273,7 +1298,7 @@ class Graph extends React.Component {
           <Async.Fulfilled>
             {(asyncProps) => {
               if (regl && !shallowEqual(asyncProps, this.cachedAsyncProps)) {
-                this.updateReglAndRender(asyncProps, this.cachedAsyncProps);
+                this.updateReglAndRender(asyncProps, this.cachedAsyncProps);          
               }
               return null;
             }}

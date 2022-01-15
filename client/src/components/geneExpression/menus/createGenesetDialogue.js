@@ -82,7 +82,7 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   handleChange = (e) => {
-    this.setState({ genesetName: e });
+    this.setState({ genesetName: `${e.split(' : (').at(0)} : (${new Date().toLocaleString()})`});
   };
 
   handleGenesetInputChange = (e) => {

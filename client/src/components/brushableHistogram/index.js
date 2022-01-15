@@ -361,7 +361,8 @@ class HistogramBrush extends React.PureComponent {
       isObs,
       mini,
       setGenes,
-      removeHistZeros
+      removeHistZeros,
+      onRemoveClick
     } = this.props;
 
     let { width } = this.props;
@@ -371,7 +372,8 @@ class HistogramBrush extends React.PureComponent {
 
     const fieldForId = field.replace(/\s/g, "_");
     const showScatterPlot = isUserDefined;
-
+    const removeHistogram = isUserDefined ? this.removeHistogram : null;
+    
     return (
       <Async
         watchFn={HistogramBrush.watchAsync}
@@ -408,7 +410,7 @@ class HistogramBrush extends React.PureComponent {
                     isColorBy={isColorAccessor}
                     isObs={isObs}
                     onColorByClick={this.handleColorAction(dispatch)}
-                    onRemoveClick={isUserDefined ? this.removeHistogram : null}
+                    onRemoveClick={onRemoveClick ? onRemoveClick : removeHistogram}
                     isScatterPlotX={isScatterplotXXaccessor}
                     isScatterPlotY={isScatterplotYYaccessor}
                     onScatterPlotXClick={

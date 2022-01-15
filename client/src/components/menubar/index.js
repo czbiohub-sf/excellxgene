@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -12,9 +12,6 @@ import DiffexpButtons from "./diffexpButtons";
 import Reembedding from "./reembedding";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
-import Canvg, {
-  presets
-} from 'canvg';
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -31,9 +28,9 @@ function HotkeysDialog(props) {
   const { annoMatrix } = state;
   const crossfilter = state.obsCrossfilter;
   const selectedCount = crossfilter.countSelected();
-
+  const numberCells = crossfilter.size();
   const subsetPossible =
-    selectedCount !== 0 && selectedCount !== crossfilter.size(); // ie, not all and not none are selected
+    selectedCount !== 0 && selectedCount !== numberCells; // ie, not all and not none are selected
   const embSubsetView = getEmbSubsetView(annoMatrix);
   const subsetResetPossible = !embSubsetView
     ? annoMatrix.nObs !== annoMatrix.schema.dataframe.nObs
@@ -42,6 +39,7 @@ function HotkeysDialog(props) {
   return {
     subsetPossible,
     subsetResetPossible,
+    tooManyCells: numberCells > 50000,
     graphInteractionMode: state.controls.graphInteractionMode,
     clipPercentileMin: Math.round(100 * (annoMatrix?.clipRange?.[0] ?? 0)),
     clipPercentileMax: Math.round(100 * (annoMatrix?.clipRange?.[1] ?? 1)),
@@ -103,6 +101,7 @@ class MenuBar extends React.PureComponent {
       pendingClipPercentiles: null,
       saveName: "",
       threshold: 0,
+      saveDataWarningDialogOpen: false
     };
   }
 
@@ -166,10 +165,22 @@ class MenuBar extends React.PureComponent {
     }
   }
   handleSaveData = () => {
-    const { dispatch } = this.props;
-    dispatch(actions.downloadData())
+    const { dispatch, tooManyCells } = this.props;
+    if (tooManyCells) {
+      this.setState({
+        ...this.state,
+        saveDataWarningDialogOpen: true
+      })
+    } else {
+      dispatch(actions.downloadData())
+    }
   }
-
+  dismissWarningDialog = () => {
+    this.setState({
+      ...this.state,
+      saveDataWarningDialogOpen: false
+    })
+  }
   isClipDisabled = () => {
     /*
     return true if clip button should be disabled.
@@ -324,9 +335,10 @@ class MenuBar extends React.PureComponent {
       sankeyController,
       currCacheKey,
       maxLink,
-      userLoggedIn
+      userLoggedIn,
+      tooManyCells
     } = this.props;
-    const { pendingClipPercentiles, saveName, threshold } = this.state;
+    const { pendingClipPercentiles, saveName, threshold, saveDataWarningDialogOpen } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
     const loading = !!outputController?.pendingFetch;
     const loadingSankey = !!sankeyController?.pendingFetch;
@@ -496,6 +508,30 @@ class MenuBar extends React.PureComponent {
         </Tooltip>
         </ButtonGroup>
         <HotkeysDialog open={this.state.hotkeysDialogOpen}/>
+        <Dialog
+        title="Warning: Saving more than 50k cells"
+        isOpen={saveDataWarningDialogOpen}
+        onClose={this.dismissWarningDialog}
+      >
+        <div style={{
+          display: "flex",
+          margin: "0 auto",
+          paddingTop: "10px"
+        }}>
+        <div
+        style={{fontSize: "16px", paddingRight: "10px", margin: "auto 0"}}
+        >Data output may take a long time. Proceed?</div>
+        <AnchorButton
+          type="button"
+          intent="danger"
+          icon="warning-sign"
+          onClick={() => {
+            dispatch(actions.downloadData())
+            this.setState({...this.state, saveDataWarningDialogOpen: false})
+          }}
+        > OK </AnchorButton>         
+        </div>
+        </Dialog>        
         <ButtonGroup className={styles.menubarButton}>   
           <Tooltip
             content="Save current subset to an `.h5ad` file."
@@ -505,6 +541,7 @@ class MenuBar extends React.PureComponent {
             <AnchorButton
                 type="button"
                 icon="floppy-disk"
+                intent={tooManyCells ?"danger" : "none"}
                 loading={loading}
                 onClick={() => {
                   this.handleSaveData()
@@ -513,8 +550,7 @@ class MenuBar extends React.PureComponent {
             </Tooltip>               
           </ButtonGroup>
 
-          {layoutChoice.sankey ? 
-          <div style={{paddingTop: "10px", flexBasis: "100%", height: 0}}></div> : null}          
+        <div style={{paddingTop: "10px", flexBasis: "100%", height: 0}}></div>
         {layoutChoice.sankey ? 
         <div style={{
           width: "20%",
@@ -534,39 +570,34 @@ class MenuBar extends React.PureComponent {
           Recalculate sankey
         </AnchorButton>
         <div style={{paddingLeft: "10px"}}>
+        <Tooltip
+          content="Screenshot the current sankey plot"
+          position="bottom"
+        >
         <AnchorButton
           type="button"
           disabled={loadingSankey}
-          icon="floppy-disk"
+          icon="camera"
           id="saveSankeyButton"
-        /></div>
-         </div> : null /*<div style={{
+        /></Tooltip></div>
+         </div> : <div style={{
           width: "20%",
           textAlign: "right",
           display: "flex",
           justifyContent: "right",
         }}>
-        <AnchorButton
-          type="button"
-          icon="floppy-disk"
-          onClick={()=>{
-            const s = document.getElementById('embedding-layout');
-            console.log(s)
-            s.toBlob(function(blob) {
-              console.log(blob)
-              var a = document.createElement("a");
-              document.body.appendChild(a);
-              a.style = "display: none";
-          
-              var url = window.URL.createObjectURL(blob);
-              a.href = url;
-              a.download = `${layoutChoice.current.split(';;').at(-1)}_umap.png`;
-              a.click();
-              window.URL.revokeObjectURL(url);
-            });
-          }}
-        />
-        </div>*/ } 
+          <Tooltip
+          content="Screenshot the current embedding"
+          position="bottom"
+        ><AnchorButton
+        type="button"
+        icon="camera"
+        onClick={()=>{
+          dispatch({type: "graph: screencap start"})
+        }}
+      /></Tooltip>
+        
+         </div> } 
         {layoutChoice.sankey ? 
         <div style={{
           width: "80%",

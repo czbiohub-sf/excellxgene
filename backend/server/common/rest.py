@@ -151,12 +151,13 @@ def schema_get_helper(data_adaptor):
                     ann_schema['writable']=False
                 schema["annotations"]["var"]["columns"].append(ann_schema)
         elif str(ax) == "obs":
-            curr_axis = pickle.load(open(f"{userID}/obs.p","rb"))
+            curr_axis = pickle_loader(f"{userID}/obs.p")
             for ann in curr_axis:
                 ann_schema = {"name": ann, "writable": True}
                 ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-                if ann_schema['type']!='categorical':
-                    ann_schema['writable']=False
+                #if ann_schema['type']!='categorical':
+                #    ann_schema['writable']=False
+                print(ann_schema)
                 schema["annotations"][ax]["columns"].append(ann_schema)
             
             ann = "name_0"
@@ -209,12 +210,21 @@ def annotations_obs_get(request, data_adaptor):
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
-            labels = pickle.load(open(f"{userID}/obs.p","rb"))
+            labels = pickle_loader(f"{userID}/obs.p")
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.OBS, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
+
+def pickle_dumper(x,fn):
+    with open(fn,"wb") as f:
+        pickle.dump(x,f)
+
+def pickle_loader(fn):
+    with open(fn,"rb") as f:
+        x = pickle.load(f)
+    return x
 
 def annotations_put_fbs_helper(data_adaptor, fbs):
     """helper function to write annotations from fbs"""
@@ -227,7 +237,7 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
         new_label_df = data_adaptor.check_new_labels(new_label_df)
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
-        pickle.dump(new_label_df,open(f"{userID}/obs.p","wb"))
+        pickle_dumper(new_label_df,f"{userID}/obs.p")
 
 
 
@@ -419,7 +429,7 @@ def save_metadata_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)        
 
 
-    labels = pickle.load(open(f"{userID}/obs.p","rb"))
+    labels = pickle_loader(f"{userID}/obs.p")
     labels = labels[labelNames]
     labels = labels[obs_mask]
     labels.to_csv(f"{userID}/{userID}_obs.csv")
@@ -584,7 +594,7 @@ def reembed_parameters_obsm_put(request, data_adaptor):
     embName = request.get_json()["embName"]
     userID = _get_user_id(data_adaptor)
     try:
-        reembedParams = pickle.load(open(f"{userID}/params/{embName}","rb"))
+        reembedParams = pickle_loader(f"{userID}/params/{embName}")
     except:
         reembedParams = None
 
