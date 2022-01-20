@@ -1,8 +1,5 @@
 from abc import ABCMeta, abstractmethod
 
-import fastobo
-import fsspec
-
 from backend.common.errors import OntologyLoadFailure, DisabledFeatureError
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
 from backend.common.genesets import write_gene_sets_tidycsv
@@ -34,6 +31,8 @@ class Annotations(metaclass=ABCMeta):
             raise DisabledFeatureError("User gene sets save is disabled.")
 
     def load_ontology(self, path):
+        import fastobo
+        import fsspec        
         """Load and parse ontologies - currently support OBO files only."""
         if path is None:
             path = self.DefaultOnotology
