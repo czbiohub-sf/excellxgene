@@ -383,9 +383,9 @@ class MenuBar extends React.PureComponent {
             this.handleClipPercentileMinValueChange
           }
         />
-        <ButtonGroup className={styles.menubarButton}>
+        {userLoggedIn && <ButtonGroup className={styles.menubarButton}>
           <Reembedding />
-        </ButtonGroup>
+        </ButtonGroup>}
         <Tooltip
           content="When a category is colored by, show labels on the graph"
           position="bottom"
@@ -463,7 +463,7 @@ class MenuBar extends React.PureComponent {
               disabled={layoutChoice.sankey}
             />       
           </Tooltip>
-          <Tooltip
+          {userLoggedIn && <Tooltip
             content="Display sankey plot from selected categories."
             position="bottom"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}
@@ -482,7 +482,7 @@ class MenuBar extends React.PureComponent {
                   });                  
                 }}
               />           
-            </Tooltip>
+            </Tooltip>}
     
         </ButtonGroup>
         <Subset
@@ -508,7 +508,7 @@ class MenuBar extends React.PureComponent {
         </Tooltip>
         </ButtonGroup>
         <HotkeysDialog open={this.state.hotkeysDialogOpen}/>
-        <Dialog
+        {userLoggedIn &&<Dialog
         title="Warning: Saving more than 50k cells"
         isOpen={saveDataWarningDialogOpen}
         onClose={this.dismissWarningDialog}
@@ -531,8 +531,8 @@ class MenuBar extends React.PureComponent {
           }}
         > OK </AnchorButton>         
         </div>
-        </Dialog>        
-        <ButtonGroup className={styles.menubarButton}>   
+        </Dialog>}        
+        {userLoggedIn && <ButtonGroup className={styles.menubarButton}>   
           <Tooltip
             content="Save current subset to an `.h5ad` file."
             position="bottom"
@@ -548,10 +548,10 @@ class MenuBar extends React.PureComponent {
                 }}
               /> 
             </Tooltip>               
-          </ButtonGroup>
+          </ButtonGroup>}
 
         <div style={{paddingTop: "10px", flexBasis: "100%", height: 0}}></div>
-        {layoutChoice.sankey ? 
+        {(userLoggedIn &&layoutChoice.sankey) ? 
         <div style={{
           width: "20%",
           textAlign: "right",

@@ -11,6 +11,7 @@ from scipy import sparse
 from server_timing import Timing as ServerTiming
 import time
 import os
+import gc
 from glob import glob
 import scanpy as sc
 import scanpy.external as sce
@@ -105,55 +106,146 @@ def _error_callback(e, ws, cfn):
     
 def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff,ihm):
     to_remove = []
-    a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
-    to_remove.extend([a,b,c])
-    shm1 = shared_memory.SharedMemory(name=a)
-    shm2 = shared_memory.SharedMemory(name=b)
-    shm3 = shared_memory.SharedMemory(name=c)    
-    indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-    indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-    data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-    XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)    
-
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
-    niA = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iA)))[0]
-    niB = np.where(np.invert(np.in1d(np.arange(XI.shape[0]),iB)))[0]
+    niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
+    niB = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iB)))[0]
     nA = iA.size
     nB = iB.size
-    if (iA.size + iB.size) == XI.shape[0]:
-        n = XI.shape[0]
 
-        if iA.size < iB.size:
+    CUTOFF = 35000
+    
+    if nA + nB == obs_mask_A.size:
+        if nA < nB:
+            if (nA < CUTOFF):
+                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
+                to_remove.extend([a,b,c])
+                shm1 = shared_memory.SharedMemory(name=a)
+                shm2 = shared_memory.SharedMemory(name=b)
+                shm3 = shared_memory.SharedMemory(name=c)    
+                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+                n = Xsh[0]
+                meanA,vA = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iA],axis=0)    
+                meanAsq = vA-meanA**2
+                meanAsq[meanAsq<0]=0
+            else:
+                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
+                to_remove.extend([a,b,c])
+                shm1 = shared_memory.SharedMemory(name=a)
+                shm2 = shared_memory.SharedMemory(name=b)
+                shm3 = shared_memory.SharedMemory(name=c)    
+                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+                XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
+                n = Xsh[0]
+
+                meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
+                meanA/=nA
+                meanAsq/=nA
+                vA = meanAsq - meanA**2
+                vA[vA<0]=0
+            
+            meanB = (tMean*n - meanA*nA) / nB
+            meanBsq = (tMeanSq*n - meanAsq*nA) / nB
+            vB = meanBsq - meanB**2                 
+
+        else:
+            if (nB < CUTOFF):
+                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
+                to_remove.extend([a,b,c])
+                shm1 = shared_memory.SharedMemory(name=a)
+                shm2 = shared_memory.SharedMemory(name=b)
+                shm3 = shared_memory.SharedMemory(name=c)    
+                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+                n = Xsh[0]
+                meanB,vB = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iB],axis=0)    
+                meanBsq = vB-meanB**2
+                meanBsq[meanBsq<0]=0                
+            else:
+                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
+                to_remove.extend([a,b,c])
+                shm1 = shared_memory.SharedMemory(name=a)
+                shm2 = shared_memory.SharedMemory(name=b)
+                shm3 = shared_memory.SharedMemory(name=c)    
+                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+                XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
+                n = Xsh[0]
+
+                meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
+                meanB/=nB
+                meanBsq/=nB
+                vB = meanBsq - meanB**2
+                vB[vB<0]=0
+
+            meanA = (tMean*n - meanB*nB) / nA
+            meanAsq = (tMeanSq*n - meanBsq*nB) / nA
+            vA = meanAsq - meanA**2                 
+    else:
+        if (nA < CUTOFF):
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
+            to_remove.extend([a,b,c])
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            n = Xsh[0]
+            meanA,vA = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iA],axis=0)    
+        else:
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
+            to_remove.extend([a,b,c])
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
+            n = Xsh[0]
+
             meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
             meanA/=nA
             meanAsq/=nA
             vA = meanAsq - meanA**2
             vA[vA<0]=0
-            meanB = (tMean*n - meanA*nA) / nB
-            meanBsq = (tMeanSq*n - meanAsq*nA) / nB
-            vB = meanBsq - meanB**2                          
+
+        if (nB < CUTOFF):
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
+            to_remove.extend([a,b,c])
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            n = Xsh[0]
+            meanB,vB = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iB],axis=0)    
         else:
+            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
+            to_remove.extend([a,b,c])
+            shm1 = shared_memory.SharedMemory(name=a)
+            shm2 = shared_memory.SharedMemory(name=b)
+            shm3 = shared_memory.SharedMemory(name=c)    
+            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+            XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
+            n = Xsh[0]
+
             meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
             meanB/=nB
             meanBsq/=nB
             vB = meanBsq - meanB**2
-            vB[vB<0]=0
-            meanA = (tMean*n - meanB*nB) / nA
-            meanAsq = (tMeanSq*n - meanBsq*nB) / nA
-            vA = meanAsq - meanA**2  
-    else:
-        meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
-        meanA/=nA
-        meanAsq/=nA
-        vA = meanAsq - meanA**2
-        vA[vA<0]=0
+            vB[vB<0]=0            
 
-        meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
-        meanB/=nB
-        meanBsq/=nB
-        vB = meanBsq - meanB**2
-        vB[vB<0]=0   
     
     _unregister_shm(to_remove, ihm)        
     return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
@@ -795,7 +887,7 @@ def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID, ihm):
     return adata_raw
 
 def _unregister_shm(to_remove, is_hosted_mode):
-    if is_hosted_mode:
+    if True:
         to_remove = list(np.unique(to_remove))
         already_deleted=[]
         for s in to_remove:
@@ -861,14 +953,20 @@ def initialize_socket(da):
 
                     layers = list(np.unique(layers))
                     direc = pathlib.Path().absolute()  
-                    obs = pickle_loader(f"{direc}/{userID}/obs.p")
 
+                    obs = pd.DataFrame()
+                    for k in glob(f"{direc}/{userID}/obs/*.p"):
+                        k=k.split('.p')[0].split('/')[-1]
+                        obs[k] = pickle_loader(f"{direc}/{userID}/obs/{k}.p")
+                    
+                    obs.index = da.data.obs['name_0']
                     obs['name_0'] = obs.index
                     obs.index = pd.Index(np.arange(obs.shape[0]))
+                    
                     AnnDataDict = {
                         "Xs": layers,
                         "obs": obs,
-                        "X_root":da._obsm_init["X_root"],
+                        "X_root":da._obsm_init[da.rootName],
                         "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
                     }
 
@@ -1035,6 +1133,7 @@ class AnndataAdaptor(DataAdaptor):
             self._create_pool()
 
         self._load_data(data_locator, root_embedding=app_config.root_embedding)    
+        print("Validating and initializing...")
         self._validate_and_initialize()
 
     def _create_pool(self):
@@ -1203,6 +1302,7 @@ class AnndataAdaptor(DataAdaptor):
 
                         adatas.append(adata)
                         batch.append([file.split('.h5ad')[0].split('/')[-1]]*adata.shape[0])
+                    
                     adata = anndata.concat(adatas,join='inner',axis=0)
                     if "orig.ident" not in adata.obs.keys():
                         key = "orig.ident"
@@ -1223,21 +1323,19 @@ class AnndataAdaptor(DataAdaptor):
                         adata.layers[k] = sparse.csr_matrix(adata.layers[k])
 
                 if root_embedding is not None:
-                    adata.obsm["X_root"] = adata.obsm[root_embedding]
-                    if root_embedding[:2] == "X_":
-                        obsp = root_embedding[2:]
+                    if root_embedding in adata.obsm.keys():
+                        if np.isnan(adata.obsm[root_embedding]).sum()>0:
+                            self.rootName = "X_root"
+                            adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))
+                        else:
+                            self.rootName = root_embedding
                     else:
-                        obsp = root_embedding
-                    
-                    if "N_"+obsp in adata.obsp.keys():
-                        adata.obsp["N_root"] = adata.obsp["N_"+obsp]
-                        adata.uns["N_root_params"] = adata.uns["N_"+obsp+"_params"]
-                        del adata.obsp["N_"+obsp]
-                        del adata.uns["N_"+obsp+"_params"]
+                        self.rootName = "X_root"
+                        adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))                        
 
-                    del adata.obsm[root_embedding]
                 else:
-                    adata.obsm["X_root"] = np.zeros((adata.shape[0],2))
+                    self.rootName = "X_root"
+                    adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))
                 
                 adata.obs_names_make_unique()
 
@@ -1248,67 +1346,37 @@ class AnndataAdaptor(DataAdaptor):
                     if adata.layers[k].dtype != "float32":
                         adata.layers[k] = adata.layers[k].astype('float32')
 
+                adata.layers["X"] = adata.X
+                if adata.raw is not None:
+                    #adata.layers[".raw"] = adata.raw.X
+                    del adata.raw
+                    gc.collect()
+                print("Loading and precomputing layers necessary for fast differential expression and reembedding...")
                 self.shm_layers_csr = {}
                 self.shm_layers_csc = {}
-                if adata.X.getformat() == "csr":
-                    self.shm_layers_csr["X"] = _create_shm_from_data(adata.X)
-                    adata.X=fmt_swapper(adata.X)
-                elif adata.X.getformat() != "csc":
-                    adata.X=adata.X.tocsc()
-                
-                adata.layers["X"] = adata.X
-
-                print("Loading and precomputing layers necessary for fast differential expression and reembedding...")
-                
-                # convert everything to CSC and cache all CSR into shared memory.
-                shm_keys = list(self.shm_layers_csr.keys())
-                for k in list(adata.layers.keys()):  
-                    if k not in shm_keys:
-                        if adata.layers[k].getformat() == "csr": # if csr, swap to csc and cache csr into shared memory.
-                            self.shm_layers_csr[k] = _create_shm_from_data(adata.layers[k])
-                            adata.layers[k] = fmt_swapper(adata.layers[k])
-                        elif adata.layers[k].getformat() != "csc": # if any other format, just convert to csc.
-                            adata.layers[k] = adata.layers[k].tocsc()
-                                
-                # cache all remaining CSC into CSR shared memory
-                shm_keys = list(self.shm_layers_csr.keys())
-                for key in list(adata.layers.keys()):
-                    X = adata.layers[key]
-                    if  key not in shm_keys: # if key not in shm_keys, then it means that it's CSC and didn't come from CSR.
-                        X2 = fmt_swapper(X) # convert csc to csr
-                        self.shm_layers_csr[key] = _create_shm_from_data(X2) #cache csr into shared memory
-
-                    mean,v = sf.mean_variance_axis(X,axis=0)
-                    meansq = v-mean**2
-                    adata.var[f"{key};;tMean"] = mean
-                    adata.var[f"{key};;tMeanSq"] = meansq
-                
                 for k in adata.layers.keys():
-                    self.shm_layers_csc[k] = _create_shm_from_data(adata.layers[k])                    
-                
-
-                if adata.raw is not None:
-                    X = adata.raw.X
-                    mean,v = sf.mean_variance_axis(X,axis=0)
-                    meansq = v-mean**2
-                    adata.var[f".raw;;tMean"] = mean
-                    adata.var[f".raw;;tMeanSq"] = meansq
-
-                    del adata.raw
-                    
-                    if X.getformat() == "csc":
-                        X1 = X
-                        X2 = fmt_swapper(X)
-                    elif X.getformat() == "csr":
-                        X1 = fmt_swapper(X)
-                        X2 = X
+                    print("Layer",k,"...")
+                    if adata.X.getformat() == "csr":
+                        self.shm_layers_csr[k] = _create_shm_from_data(adata.layers[k])
+                        self.shm_layers_csc[k] = _create_shm_from_data(fmt_swapper(adata.layers[k]))
+                    elif adata.X.getformat() != "csc":
+                        self.shm_layers_csr[k] = _create_shm_from_data(adata.layers[k].tocsr())
+                        self.shm_layers_csc[k] = _create_shm_from_data(adata.layers[k].tocsc())                        
                     else:
-                        X1 = X.tocsc()
-                        X2 = X.tocsr()                        
-                    adata.layers[".raw"] = X1
-                    self.shm_layers_csr[".raw"] = _create_shm_from_data(X2)
-                    self.shm_layers_csc[".raw"] = _create_shm_from_data(X1)
+                        self.shm_layers_csc[k] = _create_shm_from_data(adata.layers[k])
+                        self.shm_layers_csr[k] = _create_shm_from_data(fmt_swapper(adata.layers[k]))                                                                 
+                    
+                    mean,v = sf.mean_variance_axis(adata.layers[k],axis=0)
+                    meansq = v-mean**2
+                    adata.var[f"{k};;tMean"] = mean
+                    adata.var[f"{k};;tMeanSq"] = meansq
 
+                    adata.layers[k] = sp.sparse.csc_matrix(adata.shape).astype('float32')
+                    gc.collect()
+
+                adata.X = sp.sparse.csc_matrix(adata.shape).astype('float32')
+                gc.collect()
+                
                 for curr_axis in [adata.obs,adata.var]:
                     for ann in curr_axis:
                         dtype = curr_axis[ann].dtype
@@ -1317,7 +1385,7 @@ class AnndataAdaptor(DataAdaptor):
                         curr_axis[ann] = curr_axis[ann].astype(dtype)
 
                 self.data = adata
-
+                print("Finished loading the data.")
         except ValueError:
             raise DatasetAccessError(
                 "File must be in the .h5ad format. Please read "
@@ -1341,8 +1409,12 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/emb/")
             os.makedirs(f"{userID}/params/")
             os.makedirs(f"{userID}/pca/")
+            os.makedirs(f"{userID}/obs/")
 
-            pickle_dumper(self._obs_init,f"{userID}/obs.p")
+            for k in self._obs_init.keys():
+                pickle_dumper(self._obs_init[k],f"{userID}/obs/{k}.p")
+            pickle_dumper(np.array(list(self._obs_init.index),dtype='object'),f"{userID}/obs/name_0.p")                
+
             for k in self._obsm_init.keys():
                 k2 = "X_".join(k.split("X_")[1:])
                 pickle_dumper(self._obsm_init[k],f"{userID}/emb/{k2}.p")
@@ -1352,16 +1424,15 @@ class AnndataAdaptor(DataAdaptor):
                     pickle_dumper(r,f"{userID}/nnm/{k2}.p")
                     pickle_dumper(p,f"{userID}/params/{k2}.p")
         else:
-            obs = pickle_loader(f"{userID}/obs.p")
+            obs = glob(f"{userID}/obs/*.p")
             for ann in obs:
-                dtype = obs[ann].dtype
+                ann=ann.split('.p')[0].split('/')[-1]
+                x = pickle_loader(f"{userID}/obs/{ann}.p")
+                dtype = x.dtype
                 if hasattr(dtype,'numpy_dtype'):
                     dtype = dtype.numpy_dtype
-                obs[ann] = obs[ann].astype(dtype)  
-            pickle_dumper(obs,f"{userID}/obs.p")
-
-
-            
+                x = x.astype(dtype)  
+                pickle_dumper(x,f"{userID}/obs/{ann}.p")
 
     def _validate_and_initialize(self):
         if anndata_version_is_pre_070():
@@ -1401,7 +1472,7 @@ class AnndataAdaptor(DataAdaptor):
         del self.data.uns
         del self.data.obsp
 
-        self.data.obsm['X_root'] = self._obsm_init['X_root']
+        self.data.obsm[self.rootName] = self._obsm_init[self.rootName]
         self.data.obs["name_0"] = self._obs_init["name_0"]
 
         self._obs_init = self._obs_init.set_index("name_0")
@@ -1415,6 +1486,8 @@ class AnndataAdaptor(DataAdaptor):
 
         id = (self.get_location()).encode()
         self.guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
+
+        print("Initializing user folders")
         self._initialize_user_folders(self.guest_idhash)
 
     def _is_valid_layout(self, arr):
@@ -1530,10 +1603,16 @@ class AnndataAdaptor(DataAdaptor):
 
         #if row_idx is None:
         #    row_idx = np.arange(self.data.shape[0])
-        if layer == "X":
-            XI = self.data.X
-        else:
-            XI = self.data.layers[layer]
+        to_remove = []        
+        a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = self.shm_layers_csc[layer]
+        to_remove.extend([a,b,c])
+        shm1 = shared_memory.SharedMemory(name=a)
+        shm2 = shared_memory.SharedMemory(name=b)
+        shm3 = shared_memory.SharedMemory(name=c)    
+        indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
+        indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
+        data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
+        XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)        
 
         if col_idx is None:
             col_idx = np.arange(self.data.shape[1])        
@@ -1556,6 +1635,8 @@ class AnndataAdaptor(DataAdaptor):
                     x.data[:] = bisym_log_transform(x.data)
                 else:
                     x = bisym_log_transform(x)
+        
+        _unregister_shm(to_remove,True)
         return x
 
     def get_shape(self):

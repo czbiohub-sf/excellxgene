@@ -27,10 +27,11 @@ import LabelInput from "../labelInput";
     schema: state.annoMatrix?.schema,
     annoMatrix: state.annoMatrix,
     crossfilter: state.obsCrossfilter,
-    userLoggedIn: state.controls.userInfo ? true : false
+    userLoggedIn: state.controls.userInfo ? true : false,
+    modifyingLayouts: state.controls.modifyingLayouts
   };
 })
-class Embedding extends React.PureComponent {
+class Embedding extends React.Component {
   constructor(props) {
     super(props);
     this.state = {newLayoutText: "", isEmbeddingExpanded: {"": true}};
@@ -97,9 +98,8 @@ class Embedding extends React.PureComponent {
     });
     const oldName = layoutChoice.layoutNameBeingEdited.split(';;').at(-1);
     const newName = newLayoutText;
-    
+    //#TODO: add a check for name validity, if invalid grey button
     toRename.forEach((item) => {
-      dispatch({type: "reembed: rename reembedding", embName: item, newName: item.replace(oldName,newName)})
       const val = isEmbeddingExpanded?.[item] ?? false;
       this.setState({
         isEmbeddingExpanded: {...isEmbeddingExpanded, [item]: _, [item.replace(oldName,newName)]: val}
@@ -112,6 +112,14 @@ class Embedding extends React.PureComponent {
       type: "reembed: deactivate layout edit mode",
     });       
   }
+  shouldComponentUpdate = (nextProps, nextState) =>{
+    if (!nextProps.modifyingLayouts){
+      return true;
+    } else {
+      return !this.props.modifyingLayouts;
+    }
+  }
+
   handleLayoutChoiceChange = (e) => {
     const { dispatch, layoutChoice } = this.props;
     const { isEmbeddingExpanded } = this.state
@@ -146,8 +154,7 @@ class Embedding extends React.PureComponent {
     e.preventDefault()    
   }
   render() {
-    const { layoutChoice, schema, crossfilter } = this.props;
-    
+    const { annoMatrix: test, layoutChoice, schema, crossfilter } = this.props;
     const { newLayoutText, isEmbeddingExpanded } = this.state;
     const { annoMatrix } = crossfilter;
     return (
@@ -253,7 +260,9 @@ export default Embedding;
 
 const loadAllEmbeddingCounts = async (annoMatrix, available) => {
   const embeddings = await Promise.all(
-    available.map((name) => annoMatrix.base().fetch("emb", name))
+    available.map((name) => {
+      return annoMatrix.base().fetch("emb", name);
+    })
   );
   try {
     return available.map((name, idx) => ({

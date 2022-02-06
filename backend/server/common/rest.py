@@ -137,7 +137,8 @@ def schema_get_helper(data_adaptor):
         "layers": layers,
         "var_keys": var_keys,
         "latent_spaces": latent_spaces,
-        "initial_embeddings": initial_embeddings
+        "initial_embeddings": initial_embeddings,
+        "rootName": data_adaptor.rootName
     }
     userID = _get_user_id(data_adaptor)   
     
@@ -151,13 +152,12 @@ def schema_get_helper(data_adaptor):
                     ann_schema['writable']=False
                 schema["annotations"]["var"]["columns"].append(ann_schema)
         elif str(ax) == "obs":
-            curr_axis = pickle_loader(f"{userID}/obs.p")
-            for ann in curr_axis:
+            fns = glob(f"{userID}/obs/*.p")
+            for ann in fns:
+                ann=ann.split('.p')[0].split('/')[-1]
+                x = pickle_loader(f"{userID}/obs/{ann}.p")
                 ann_schema = {"name": ann, "writable": True}
-                ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-                #if ann_schema['type']!='categorical':
-                #    ann_schema['writable']=False
-                print(ann_schema)
+                ann_schema.update(get_schema_type_hint_of_array(x))
                 schema["annotations"][ax]["columns"].append(ann_schema)
             
             ann = "name_0"
@@ -210,7 +210,10 @@ def annotations_obs_get(request, data_adaptor):
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
-            labels = pickle_loader(f"{userID}/obs.p")
+            labels=pd.DataFrame()
+            for f in fields:
+                labels[f] = pickle_loader(f"{userID}/obs/{f}.p")
+            labels.index = pd.Index(np.array(list(data_adaptor.data.obs['name_0']),dtype='object'))
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.OBS, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
@@ -237,7 +240,8 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
         new_label_df = data_adaptor.check_new_labels(new_label_df)
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
-        pickle_dumper(new_label_df,f"{userID}/obs.p")
+        for col in new_label_df:
+            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),f"{userID}/obs/{col}.p")
 
 
 
@@ -428,23 +432,25 @@ def save_metadata_put(request, data_adaptor):
 
     userID = _get_user_id(data_adaptor)        
 
-
-    labels = pickle_loader(f"{userID}/obs.p")
-    labels = labels[labelNames]
+    labels = pd.DataFrame()
+    for k in labelNames:
+        labels[k] = pickle_loader(f"{userID}/obs/{k}.p")
+    
+    labels.index = pd.Index(np.array(list(data_adaptor.data.obs['name_0']),dtype='object'))
     labels = labels[obs_mask]
-    labels.to_csv(f"{userID}/{userID}_obs.csv")
+    labels.to_csv(f"{userID}/{userID}_obs.txt",sep='\t')
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{userID}/{userID}_obs.csv")
+            os.remove(f"{userID}/{userID}_obs.txt")
         except Exception as error:
             print(error)
         return response
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/{userID}_obs.csv",as_attachment=True)
+        return send_file(f"{direc}/{userID}/{userID}_obs.txt",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -488,9 +494,44 @@ def delete_obsm_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
 
+def delete_obs_put(request, data_adaptor):
+    args = request.get_json()
+    name = args.get("name",None)
+    fail=False
+    userID = _get_user_id(data_adaptor)
+
+    if os.path.exists(f"{userID}/obs/{name}.p"):
+        os.remove(f"{userID}/obs/{name}.p")
+    try:
+        return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+
+def rename_obs_put(request, data_adaptor):
+    args = request.get_json()
+    oldName = args.get("oldName",None)
+    newName = args.get("newName",None)
+    userID = _get_user_id(data_adaptor)
+    
+    if os.path.exists(f"{userID}/obs/{oldName}.p"):
+        os.rename(f"{userID}/obs/{oldName}.p",f"{userID}/obs/{newName}.p")
+    
+    try:
+        return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+
 def initialize_user(data_adaptor):            
     userID = _get_user_id(data_adaptor)
-    data_adaptor._initialize_user_folders(userID)           
+    if not os.path.exists(f"{userID}/"):
+        os.system(f"mkdir {userID}")
+        os.system(f"cp -r {data_adaptor.guest_idhash}/* {userID}/")
+    #data_adaptor._initialize_user_folders(userID)           
 
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
@@ -500,24 +541,39 @@ def initialize_user(data_adaptor):
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
 
 
+def rename_wrapper(item,oldName,newName):
+    if f";;{oldName};;" in item:
+        newItem = item.replace(f";;{oldName};;",f";;{newName};;")
+    elif f"{oldName};;" in item:
+        newItem = item.replace(f"{oldName};;",f"{newName};;")
+    elif f";;{oldName}" in item:
+        newItem = item.replace(f";;{oldName}",f";;{newName}")
+    elif oldName == item:
+        newItem = newName
+    return newItem
+
 def rename_obsm_put(request, data_adaptor):
     args = request.get_json()
     embNames = args.get("embNames",None)
     oldName = args.get("oldName",None)
     newName = args.get("newName",None)
     userID = _get_user_id(data_adaptor)
+
+    
     if embNames is not None and oldName is not None and newName is not None:
         for embName in embNames:
+            newItem = rename_wrapper(embName,oldName,newName)            
             if os.path.exists(f"{userID}/emb/{embName}.p"):
-                os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{embName.replace(oldName,newName)}.p")
+                os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{newItem}.p")
             if os.path.exists(f"{userID}/nnm/{embName}.p"):
-                os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{embName.replace(oldName,newName)}.p")
+                os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{newItem}.p")
             if os.path.exists(f"{userID}/params/{embName}.p"):
-                os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{embName.replace(oldName,newName)}.p")
+                os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{newItem}.p")
             if os.path.exists(f"{userID}/pca/{embName}.p"):
-                os.rename(f"{userID}/pca/{embName}.p",f"{userID}/pca/{embName.replace(oldName,newName)}.p")
+                os.rename(f"{userID}/pca/{embName}.p",f"{userID}/pca/{newItem}.p")
     try:
-        return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        layout_schema = {"name": newName, "type": "float32", "dims": [f"{newName}_0", f"{newName}_1"]}
+        return make_response(jsonify({"schema": layout_schema}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:

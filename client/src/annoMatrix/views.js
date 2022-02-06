@@ -7,6 +7,10 @@ import clip from "../util/clip";
 import AnnoMatrix from "./annoMatrix";
 import { _whereCacheCreate } from "./whereCache";
 import { _isContinuousType, _getColumnSchema } from "./schema";
+import {
+  removeObsLayout,
+  addObsLayout,
+} from "../util/stateManager/schemaHelpers";
 
 class AnnoMatrixView extends AnnoMatrix {
   constructor(viewOf, rowIndex = null) {
@@ -53,6 +57,20 @@ class AnnoMatrixView extends AnnoMatrix {
     newAnnoMatrix.schema = newAnnoMatrix.viewOf.schema;
     return newAnnoMatrix;
   }
+  renameObsmLayout(layout,newLayout, newSchema) {
+    const newAnnoMatrix = this._clone();
+    try{
+      newAnnoMatrix.viewOf = newAnnoMatrix.viewOf.renameObsmLayout(layout,newLayout, newSchema);            
+      newAnnoMatrix._cache.emb = newAnnoMatrix._cache.emb.dropCol(`${layout}_0`);//,`${newLayout}_0`)
+      newAnnoMatrix._cache.emb = newAnnoMatrix._cache.emb.dropCol(`${layout}_1`);//,`${newLayout}_1`)
+      newAnnoMatrix.schema = removeObsLayout(newAnnoMatrix.schema, layout);    
+      newAnnoMatrix.schema = addObsLayout(newAnnoMatrix.schema, newSchema);        
+    } catch (error){
+      console.log(`Ignoring due to: ${error}`)
+    }        
+    return newAnnoMatrix;
+  }
+    
   addObsColumn(colSchema, Ctor, value) {
     const newAnnoMatrix = this._clone();
     newAnnoMatrix.viewOf = this.viewOf.addObsColumn(colSchema, Ctor, value);

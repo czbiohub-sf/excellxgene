@@ -42,6 +42,8 @@ const HEIGHT_MINI = 15 - MARGIN_MINI.TOP - MARGIN_MINI.BOTTOM;
     isScatterplotYYaccessor: state.controls.scatterplotYYaccessor === field,
     continuousSelectionRange: state.continuousSelection[myName],
     isColorAccessor: state.colors.colorAccessor === field,
+    dataLayerExpr: state.reembedParameters.dataLayerExpr,
+    logScaleExpr: state.reembedParameters.logScaleExpr
   };
 })
 class HistogramBrush extends React.PureComponent {
@@ -332,7 +334,6 @@ class HistogramBrush extends React.PureComponent {
         },
       ];
     }
-
     // else, we assume it is a gene expression
     return [
       "X",
@@ -362,9 +363,10 @@ class HistogramBrush extends React.PureComponent {
       mini,
       setGenes,
       removeHistZeros,
-      onRemoveClick
+      onRemoveClick,
+      dataLayerExpr,
+      logScaleExpr
     } = this.props;
-
     let { width } = this.props;
     if (!width) {
       width = mini ? WIDTH_MINI : WIDTH;
@@ -378,7 +380,7 @@ class HistogramBrush extends React.PureComponent {
       <Async
         watchFn={HistogramBrush.watchAsync}
         promiseFn={this.fetchAsyncProps}
-        watchProps={{ annoMatrix, setGenes, removeHistZeros }}
+        watchProps={{ annoMatrix, setGenes, removeHistZeros, dataLayerExpr, logScaleExpr }}
       >
         <Async.Pending initial>
           <StillLoading displayName={field} zebra={zebra} />

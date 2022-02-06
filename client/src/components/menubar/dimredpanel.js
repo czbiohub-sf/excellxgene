@@ -1,6 +1,7 @@
 import React from "react";
 import { connect } from "react-redux";
 import {
+  Button,
   AnchorButton,
   Collapse,
   ControlGroup,
@@ -12,7 +13,6 @@ import {
 } from "@blueprintjs/core";
 import * as globals from "../../globals";
 import ParameterInput from "./parameterinput";
-import DefaultsButton from "./defaultsio";
 import BatchPanel from "./batchpanel";
 
 @connect((state) => ({
@@ -78,6 +78,7 @@ class DimredPanel extends React.PureComponent {
     const { reembedParams, annoMatrix, dispatch, embName, onChange } = this.props;
     const latentSpaces = annoMatrix.schema.latent_spaces;
     const disabled = allDisabled || aboDisabled;
+    const advancedShown = this.state?.advancedShown ?? false;
     let tem;
     if (allDisabled){
       tem = "`Create embedding from subset` copies the current selection into a new embedding.";
@@ -88,7 +89,6 @@ class DimredPanel extends React.PureComponent {
     }
     return (
       <div>
-      <DefaultsButton dispatch={dispatch}/>  
       <div
       style={{
         paddingBottom: "10px",
@@ -164,8 +164,22 @@ class DimredPanel extends React.PureComponent {
               } value="Run UMAP"/> 
             : null}
         </RadioGroup>
-      </div>    
-      {allDisabled ? null : <><hr/>
+      </div>  
+      <div style={{paddingTop: "30px"}}>
+        <Button
+          onClick={() => {
+            this.setState({ 
+              advancedShown: !(this.state?.advancedShown ?? false)
+            });
+          }}
+          minimal
+          rightIcon={advancedShown ? "chevron-down" : "chevron-right"} small
+        >
+          {<b>Advanced options</b>}
+        </Button>
+      </div>  
+      <Collapse isOpen={advancedShown || aboDisabled}>   
+      {allDisabled ? null :
       <div
       style={{
         paddingBottom: "10px",
@@ -173,7 +187,7 @@ class DimredPanel extends React.PureComponent {
       }}>
         <BatchPanel disabled={allDisabled}/>           
       </div>
-      </>}
+      }
       {disabled ? null : <ControlGroup fill={true} vertical={false}>
         <ParameterInput 
           label="Use SAM?"
@@ -199,8 +213,8 @@ class DimredPanel extends React.PureComponent {
             samshown: false
           });
         }}
-        text={`Highly variable gene selection`}
-        fill outlined
+        text={<b>Highly variable gene selection</b>}
+        minimal fill
         rightIcon={trshown ? "chevron-down" : "chevron-right"} small
         disabled = {reembedParams.doSAM || disabled}
       />}   
@@ -229,8 +243,8 @@ class DimredPanel extends React.PureComponent {
             trshown: false,
           });
         }}
-        text="PCA"
-        fill outlined
+        text={<b>PCA</b>}
+        minimal fill
         rightIcon={cfshown ? "chevron-down" : "chevron-right"} small
         disabled={disabled}
       />}                    
@@ -265,8 +279,8 @@ class DimredPanel extends React.PureComponent {
             trshown: false,
           });
         }}
-        text={`Neighbors`}
-        fill outlined
+        text={<b>Neighbors</b>}
+        minimal fill
         disabled={disabled}
         rightIcon={gfshown ? "chevron-down" : "chevron-right"} small
       />}   
@@ -309,8 +323,8 @@ class DimredPanel extends React.PureComponent {
             trshown: false,
           });
         }}
-        text={`SAM`}
-        fill outlined
+        text={<b>SAM</b>}
+        minimal fill
         rightIcon={samshown ? "chevron-down" : "chevron-right"} small
         disabled = {!reembedParams.doSAM || disabled}
       />}   
@@ -348,8 +362,8 @@ class DimredPanel extends React.PureComponent {
             trshown: false
           });
         }}
-        text={`UMAP`}
-        fill outlined
+        text={<b>UMAP</b>}
+        minimal fill 
         disabled={allDisabled}
         rightIcon={hvgshown ? "chevron-down" : "chevron-right"} small
       />}   
@@ -384,7 +398,8 @@ class DimredPanel extends React.PureComponent {
             />        
           </ControlGroup>    
         </Collapse>  
-      </div>                  
+      </div>   
+      </Collapse>               
     </div>
     );
   }

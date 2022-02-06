@@ -2,7 +2,6 @@ anndata>0.7.4
 authlib>=0.15.4
 boto3>=1.12.18
 click>=7.1.2
-fastobo>=0.6.1
 Flask>2.0.0 # Flask 2.0 is not compatible with the latest version of Flask-RESTful (0.3.8)
 Flask-Compress>=1.4.0
 Flask-Cors>=3.0.9  # CVE-2020-25032
@@ -11,7 +10,6 @@ flask-server-timing>=0.1.2
 flask-talisman>=0.7.0
 flatbuffers>=1.11.0,<2.0.0 # cellxgene is not compatible with 2.0.0. Requires migration
 flatten-dict>=0.2.0
-fsspec>=0.4.4,<0.8.0
 gunicorn>=20.0.4
 h5py<3.0.0 # h5py>=3.0.0 had a breaking change; there is a fix in anndata>=0.7.5
 jinja2>=2.11.3  # Flask sub-dependency. Added due to CVE-2020-28493
@@ -25,7 +23,6 @@ PyYAML>=5.4  # CVE-2020-14343
 PyJWT>=2.3.0
 scipy>=1.4
 flask-sock>=0.4.0
-scikit-misc
 s3fs==0.4.2
 bbknn>=1.5.1
 scanorama>=1.7.1

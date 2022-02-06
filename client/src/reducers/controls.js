@@ -22,7 +22,8 @@ const Controls = (
     userInfo: null,
     hostedMode: false,
     modifyingLayouts: false,
-    screenCap: false
+    screenCap: false,
+    annoTracker: []
   },
   action
 ) => {
@@ -54,6 +55,20 @@ const Controls = (
         [action.name]: action.ws
       };
     }   
+    case "track anno": {
+      const { annoTracker } = state;
+      annoTracker.push(action.anno);
+      return {
+        ...state,
+        annoTracker
+      };
+    }       
+    case "writable obs annotations - save complete": {
+      return {
+        ...state,
+        annoTracker: []
+      }
+    }
     case "graph: screencap start": {
       return {
         ...state,

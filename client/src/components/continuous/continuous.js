@@ -8,6 +8,7 @@ import actions from "../../actions";
 
 @connect((state) => ({
   schema: state.annoMatrix?.schema,
+  userLoggedIn: state.controls.userInfo ? true : false
 }))
 class Continuous extends React.PureComponent {
   constructor(props) {
@@ -18,7 +19,7 @@ class Continuous extends React.PureComponent {
   }
   render() {
     /* initial value for iterator to simulate index, ranges is an object */
-    const { dispatch, schema } = this.props;
+    const { dispatch, schema, userLoggedIn } = this.props;
     const { contOpen } = this.state;
     if (!schema) return null;
     const obsIndex = schema.annotations.obs.index;
@@ -43,11 +44,11 @@ class Continuous extends React.PureComponent {
         />               
         <Collapse isOpen={contOpen}>
         {allContinuousNames.map((key, zebra) => (
-          <HistogramBrush key={key} onRemoveClick={
+          <HistogramBrush key={key} onRemoveClick={userLoggedIn ? (
             (field)=>{
               dispatch(actions.annotationDeleteCategoryAction(field));              
             }
-          }
+          ) : null}
           field={key} isObs zebra={zebra % 2 === 0} />
         ))}
         </Collapse>

@@ -10,9 +10,9 @@ import {
 } from "@blueprintjs/core";
 import * as globals from "../../globals";
 import actions from "../../actions";
-import styles from "./menubar.css";
 import DimredPanel from "./dimredpanel";
 import PrepPanel from "./preppanel";
+import DefaultsButton from "./defaultsio";
 
 @connect((state) => ({
   reembedController: state.reembedController,
@@ -23,7 +23,8 @@ import PrepPanel from "./preppanel";
   obsCrossfilter: state.obsCrossfilter,
   layoutChoice: state.layoutChoice,
   isSubsetted: state.controls.isSubsetted,
-  userLoggedIn: state.controls.userInfo ? true : false
+  userLoggedIn: state.controls.userInfo ? true : false,
+  hostedMode: state.controls.hostedMode
 }))
 class Reembedding extends React.PureComponent {
   constructor(props) {
@@ -87,13 +88,13 @@ class Reembedding extends React.PureComponent {
   }
   render() {
     const { setReembedDialogActive, embName, reembeddingPanel } = this.state;
-    const { reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn } = this.props;
+    const { dispatch, reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn, hostedMode } = this.props;
     const loading = !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const tipContent =
       "Click to perform preprocessing and dimensionality reduction on the currently selected cells.";
     const cS = obsCrossfilter.countSelected();
     
-    const runDisabled = cS > 50000;
+    const runDisabled = (cS > 50000) && hostedMode;
     
     const title = `${reembeddingPanel ? "Reembedding" : "Preprocessing"} on ${cS}/${annoMatrix.schema.dataframe.nObs} cells.`;
     return (
@@ -111,6 +112,7 @@ class Reembedding extends React.PureComponent {
           usePortal
         >        
           {runDisabled ? <div style={{paddingBottom: "20px"}}><AnchorButton fill minimal icon="warning-sign" intent="danger"> You cannot preprocess or reembed on greater than 50,000 cells. </AnchorButton></div> : null}
+          <DefaultsButton dispatch={dispatch}/>       
           <ControlGroup fill={true} vertical={false}>
             <AnchorButton
               onClick={() => {

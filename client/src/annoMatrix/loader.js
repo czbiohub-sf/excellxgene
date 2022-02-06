@@ -213,7 +213,16 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
     }
     return newAnnoMatrix;
   }
-
+  
+  renameObsmLayout(layout,newLayout, newSchema) {
+    const newAnnoMatrix = this._clone();
+    newAnnoMatrix._cache.emb = newAnnoMatrix._cache.emb.dropCol(`${layout}_0`);//,`${newLayout}_0`)
+    newAnnoMatrix._cache.emb = newAnnoMatrix._cache.emb.dropCol(`${layout}_1`);//,`${newLayout}_1`)
+    newAnnoMatrix.schema = removeObsLayout(newAnnoMatrix.schema, layout);    
+    newAnnoMatrix.schema = addObsLayout(newAnnoMatrix.schema, newSchema);
+    return newAnnoMatrix;
+  }
+  
   addEmbedding(colSchema) {
     /*
     add new layout to the obs embeddings
@@ -291,7 +300,7 @@ function _writableCheck(colSchema) {
 
 function _writableCategoryTypeCheck(colSchema) {
   _writableCheck(colSchema);
-  if (colSchema.type !== "categorical") {
+  if (colSchema.type !== "categorical" && colSchema.type !== "string") {
     throw new Error("column must be categorical");
   }
 }

@@ -188,11 +188,11 @@ class Categories extends React.Component {
       }
       let numCols;
       for(let i = 0; i < newLinebrk.length; i++) {
-        const x = newLinebrk[i].split(",");
+        const x = newLinebrk[i].split("\t");
         if (numCols ?? false){
           if (x.length !== numCols || x.length === 1){
             context.resetFileState();
-            throw new Error("CSV file improperly formatted");
+            throw new Error("TXT file improperly formatted");
           }
         }
         numCols = x.length;
@@ -463,7 +463,7 @@ class Categories extends React.Component {
             }
           />
           
-          {writableCategoriesEnabled ? (
+          {userLoggedIn && (
             <div style={{display: "flex", flexDirection: "column"}}>
               <div style={{
                 paddingBottom: "10px",
@@ -484,7 +484,7 @@ class Categories extends React.Component {
                   /> 
                 </Tooltip> 
                 <Tooltip
-                content="Upload metadata from a `.csv` file."
+                content="Upload metadata from a `.txt`, tab-delimited file."
                 position="bottom"
                 hoverOpenDelay={globals.tooltipHoverOpenDelay}
               >                                              
@@ -498,7 +498,7 @@ class Categories extends React.Component {
                   /> 
                 </Tooltip>                 
                   <Dialog
-                    title="Upload metadata csv file"
+                    title="Upload metadata file (tab-delimited .txt)"
                     isOpen={uploadMetadataOpen}
                     onOpened={()=>this.setupFileInput()}
                     onClose={()=>{
@@ -592,7 +592,7 @@ class Categories extends React.Component {
                   </Dialog> 
                 </div>    
 
-              <div  style={{
+              {userLoggedIn && <div  style={{
                 display: 'inline-flex',
                 justifyContent: 'space-between',
                 margin: '0 0',
@@ -659,8 +659,8 @@ class Categories extends React.Component {
                         }
                       />
                   </Tooltip>
-                </div>
-                <div  style={{
+                </div> }
+                {userLoggedIn && <div  style={{
                   display: 'inline-flex',
                   justifyContent: 'space-between',
                   margin: '0 0',
@@ -687,9 +687,9 @@ class Categories extends React.Component {
                   >
                     <strong>Delete</strong> labels
                   </AnchorButton>                     
-                </div>
+                </div>}
               </div>            
-        ) : null}
+        )}
 
         {/* READ ONLY CATEGORICAL FIELDS */}
         {/* this is duplicative but flat, could be abstracted */}

@@ -201,7 +201,6 @@ class AnnotationsLocalFile(Annotations):
         Used to create safe annotations output file names.
         """
         useGuest = 'excxg_profile' not in session
-
         if useGuest:
             id = (data_adaptor.get_location()).encode()
             guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")            

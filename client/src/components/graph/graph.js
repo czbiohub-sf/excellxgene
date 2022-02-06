@@ -80,7 +80,9 @@ function createModelTF() {
   genesets: state.genesets.genesets,
   multiselect: state.graphSelection.multiselect,
   modifyingLayouts: state.controls.modifyingLayouts,
-  screenCap: state.controls.screenCap
+  screenCap: state.controls.screenCap,
+  dataLayerExpr: state.reembedParameters.dataLayerExpr,
+  logScaleExpr: state.reembedParameters.logScaleExpr
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -282,6 +284,8 @@ class Graph extends React.Component {
       selectionTool,
       currentSelection,
       graphInteractionMode,
+      dataLayerExpr,
+      logScaleExpr
     } = this.props;
     const { toolSVG, viewport } = this.state;
     const hasResized =
@@ -293,7 +297,9 @@ class Graph extends React.Component {
       (viewport.height && viewport.width && !toolSVG) || // first time init
       hasResized || //  window size has changed we want to recreate all SVGs
       selectionTool !== prevProps.selectionTool || // change of selection tool
-      prevProps.graphInteractionMode !== graphInteractionMode // lasso/zoom mode is switched
+      prevProps.graphInteractionMode !== graphInteractionMode  ||// lasso/zoom mode is switched
+      prevProps.dataLayerExpr !== dataLayerExpr ||
+      prevProps.logScaleExpr !== logScaleExpr
     ) {
       stateChanges = {
         ...stateChanges,
@@ -611,7 +617,6 @@ class Graph extends React.Component {
         colorsProp,
         pointDilation
       );
-
       const { currentDimNames } = layoutChoice;
       const X = layoutDf.col(currentDimNames[0]).asArray();
       const Y = layoutDf.col(currentDimNames[1]).asArray();
@@ -669,10 +674,8 @@ class Graph extends React.Component {
     const { metadataField: pointDilationAccessor } = pointDilation;
 
     const promises = [];
-    // layout
-
+    // layout 
     promises.push(annoMatrix.fetch("emb", layoutChoice.current));
-
     // color
     const query = this.createColorByQuery(colors);
     if (query) {
@@ -1146,7 +1149,9 @@ class Graph extends React.Component {
       crossfilter,
       sankeyPlotMode,
       modifyingLayouts,
-      screenCap
+      screenCap,
+      dataLayerExpr,
+      logScaleExpr
     } = this.props;
     const {
       modelTF,
@@ -1275,7 +1280,9 @@ class Graph extends React.Component {
             crossfilter,
             viewport,
             modifyingLayouts,
-            screenCap
+            screenCap,
+            dataLayerExpr,
+            logScaleExpr
           }}
         >
           <Async.Pending initial>

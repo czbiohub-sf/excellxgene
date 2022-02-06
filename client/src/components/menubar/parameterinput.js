@@ -16,6 +16,7 @@ import { isNumber } from "lodash";
 
 @connect((state) => ({
   reembedParams: state.reembedParameters,
+  annoMatrix: state.annoMatrix
 }))
 class ParameterInput extends React.PureComponent {
   constructor(props) {
@@ -49,10 +50,10 @@ class ParameterInput extends React.PureComponent {
     return Math.min(Math.max(num, min), max);
   };      
   render() {
-    const { dispatch, param, label, min, max, reembedParams, tooltipContent, left } = this.props;    
+    const { dispatch, param, label, min, max, reembedParams, tooltipContent, left, annoMatrix } = this.props;    
     let { value, refresher } = this.state;
     let params = reembedParams;
-
+  
     if (param in defaultPrepParams) {
       if (reembedParams.batchPrepKey !== "" && reembedParams.batchPrepLabel !== "") {
         params = reembedParams.batchPrepParams[reembedParams.batchPrepKey][reembedParams.batchPrepLabel]
@@ -75,8 +76,11 @@ class ParameterInput extends React.PureComponent {
                 targetTagName="span"
                 wrapperTagName="span"
               >               
-                <Checkbox checked={params[param]} label={label} style={{"paddingTop":"10px"}}
+                <Checkbox checked={disabled ? false : params[param]} label={label} style={{"paddingTop":"10px"}}
                   onChange={() => {
+                    if (param === "logScaleExpr"){ 
+                      annoMatrix.setLogscale(!params[param])
+                    }                      
                     dispatch({
                       type: "reembed: set parameter",
                       key: param,
@@ -120,6 +124,9 @@ class ParameterInput extends React.PureComponent {
                 );
               }}
               onItemSelect={(d) => {
+                if (param === "dataLayerExpr"){ 
+                  annoMatrix.setLayer(d)
+                }                
                 dispatch({
                   type: "reembed: set parameter",
                   key: param,

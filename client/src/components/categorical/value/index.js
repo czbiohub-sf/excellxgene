@@ -719,7 +719,7 @@ class CategoryValue extends React.Component {
                     : "inherit",
               }}
             />
-            {isUserAnno ? (
+            {isUserAnno && userLoggedIn ? (
               <span
                 onMouseEnter={this.handleMouseExit}
                 onMouseLeave={this.handleMouseEnter}

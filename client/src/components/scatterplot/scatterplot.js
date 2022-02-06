@@ -53,6 +53,8 @@ const getYScale = memoize(getScale);
 
     crossfilter,
     genesets: state.genesets.genesets,
+    dataLayerExpr: state.reembedParameters.dataLayerExpr,
+    logScaleExpr: state.reembedParameters.logScaleExpr
   };
 })
 class Scatterplot extends React.PureComponent {
@@ -440,6 +442,8 @@ class Scatterplot extends React.PureComponent {
       colors,
       crossfilter,
       pointDilation,
+      dataLayerExpr,
+      logScaleExpr
     } = this.props;
     const { minimized, regl, viewport } = this.state;
     const bottomToolbarGutter = 48; // gutter for bottom tool bar
@@ -520,6 +524,8 @@ class Scatterplot extends React.PureComponent {
               crossfilter,
               pointDilation,
               viewport,
+              dataLayerExpr,
+              logScaleExpr
             }}
           >
             <Async.Pending initial>Loading...</Async.Pending>

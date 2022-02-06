@@ -4,6 +4,7 @@ const Differential = (
     error: null,
     celllist1: null,
     celllist2: null,
+    num: 0
   },
   action
 ) => {
@@ -25,7 +26,13 @@ const Differential = (
         ...state,
         error: null,
         loading: false,
+        num: 0
     };      
+    case "request differential expression number of categories":
+      return {
+        ...state,
+        num: action.num
+    };
     case "request differential expression success":
       return {
         ...state,

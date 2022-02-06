@@ -561,7 +561,8 @@ def launch(
             # Redirect user to logout endpoint
             params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
             return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
-        
+    
+    #server.app.use_x_sendfile = True
     try:
         server.app.run(
             host=server_config.app__host,

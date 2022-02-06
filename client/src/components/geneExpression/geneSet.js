@@ -27,7 +27,7 @@ class GeneSet extends React.Component {
     this.state = {
       isOpen: false,
       genePage: 0,
-      maxGenePage: Math.ceil((props.setGenes.length-1) / 10) - 1,
+      maxGenePage: Math.ceil((props.setGenes.length-0.1) / 10) - 1,
       removeHistZeros: false,
       queryGene: "",
     };
@@ -76,7 +76,7 @@ class GeneSet extends React.Component {
     if (setGenes !== setGenesPrev) {
       this.setState({
         ...this.state,
-        maxGenePage: Math.ceil((setGenes.length-1) / 10) - 1,
+        maxGenePage: Math.ceil((setGenes.length-0.1) / 10) - 1,
       })
     }
   }
@@ -110,7 +110,6 @@ class GeneSet extends React.Component {
   renderGenes() {
     const { setName, setGenes, setGenesWithDescriptions } = this.props;
     const { genePage, removeHistZeros } = this.state;
-
     return setGenes.slice(genePage*10,(genePage+1)*10).map((gene) => {
       const { geneDescription } = setGenesWithDescriptions.get(gene);
 
@@ -218,7 +217,7 @@ class GeneSet extends React.Component {
         <div style={{
           textAlign: "right"
         }}>
-          {`Showing genes ${genePage*10}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
+          {`Showing genes ${genePage*10+1}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
           <AnchorButton
             type="button"
             icon="double-chevron-left"

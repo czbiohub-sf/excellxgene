@@ -15,6 +15,7 @@ export default
   categoricalSelection: state.categoricalSelection,
   showLabels: state.centroidLabels?.showLabels,
   genesets: state.genesets.genesets,
+  modifyingLayouts: state.controls.modifyingLayouts
 }))
 class CentroidLabels extends PureComponent {
   static watchAsync(props, prevProps) {
@@ -28,32 +29,42 @@ class CentroidLabels extends PureComponent {
       layoutChoice,
       categoricalSelection,
       showLabels,
+      modifyingLayouts
     } = props.watchProps;
-    const { schema } = annoMatrix;
-    const { colorAccessor } = colors;
-
-    const [layoutDf, colorDf] = await this.fetchData();
-    let labels;
-    if (colorDf) {
-      labels = calcCentroid(
-        schema,
+    if (!modifyingLayouts){
+      const { schema } = annoMatrix;
+      const { colorAccessor } = colors;
+  
+      const [layoutDf, colorDf] = await this.fetchData();
+      let labels;
+      if (colorDf) {
+        labels = calcCentroid(
+          schema,
+          colorAccessor,
+          colorDf,
+          layoutChoice,
+          layoutDf
+        );
+      } else {
+        labels = new Map();
+      }
+  
+      const { overlaySetShowing } = this.props;
+      overlaySetShowing("centroidLabels", showLabels && labels.size > 0);
+      this.cachedAsyncProps = {
+        labels,
         colorAccessor,
-        colorDf,
-        layoutChoice,
-        layoutDf
-      );
+        category: categoricalSelection[colorAccessor],
+      };
+      return {
+        labels,
+        colorAccessor,
+        category: categoricalSelection[colorAccessor],
+      };
     } else {
-      labels = new Map();
+      return this?.cachedAsyncProps;
     }
 
-    const { overlaySetShowing } = this.props;
-    overlaySetShowing("centroidLabels", showLabels && labels.size > 0);
-
-    return {
-      labels,
-      colorAccessor,
-      category: categoricalSelection[colorAccessor],
-    };
   };
 
   handleMouseEnter = (e, colorAccessor, label) => {
@@ -107,6 +118,7 @@ class CentroidLabels extends PureComponent {
       colors,
       annoMatrix,
       layoutChoice,
+      modifyingLayouts
     } = this.props;
 
     return (
@@ -120,6 +132,7 @@ class CentroidLabels extends PureComponent {
           categoricalSelection,
           dilatedValue,
           showLabels,
+          modifyingLayouts
         }}
       >
         <Async.Fulfilled>

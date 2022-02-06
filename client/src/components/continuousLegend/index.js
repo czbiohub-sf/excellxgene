@@ -107,13 +107,15 @@ const continuous = (selectorId, colorScale, colorAccessor) => {
   annoMatrix: state.annoMatrix,
   colors: state.colors,
   genesets: state.genesets.genesets,
+  dataLayerExpr: state.reembedParameters.dataLayerExpr,
+  logScaleExpr: state.reembedParameters.logScaleExpr
 }))
 class ContinuousLegend extends React.Component {
   async componentDidUpdate(prevProps) {
-    const { annoMatrix, colors, genesets } = this.props;
+    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr } = this.props;
     if (!colors || !annoMatrix) return;
 
-    if (colors !== prevProps?.colors || annoMatrix !== prevProps?.annoMatrix) {
+    if (logScaleExpr !== prevProps.logScaleExpr || dataLayerExpr !== prevProps.dataLayerExpr || colors !== prevProps?.colors || annoMatrix !== prevProps?.annoMatrix) {
       const { schema } = annoMatrix;
       const { colorMode, colorAccessor, userColors } = colors;
 

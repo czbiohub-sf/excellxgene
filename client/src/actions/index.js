@@ -398,9 +398,8 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       }
 
     } else if (data.cfn === "diffexp"){
-      const { annoMatrix, genesets } = getState();
+      const { annoMatrix, genesets, differential } = getState();
       const { diffExpListsLists, diffExpListsNames } = genesets;
-      const n = data?.nameList?.length-1 ?? -1
       const varIndexName = annoMatrix.schema.annotations.var.index;
 
       annoMatrix.fetch("var", varIndexName).then((varIndex)=>{
@@ -416,7 +415,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
             type: "request differential expression success",
             data: diffexpLists,
           });      
-        } else if (data?.multiplex && (diffExpListsLists.length+1) === n) {
+        } else if (data?.multiplex && data.num===differential.num) {
           diffExpListsLists.push(diffexpLists)
           diffExpListsNames.push(data.category)
           const diffExpListsMap = new Map();
@@ -426,7 +425,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
           const dataList = [];
           const nameList = [];
           for (const name of data.nameList) {
-            if(name!=="unassigned"){
+            if(name!=="unassigned" && diffExpListsMap.has(name)){
               dataList.push(diffExpListsMap.get(name));
               nameList.push(name);
             }
@@ -473,45 +472,12 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         annoMatrix,
         obsCrossfilter,
       });
+
       postAsyncSuccessToast("Re-embedding has completed.");
 
-    /*} else if (data.cfn === "preprocessing"){
-      const {        
-        obsCrossfilter: prevCrossfilter,
-        layoutChoice,
-        annoMatrix: dummy
-      } = getState();
-
-      const schema = dummy.schema;
-
-      dispatch({
-        type: "preprocess: request completed",
-      });
-
-      const baseDataUrl = `${API.prefix}${API.version}`;
-      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, schema);
-      prefetchEmbeddings(annoMatrixNew);
-
-      dispatch({
-        type: "reset subset"
-      })
-
-      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
-        annoMatrixNew,
-        prevCrossfilter,
-        layoutChoice.current,
-        layoutChoice.current
-      );
-      
-      dispatch({
-        type: "annoMatrix: init complete",
-        annoMatrix,
-        obsCrossfilter
-      });      
-      postAsyncSuccessToast("Preprocessing has completed.");
-    } */ 
     } else if (data.cfn === "sankey"){
       const { layoutChoice } = getState();
+      console.log(data)
       const catNames = data.catNames;
       const sankey = data.response;
       const threshold = data.threshold;
@@ -589,7 +555,8 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         categoryToDuplicate: null,
         annoMatrix: obsCrossfilter.annoMatrix,
         obsCrossfilter,
-      });       
+      }); 
+      dispatch({type: "track anno", anno: name})      
     } else if (data.cfn === "downloadAnndata"){
       const { layoutChoice } = getState();
       const res = await fetch(`${API.prefix}${API.version}sendFile?path=${data.response}`,
@@ -715,7 +682,7 @@ const doInitialDataLoad = () =>
       const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
       if(layoutSchema.length > 0){
-        const preferredNames = ["root"];
+        const preferredNames = [schema?.schema?.rootName.split("X_").at(-1)];
         const f = layoutSchema.filter((i) => {
           return preferredNames.includes(i.name)
         })
@@ -867,6 +834,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     labels = labels.__columns[0];
     const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
+    let z = 0;
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
         let set1 = []
@@ -878,21 +846,26 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
             set2.push(ix[i])
           }
         }
-        set1 = Array.isArray(set1) ? set1 : Array.from(set1);
-        set2 = Array.isArray(set2) ? set2 : Array.from(set2);
-        wsDiffExp.send(JSON.stringify({
-          mode: "topN",
-          count: num_genes,
-          set1: { filter: { obs: { index: set1 } } },
-          set2: { filter: { obs: { index: set2 } } },
-          multiplex: true,
-          grouping: categoryName,
-          nameList: allCategories,
-          layer: annoMatrix.layer,
-          category: cat
-        }))
+        if (set1.length > 1 && set2.length > 1) {
+          z+=1;
+          set1 = Array.isArray(set1) ? set1 : Array.from(set1);
+          set2 = Array.isArray(set2) ? set2 : Array.from(set2);
+          wsDiffExp.send(JSON.stringify({
+            mode: "topN",
+            count: num_genes,
+            set1: { filter: { obs: { index: set1 } } },
+            set2: { filter: { obs: { index: set2 } } },
+            multiplex: true,
+            grouping: categoryName,
+            nameList: allCategories,
+            layer: annoMatrix.layer,
+            category: cat,
+            num: z
+          }))
+        }
       } 
     }
+    dispatch({type: "request differential expression number of categories", num: z})
   } catch (error) {
     return dispatch({
       type: "request differential expression error",
@@ -1021,7 +994,6 @@ export default {
   saveObsAnnotationsAction: annoActions.saveObsAnnotationsAction,
   saveGenesetsAction: annoActions.saveGenesetsAction,
   saveReembedParametersAction: annoActions.saveReembedParametersAction,
-  needToSaveObsAnnotations: annoActions.needToSaveObsAnnotations,
   layoutChoiceAction: embActions.layoutChoiceAction,
   requestDeleteEmbedding: embActions.requestDeleteEmbedding,
   requestRenameEmbedding: embActions.requestRenameEmbedding,

@@ -109,10 +109,22 @@ export default class AnnoMatrix {
     
   }
   setLayer(layer) {
-    this.layer = layer;
+    if (layer !== this.layer){
+      this.layer = layer;
+      this._cache.X = Dataframe.empty(this.rowIndex);
+      if (this.viewOf){
+        this.viewOf.setLayer(layer);
+      }      
+    }
   }
   setLogscale(logscale) {
-    this.logscale = logscale;
+    if (logscale !== this.logscale){
+      this.logscale = logscale;
+      this._cache.X = Dataframe.empty(this.rowIndex);
+      if (this.viewOf){
+        this.viewOf.setLogscale(logscale);
+      }      
+    }    
   }  
   /**
    ** Schema helper/accessors
@@ -460,7 +472,9 @@ export default class AnnoMatrix {
     const uncachedQueries = queries.filter((query) =>
       _whereCacheGet(this._whereCache, this.schema, field, query).some(
         (cacheKey) =>
-          cacheKey === undefined || !this._cache[field].hasCol(cacheKey)
+          {
+            return (cacheKey === undefined || !this._cache[field].hasCol(cacheKey));
+          }
       )
     );
 
@@ -470,13 +484,16 @@ export default class AnnoMatrix {
         uncachedQueries.map((query) =>
           this._getPendingLoad(field, query, async (_field, _query) => {
             /* fetch, then index.  _doLoad is subclass interface */
-            const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer, logscale);
-            
-            this._cache[_field] = this._cache[_field].withColsFrom(df);
-            this._whereCache = _whereCacheMerge(
-              this._whereCache,
-              whereCacheUpdate
-            );
+            if (!this._cache[field].hasCol(_query)){
+              const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer, logscale);
+              this._cache[_field] = this._cache[_field].withColsFrom(df);
+              
+              this._whereCache = _whereCacheMerge(
+                this._whereCache,
+                whereCacheUpdate
+              );
+  
+            }
           })
         )
       );

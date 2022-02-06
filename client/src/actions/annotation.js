@@ -80,7 +80,7 @@ export const annotationCreateCategoryAction = (
     ctor,
     initialValue
   );
-
+  dispatch({type: "track anno", anno: newCategoryName})    
   dispatch({
     type: "annotation: create category",
     data: newCategoryName,
@@ -133,11 +133,9 @@ export const annotationRenameCategoryAction = (
 };
 
 export function requestObsRename(oldCategoryName,newCategoryName) {
-  return async (_dispatch, getState) => {
-    const { controls } = getState()
-    const { username } = controls;
+  return async (_dispatch, _getState) => {    
     const res = await fetch(
-      `${API.prefix}${API.version}renameObs`,
+      `${API.prefix}${API.version}annotations/rename`,
       {
         method: "PUT",
         headers: new Headers({
@@ -145,11 +143,11 @@ export function requestObsRename(oldCategoryName,newCategoryName) {
           "Content-Type": "application/json",
         }),
         body: JSON.stringify({
-          oldCategoryName: oldCategoryName,
-          newCategoryName: newCategoryName,
+          oldName: oldCategoryName,
+          newName: newCategoryName
         }),
         credentials: "include",
-        }
+      }
     );
 
     if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
@@ -220,7 +218,7 @@ export function requestFuseLabels() {
       ctor,
       arr
     );      
-          
+    dispatch({type: "track anno", anno: name})          
     dispatch({
       type: "annotation: create category",
       data: name,
@@ -272,6 +270,21 @@ export const annotationDeleteCategoryAction = (categoryName) => (
     metadataField: categoryName
   });
 
+  fetch(
+    `${API.prefix}${API.version}annotations/delete`,
+    {
+      method: "PUT",
+      headers: new Headers({
+        Accept: "application/octet-stream",
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        name: categoryName,
+      }),
+      credentials: "include",
+    }
+  );
+
   dispatch({type: "sankey: set", category: categoryName, value: false})
 };
 
@@ -303,7 +316,7 @@ export const annotationCreateLabelInCategory = (
       labelName
     );
   }
-
+  dispatch({type: "track anno", anno: categoryName})
   dispatch({
     type: "annotation: add new label to category",
     annoMatrix: obsCrossfilter.annoMatrix,
@@ -334,7 +347,7 @@ export const annotationDeleteLabelFromCategory = (
     labelName,
     globals.unassignedCategoryLabel
   );
-
+  dispatch({type: "track anno", anno: categoryName})
   dispatch({
     type: "annotation: delete label",
     metadataField: categoryName,
@@ -370,7 +383,7 @@ export const annotationRenameLabelInCategory = (
     oldLabelName,
     globals.unassignedCategoryLabel
   );
-
+  dispatch({type: "track anno", anno: categoryName})
   dispatch({
     type: "annotation: label edited",
     editedLabel: newLabelName,
@@ -401,7 +414,7 @@ export const annotationLabelCurrentSelection = (
     prevObsCrossfilter.allSelectedLabels(),
     labelName
   );
-
+  dispatch({type: "track anno", anno: categoryName})
   dispatch({
     type: "annotation: label current cell selection",
     metadataField: categoryName,
@@ -417,33 +430,6 @@ function writableAnnotations(annoMatrix) {
     .map((s) => s.name);
 }
 
-export const needToSaveObsAnnotations = (annoMatrix, lastSavedAnnoMatrix) => {
-  /*
-  Return true if there are LIKELY user-defined annotation modifications between the two
-  annoMatrices.  Technically not an action creator, but intimately intertwined
-  with the save process.
-
-  Two conditions will trigger a need to save:
-    * the collection of user-defined columns have changed
-    * the contents of the user-defined columns have change
-  */
-
-  annoMatrix = annoMatrix.base();
-
-  // if the annoMatrix hasn't changed, we are guaranteed no changes to the matrix schema or contents.
-  if (annoMatrix === lastSavedAnnoMatrix) return false;
-
-  // if the schema has changed, we need to save
-  const currentWritable = writableAnnotations(annoMatrix);
-  if (difference(currentWritable, writableAnnotations(lastSavedAnnoMatrix))) {
-    return true;
-  }
-
-  // no schema changes; check for change in contents
-  return currentWritable.some(
-    (col) => annoMatrix.col(col) !== lastSavedAnnoMatrix.col(col)
-  );
-};
 
 export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   /*
@@ -451,14 +437,14 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   */
   const state = getState();
   const { annotations, autosave, controls } = state;
-  const { username } = controls;
+  const { annoTracker: annos } = controls;
   const { dataCollectionNameIsReadOnly, dataCollectionName } = annotations;
   const { lastSavedAnnoMatrix, saveInProgress } = autosave;
 
   const annoMatrix = state.annoMatrix.base();
 
   if (saveInProgress || annoMatrix === lastSavedAnnoMatrix) return;
-  if (!needToSaveObsAnnotations(annoMatrix, lastSavedAnnoMatrix)) {
+  if (annos.length === 0) {
     dispatch({
       type: "writable obs annotations - save complete",
       lastSavedAnnoMatrix: annoMatrix,
@@ -473,12 +459,6 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   dispatch({
     type: "writable obs annotations - save started",
   });
-  const annos = []
-  for (const c of annoMatrix.schema.annotations.obs.columns) {
-    if (c.name !== "name_0") {
-      annos.push(c.name)
-    }
-  }
   const df = await annoMatrix.fetch("obs", annos);
   const matrix = MatrixFBS.encodeMatrixFBS(df);
   const compressedMatrix = pako.deflate(matrix);
@@ -526,7 +506,6 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
 
   // bail if gene sets not available, or in readonly mode.
   const { config, controls } = state;
-  const { username } = controls;
   const { lastTid, genesets } = state.genesets;
 
   const genesetsAreAvailable =
@@ -622,7 +601,6 @@ export const saveReembedParametersAction = () => async (dispatch, getState) => {
   const reembedParams = state.reembedParameters;
 
   try {
-    const { username } = state.controls;
     const { dataCollectionName } = state.annotations;
     const queryString = `?annotation-collection-name=${encodeURIComponent(
       dataCollectionName

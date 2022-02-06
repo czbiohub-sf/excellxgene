@@ -2,7 +2,7 @@
 action creators related to embeddings choice
 */
 
-import { AnnoMatrixLoader, AnnoMatrixObsCrossfilter } from "../annoMatrix";
+import { AnnoMatrixObsCrossfilter } from "../annoMatrix";
 import { _setEmbeddingSubset } from "../util/stateManager/viewStackHelpers";
 import { API } from "../globals";
 
@@ -65,7 +65,7 @@ export const requestDeleteEmbedding = (toDelete) => async (
 
 export const requestRenameEmbedding = (toRename,oldName,newName) => async (
   dispatch,
-  _getState
+  getState
 ) => {
   
 dispatch({type: "modifying layouts", modifyingLayouts: true})
@@ -88,15 +88,33 @@ const res = await fetch(
 );
 
 const schema = await res.json();
-const baseDataUrl = `${API.prefix}${API.version}`;
-const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
-const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);   
-     
-dispatch({
-  type: "annoMatrix: init complete",
-  annoMatrix: annoMatrix,
-  obsCrossfilter: obsCrossfilter,
-});   
+let { annoMatrix, obsCrossfilter: prevCrossfilter } = getState();
+const newNames = [];
+toRename.forEach((item)=>{
+  let newItem;
+  if (item.includes(`;;${oldName};;`)) { // middle
+    newItem = item.replace(`;;${oldName};;`,`;;${newName};;`)
+  } else if (item.includes(`${oldName};;`)) { // root
+    newItem = item.replace(`${oldName};;`,`${newName};;`)
+  } else if (item.includes(`;;${oldName}`)) { // leaf
+    newItem = item.replace(`;;${oldName}`,`;;${newName}`)    
+  } else if (item === oldName) { // no children
+    newItem = newName;
+  }
+  newNames.push(newItem);
+  annoMatrix = annoMatrix.renameObsmLayout(item,newItem,{"name": newItem, "type": "float32", "dims": [`${newItem}_0`, `${newItem}_1`]})
+})     
+
+
+const obsCrossfilter = await new AnnoMatrixObsCrossfilter(
+  annoMatrix,
+  prevCrossfilter.obsCrossfilter
+)
+dispatch({type: "", annoMatrix, obsCrossfilter})
+
+toRename.forEach((item,index)=>{
+  dispatch({type: "reembed: rename reembedding", embName: item, newName: newNames[index]});
+})
 
 dispatch({type: "modifying layouts", modifyingLayouts: false})
 

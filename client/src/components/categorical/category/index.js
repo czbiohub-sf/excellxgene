@@ -26,6 +26,7 @@ import {
   createColorQuery,
 } from "../../../util/stateManager/colorHelpers";
 import actions from "../../../actions";
+import { CONSOLE } from "@blueprintjs/icons/lib/esm/generated/iconContents";
 
 const LABEL_WIDTH = globals.leftSidebarWidth - 100;
 const ANNO_BUTTON_WIDTH = 50;
@@ -52,7 +53,8 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
     selectedCategories: state.sankeySelection.selectedCategories,
     numChecked: state.sankeySelection.numChecked,
     sankeyController: state.sankeyController,
-    refresher: refresher
+    refresher: refresher,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class Category extends React.PureComponent {
@@ -64,7 +66,8 @@ class Category extends React.PureComponent {
       sortDirection: null,
       removeHistZeros: false,
       indexOfSankeyCategory: -1,
-      filterValue: "" 
+      filterValue: "",
+      ctPage: 0
     }
   }
   static getSelectionState(
@@ -345,7 +348,8 @@ class Category extends React.PureComponent {
       isUserAnno,
       sankeySelected,
       layoutChoiceSankey,
-      sankeyController
+      sankeyController,
+      userLoggedIn
     } = this.props;
     
     const sankeyLoading = !!sankeyController?.pendingFetch;
@@ -355,7 +359,6 @@ class Category extends React.PureComponent {
     const checkboxID = `category-select-${metadataField}`;
     const sankeyCheckboxID = `sankey-select-${metadataField}`;
     const { sortDirection, continuousAverages, removeHistZeros, indexOfSankeyCategory, filterValue } = this.state;
-
     return (
       <CategoryCrossfilterContext.Provider value={crossfilter}>
         <Async
@@ -392,7 +395,62 @@ class Category extends React.PureComponent {
               } = asyncProps;
               const isTruncated = !!categorySummary?.isTruncated;
               const categorySummary = this.state?.categorySummary ?? categorySummaryOrig
-              const selectionState = this.getSelectionState(categorySummary);
+              const selectionState = this.getSelectionState(categorySummary);              
+              
+              let maxCtPage;
+              let numCats = 0;
+              categorySummary.allCategoryValues.forEach((value)=>{
+                if (value.toString().includes(filterValue)){
+                  numCats = numCats + 1;
+                }
+              })
+              maxCtPage = Math.ceil((numCats-0.1) / 10)-1;
+              maxCtPage = Math.max(0,maxCtPage);
+
+              const pager = (
+                <div style={{
+                  textAlign: "right"
+                }}>
+                  {`Showing labels ${this.state.ctPage*10+1}-${Math.min((this.state.ctPage+1)*10,numCats)} / ${numCats}`}
+                  <AnchorButton
+                    type="button"
+                    icon="double-chevron-left"
+                    onClick={()=>{this.setState({...this.state,ctPage: 0})}}
+                    minimal
+                    disabled={this.state.ctPage === 0}
+                  />          
+                  <AnchorButton
+                    type="button"
+                    icon="chevron-left"
+                    onClick={()=>{
+                      this.setState({
+                        ctPage: this.state.ctPage-1
+                      })                      
+                    }}
+                    minimal
+                    disabled={this.state.ctPage  === 0}
+                  />
+                  <AnchorButton
+                    type="button"
+                    icon="chevron-right"
+                    onClick={()=>{
+                      this.setState({
+                        ctPage: this.state.ctPage+1
+                      })                      
+                    }}
+                    minimal
+                    disabled={this.state.ctPage === maxCtPage}
+                  />  
+                  <AnchorButton
+                    type="button"
+                    icon="double-chevron-right"
+                    onClick={()=>{this.setState({ctPage: maxCtPage})}}
+                    minimal
+                    disabled={this.state.ctPage === maxCtPage}
+                  />                            
+                </div>
+          
+              );              
               return (
                 <CategoryRender
                   metadataField={metadataField}
@@ -429,7 +487,12 @@ class Category extends React.PureComponent {
                   indexOfSankeyCategory={indexOfSankeyCategory}
                   sankeyLoading={sankeyLoading}    
                   filterValue={filterValue}
-                  filterValueSetter={(e)=>{this.setState({...this.state,filterValue: e})}}
+                  filterValueSetter={(e)=>{
+                    this.setState({...this.state,filterValue: e, ctPage: 0})
+                  }}
+                  userLoggedIn={userLoggedIn}
+                  pager={pager}
+                  ctPage={this.state.ctPage}
                 />
               );
             }}
@@ -534,7 +597,8 @@ const CategoryHeader = React.memo(
     removeHistZeros,
     histToggler,
     indexOfSankeyCategory,
-    sankeyLoading
+    sankeyLoading,
+    userLoggedIn
   }) => {
     /*
     Render category name and controls (eg, color-by button).
@@ -635,7 +699,7 @@ const CategoryHeader = React.memo(
             icon={sortIcon}
           />
           </Tooltip>
-          <AnnoMenu
+          {userLoggedIn && <AnnoMenu
             metadataField={metadataField}
             isUserAnno={isUserAnno}
             createText="Add a new label to this category"
@@ -646,7 +710,7 @@ const CategoryHeader = React.memo(
             disableToggle={!continuousColoring}
             histToggler={histToggler}
             removeHistZeros={removeHistZeros}
-          />
+          />}
 
           <Tooltip
             content={
@@ -672,7 +736,7 @@ const CategoryHeader = React.memo(
               icon="tint"
             />
           </Tooltip>
-          <Tooltip
+          {userLoggedIn && <Tooltip
             content="Select category."
             position="bottom"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}          
@@ -687,8 +751,8 @@ const CategoryHeader = React.memo(
                 type="checkbox"
                 disabled={layoutChoiceSankey || sankeyLoading}
             />  
-          </Tooltip>     
-          {indexOfSankeyCategory > -1 ? indexOfSankeyCategory+1 : null}
+          </Tooltip>}     
+          {(indexOfSankeyCategory > -1) && userLoggedIn ? indexOfSankeyCategory+1 : null}
         </div>
       </>
     );
@@ -726,7 +790,10 @@ const CategoryRender = React.memo(
     indexOfSankeyCategory,
     sankeyLoading,
     filterValue,
-    filterValueSetter
+    filterValueSetter,
+    userLoggedIn,
+    pager,
+    ctPage
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -783,6 +850,7 @@ const CategoryRender = React.memo(
             histToggler={histToggler}
             indexOfSankeyCategory={indexOfSankeyCategory}
             sankeyLoading={sankeyLoading}
+            userLoggedIn={userLoggedIn}
           />
         </div>
         <div style={{ marginLeft: 26 }}>
@@ -801,6 +869,9 @@ const CategoryRender = React.memo(
                   
                 />
               </div>
+              <div style={{paddingBottom: "5px"}}>
+                {pager}
+              </div>
               <CategoryValueList
                 isUserAnno={isUserAnno}
                 metadataField={metadataField}
@@ -813,6 +884,7 @@ const CategoryRender = React.memo(
                 continuousAverages={continuousAverages}
                 removeHistZeros={removeHistZeros}
                 filterValue={filterValue}
+                ctPage={ctPage}
               />
               </>
             ) : null
@@ -840,7 +912,8 @@ const CategoryValueList = React.memo(
     sortDirection,
     continuousAverages,
     removeHistZeros,
-    filterValue
+    filterValue,
+    ctPage
   }) => {
     const categoryValueCountsObj = {}
     categorySummary.categoryValueCounts.forEach((item,index)=>{
@@ -923,12 +996,17 @@ const CategoryValueList = React.memo(
       categoryValueIndices: newCategoryValueIndices,
       numCategoryValues: newCategoryValues.length
     }    
-
+    const newTuplesFiltered = [];
+    newTuples.forEach((value,index)=>{
+      if (value[0].toString().includes(filterValue) || value[0] === "unassigned"){
+        newTuplesFiltered.push(newTuples[index])
+      }
+    })
     if (!isUserAnno) {
       return (
         <>
-          {newTuples.map(([value, index]) => (
-            value.toString().includes(filterValue) ?
+          {newTuplesFiltered.slice(ctPage*10,(ctPage+1)*10).map(([value, index]) => (
+            (value.toString().includes(filterValue) || value === "unassigned") ?
             <Value
               key={value}
               isUserAnno={isUserAnno}
@@ -951,8 +1029,8 @@ const CategoryValueList = React.memo(
     const flipKey = [...categorySummary.categoryValueIndices].map((t) => t[0]).join("");
     return (
       <Flipper flipKey={flipKey}>
-        {newTuples.map(([value, index]) => (
-          value.toString().includes(filterValue) ?
+        {newTuplesFiltered.slice(ctPage*10,(ctPage+1)*10).map(([value, index]) => 
+        ((value.toString().includes(filterValue) || value === "unassigned") ?
           <Flipped key={value} flipId={value}>
             <Value
               isUserAnno={isUserAnno}

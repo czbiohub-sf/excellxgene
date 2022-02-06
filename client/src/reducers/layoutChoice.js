@@ -93,14 +93,23 @@ const LayoutChoice = (
       })
       const oldname = action.embName.split(';;').at(-1)
       const newname = newName.split(';;').at(-1)
+      let newCurrent = current;
       if (current === action.embName || current.includes(`${action.embName};;`)){
-        current = current.replace(oldname,newname)
+        if (current.includes(`;;${oldname};;`)) { // middle
+          newCurrent = current.replace(`;;${oldname};;`,`;;${newname};;`)
+        } else if (current.includes(`${oldname};;`)) { // root
+          newCurrent = current.replace(`${oldname};;`,`${newname};;`)
+        } else if (current.includes(`;;${oldname}`)) { // leaf
+          newCurrent = current.replace(`;;${oldname}`,`;;${newname}`)    
+        } else if (current === oldname) { // no children
+          newCurrent = newname;
+        }
       }
       return {
         ...state,
         available: availableNew,
-        current: current,
-        currentDimNames: [`${current}_0`,`${current}_1`]        
+        current: newCurrent,
+        currentDimNames: [`${newCurrent}_0`,`${newCurrent}_1`]        
       };
     }
     case "reembed: activate layout edit mode": {

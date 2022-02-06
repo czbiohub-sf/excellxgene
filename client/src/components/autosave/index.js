@@ -17,6 +17,7 @@ import FilenameDialog from "./filenameDialog";
   genesets: state.genesets,
   lastSavedAnnoMatrix: state.autosave?.lastSavedAnnoMatrix,
   lastSavedGenesets: state.autosave?.lastSavedGenesets,
+  annoTracker: state.controls.annoTracker
 }))
 class Autosave extends React.Component {
   constructor(props) {
@@ -48,7 +49,7 @@ class Autosave extends React.Component {
     const {
       dispatch,
       obsAnnotationSaveInProgress,
-      genesetSaveInProgress,
+      genesetSaveInProgress
     } = this.props;
     if (!obsAnnotationSaveInProgress && this.needToSaveObsAnnotations()) {
       dispatch(actions.saveObsAnnotationsAction());
@@ -60,8 +61,8 @@ class Autosave extends React.Component {
 
   needToSaveObsAnnotations = () => {
     /* return true if we need to save obs cell labels, false if we don't */
-    const { annoMatrix, lastSavedAnnoMatrix } = this.props;
-    return actions.needToSaveObsAnnotations(annoMatrix, lastSavedAnnoMatrix);
+    const { annoTracker } = this.props;
+    return annoTracker.length > 0;
   };
 
   needToSaveGenesets = () => {

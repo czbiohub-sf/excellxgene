@@ -161,38 +161,26 @@ class GeneExpression extends React.Component {
       geneSetsExpanded: !this.state.geneSetsExpanded,
     });
   };
+  
+  /*createGeneset = (genesetName,genesArrayFromString,genesetDescription) => {
+    const { dispatch } = this.props;
 
-  componentDidUpdate(prevProps) {
-    const { dispatch, reembedParams, annoMatrix } = this.props;
-    if(prevProps.reembedParams.dataLayerExpr !== reembedParams.dataLayerExpr){
-      // Trigger new data layer.
-      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
-      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
-      annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
-      annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
-      const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
-      actions.prefetchEmbeddings(annoMatrixNew);
+    dispatch({
+      type: "geneset: create",
+      genesetName,
+      genesetDescription,
+    });
+    const genesTmpHardcodedFormat = [];
 
-      dispatch({
-        type: "annoMatrix: init complete",
-        annoMatrix: annoMatrixNew,
-        obsCrossfilter: obsCrossfilterNew
-      });      
-    } else if(prevProps.reembedParams.logScaleExpr !== reembedParams.logScaleExpr){
-      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;
-      const annoMatrixNew = new AnnoMatrixLoader(baseDataUrl, annoMatrix.schema);
-      annoMatrixNew.setLayer(reembedParams.dataLayerExpr)
-      annoMatrixNew.setLogscale(reembedParams.logScaleExpr)
-      const obsCrossfilterNew = new AnnoMatrixObsCrossfilter(annoMatrixNew);
-      actions.prefetchEmbeddings(annoMatrixNew);
+    genesArrayFromString.forEach((_gene) => {
+      genesTmpHardcodedFormat.push({
+        geneSymbol: _gene,
+      });
+    });
 
-      dispatch({
-        type: "annoMatrix: init complete",
-        annoMatrix: annoMatrixNew,
-        obsCrossfilter: obsCrossfilterNew
-      });      
-    }
-  }
+    dispatch(actions.genesetAddGenes(genesetName, genesTmpHardcodedFormat));
+
+  };*/
 
   handleActivateCreateGenesetMode = () => {
     const { dispatch } = this.props;
@@ -218,7 +206,7 @@ class GeneExpression extends React.Component {
             paddingRight: "10px"
           }}>
                       
-            <Tooltip
+            {userLoggedIn && <Tooltip
               content="Save gene sets a `.csv` file."
               position="bottom"
               hoverOpenDelay={globals.tooltipHoverOpenDelay}
@@ -230,7 +218,7 @@ class GeneExpression extends React.Component {
                     this.handleSaveGenedata()
                   }}
                 /> 
-              </Tooltip>    
+              </Tooltip> }  
             </div>       
             <div style={{
               marginBottom: "20px",
@@ -254,7 +242,7 @@ class GeneExpression extends React.Component {
           </div>     
         </div>               
         <QuickGene/>
-        <div>
+        {userLoggedIn && <div>
           <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between" }}>
             <H4
               role="menuitem"
@@ -290,8 +278,8 @@ class GeneExpression extends React.Component {
           { 
             geneSetsExpanded && <div>{this.renderGeneSets()}</div>
           }
-        </div>
-        <AnnoDialog
+        </div>}
+        {userLoggedIn && <AnnoDialog
           isActive={
             isEditingSetName
           }
@@ -323,7 +311,7 @@ class GeneExpression extends React.Component {
               newLabelMessage="New layout name"
             />
           }
-        />        
+        /> }      
       </div>
     );
   }

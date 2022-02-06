@@ -1,12 +1,12 @@
 import React from "react";
 import { connect } from "react-redux";
 import {
+  Button,
   AnchorButton,
   Collapse,
   ControlGroup,
 } from "@blueprintjs/core";
 import ParameterInput from "./parameterinput";
-import DefaultsButton from "./defaultsio";
 import { ControlsHelpers } from "../../util/stateManager";
 
 @connect((state) => ({
@@ -57,10 +57,10 @@ class PrepPanel extends React.PureComponent {
         disabledBatchLabel = false;
       }
     }
+    const advancedShown = this.state?.advancedShown ?? false;
     allBatchPrepLabels = allBatchPrepLabels ?? [""]
     return (
       <div>
-      <DefaultsButton dispatch={dispatch}/>       
       <ControlGroup fill={true} vertical={false}>     
         <ParameterInput 
           label="Batch preprocess?"
@@ -87,7 +87,19 @@ class PrepPanel extends React.PureComponent {
           label="Preprocess?"
           param="doPreprocess"
           tooltipContent={"Check to perform preprocessing."}
-        />           
+        />    
+        <ParameterInput
+            label="Sum normalize?"
+            param="sumNormalizeCells"
+            tooltipContent={"Check to normalize cells to have median library size (assumes raw counts)."}
+            disabled={(!reembedParams.doPreprocess && batchDisabled) || (!batchDisabled && !reembedParams.batchPrepParams?.[reembedParams.batchPrepKey]?.[reembedParams.batchPrepLabel]?.doPreprocess)}
+          />            
+          <ParameterInput
+            label="Log transform?"
+            param="logTransform"
+            tooltipContent={"Check to log-transform your data (assumes raw counts)."}
+            disabled={(!reembedParams.doPreprocess && batchDisabled) || (!batchDisabled && !reembedParams.batchPrepParams?.[reembedParams.batchPrepKey]?.[reembedParams.batchPrepLabel]?.doPreprocess)}
+          />               
         <ParameterInput
           label="Data layer"
           param="dataLayer"
@@ -95,6 +107,21 @@ class PrepPanel extends React.PureComponent {
           tooltipContent={"The gene expression layer to be used for preprocessing."}
         />                   
       </ControlGroup>  
+ 
+        <div style={{paddingTop: "30px"}}>
+        <Button
+          onClick={() => {
+            this.setState({ 
+              advancedShown: !(this.state?.advancedShown ?? false)
+            });
+          }}
+          minimal
+          rightIcon={advancedShown ? "chevron-down" : "chevron-right"} small
+        >
+          {<b>Advanced filtering options</b>}
+        </Button>
+      </div>  
+      <Collapse isOpen={advancedShown}>                 
       <AnchorButton
         onClick={() => {
           this.setState({ 
@@ -104,8 +131,8 @@ class PrepPanel extends React.PureComponent {
             trshown: false
           });
         }}
-        text={`Cell filtering`}
-        fill outlined
+        text={<b>Cell filtering</b>}
+        fill minimal
         rightIcon={cfshown ? "chevron-down" : "chevron-right"} small
         disabled = {disabled}
       />                    
@@ -136,8 +163,8 @@ class PrepPanel extends React.PureComponent {
             trshown: false
           });
         }}
-        text={`Gene filtering`}
-        fill outlined
+        text={<b>Gene filtering</b>}
+        fill minimal
         rightIcon={gfshown ? "chevron-down" : "chevron-right"} small
         disabled = {disabled}
       />   
@@ -168,37 +195,8 @@ class PrepPanel extends React.PureComponent {
               />         
             </ControlGroup>          
         </Collapse>
-      </div>
-      <AnchorButton
-        onClick={() => {
-          this.setState({ 
-            hvgshown: false,
-            cfshown: false,
-            gfshown: false,
-            trshown: !this.state.trshown
-          });
-        }}
-        text={`Transformation`}
-        fill outlined
-        rightIcon={trshown ? "chevron-down" : "chevron-right"} small
-        disabled = {disabled}
-      />   
-      <div style={{"paddingLeft":"10px"}}>
-        <Collapse isOpen={trshown}>     
-          <ControlGroup fill={true} vertical={false}>
-          <ParameterInput
-              label="Sum normalize?"
-              param="sumNormalizeCells"
-              tooltipContent={"Check to normalize cells to have median library size (assumes raw counts)."}
-            />            
-            <ParameterInput
-              label="Log transform?"
-              param="logTransform"
-              tooltipContent={"Check to log-transform your data (assumes raw counts)."}
-            />
-          </ControlGroup> 
-        </Collapse>       
-      </div>                               
+      </div>    
+      </Collapse>             
     </div>
     );
   }

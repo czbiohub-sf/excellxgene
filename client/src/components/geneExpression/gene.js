@@ -18,6 +18,8 @@ const MINI_HISTOGRAM_WIDTH = 110;
     isColorAccessor: state.colors.colorAccessor === gene,
     isScatterplotXXaccessor: state.controls.scatterplotXXaccessor === gene,
     isScatterplotYYaccessor: state.controls.scatterplotYYaccessor === gene,
+    dataLayerExpr: state.reembedParameters.dataLayerExpr,
+    logScaleExpr: state.reembedParameters.logScaleExpr
   };
 })
 class Gene extends React.Component {

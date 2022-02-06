@@ -101,7 +101,7 @@ def can_cast_to_float32(dtype, array_values):
 
         return True
 
-    if dtype.kind == "O" and array_values.hasnans:
+    if dtype.kind == "O" and pd.Series(array_values).hasnans:
         return True
 
     return False
@@ -115,7 +115,7 @@ def can_cast_to_int32(dtype, array_values=None):
 
     # Since a NaN is technically a float, any array that contains NaNs cannot be cast to an integer so immediately
     # return False.
-    if array_values.hasnans:
+    if pd.Series(array_values).hasnans:
         return False
 
     # If the array is categorical, then we need to order the array values so that functions min and max that occur

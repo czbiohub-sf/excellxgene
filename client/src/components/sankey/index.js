@@ -43,6 +43,9 @@ class Sankey extends React.Component {
   };  
   constructSankey = () => {
     const { sankeyData: data, layoutChoice } = this.props
+    if(data.nodes.length===0){
+      return
+    }
     const { viewport } = this.state
     const topMargin = this.sankeyTopPadding
     const leftMargin = this.sankeyLeftPadding
@@ -212,7 +215,7 @@ class Sankey extends React.Component {
                      .nodeId(d => d.id)
                      .nodeWidth(nodeWidth)
                      .nodePadding(nodePadding)
-                     .nodeAlign((n,tn)=>map.get(parseInt(n.id.split('_').at(0).slice(-1))));
+                     //.nodeAlign((n,tn)=>map.get(parseInt(n.id.split('_').at(0).slice(-1))));
 
     let graph = sankey(data);
     
