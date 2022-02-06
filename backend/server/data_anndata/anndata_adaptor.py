@@ -43,7 +43,9 @@ import sklearn.utils.sparsefuncs as sf
 from numba import njit, prange, config, threading_layer
 from numba.core import types
 from numba.typed import Dict
-#config.THREADING_LAYER = 'tbb'
+
+config.THREADING_LAYER = 'tbb'
+
 global process_count
 process_count = 0
 
@@ -90,22 +92,21 @@ def _callback_fn(res,ws,cfn,data,post_processing,tstart):
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing,tstart=time.time())
     _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn)
-    if current_app.hosted_mode:
-        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
-    else:
-        try:
-            res = fn(*args)
-            _new_callback_fn(res)
-        except Exception as e:
-            _error_callback(e,ws,cfn)
+    da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
+    #if current_app.hosted_mode:
+    #else:
+    #    try:
+    #        res = fn(*args)
+    #        _new_callback_fn(res)
+    #    except Exception as e:
+    #        _error_callback(e,ws,cfn)
 
 def _error_callback(e, ws, cfn):
     ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
     traceback.print_exception(type(e), e, e.__traceback__)
 
     
-def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff,ihm):
-    to_remove = []
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff,ihm):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
@@ -118,29 +119,14 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
     if nA + nB == obs_mask_A.size:
         if nA < nB:
             if (nA < CUTOFF):
-                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
-                to_remove.extend([a,b,c])
-                shm1 = shared_memory.SharedMemory(name=a)
-                shm2 = shared_memory.SharedMemory(name=b)
-                shm3 = shared_memory.SharedMemory(name=c)    
-                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-                n = Xsh[0]
-                meanA,vA = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iA],axis=0)    
+                XI = shm[layer]
+                n = XI.shape[0]
+                meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)
                 meanAsq = vA-meanA**2
                 meanAsq[meanAsq<0]=0
             else:
-                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
-                to_remove.extend([a,b,c])
-                shm1 = shared_memory.SharedMemory(name=a)
-                shm2 = shared_memory.SharedMemory(name=b)
-                shm3 = shared_memory.SharedMemory(name=c)    
-                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-                XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
-                n = Xsh[0]
+                XI = shm_csc[layer]
+                n = XI.shape[0]
 
                 meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
                 meanA/=nA
@@ -154,29 +140,14 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
 
         else:
             if (nB < CUTOFF):
-                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
-                to_remove.extend([a,b,c])
-                shm1 = shared_memory.SharedMemory(name=a)
-                shm2 = shared_memory.SharedMemory(name=b)
-                shm3 = shared_memory.SharedMemory(name=c)    
-                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-                n = Xsh[0]
-                meanB,vB = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iB],axis=0)    
+                XI = shm[layer]
+                n = XI.shape[0]
+                meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
                 meanBsq = vB-meanB**2
                 meanBsq[meanBsq<0]=0                
             else:
-                a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
-                to_remove.extend([a,b,c])
-                shm1 = shared_memory.SharedMemory(name=a)
-                shm2 = shared_memory.SharedMemory(name=b)
-                shm3 = shared_memory.SharedMemory(name=c)    
-                indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-                indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-                data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-                XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
-                n = Xsh[0]
+                XI = shm_csc[layer]
+                n = XI.shape[0]
 
                 meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
                 meanB/=nB
@@ -189,27 +160,12 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
             vA = meanAsq - meanA**2                 
     else:
         if (nA < CUTOFF):
-            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
-            to_remove.extend([a,b,c])
-            shm1 = shared_memory.SharedMemory(name=a)
-            shm2 = shared_memory.SharedMemory(name=b)
-            shm3 = shared_memory.SharedMemory(name=c)    
-            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-            n = Xsh[0]
-            meanA,vA = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iA],axis=0)    
+            XI = shm[layer]
+            n = XI.shape[0]
+            meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)    
         else:
-            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
-            to_remove.extend([a,b,c])
-            shm1 = shared_memory.SharedMemory(name=a)
-            shm2 = shared_memory.SharedMemory(name=b)
-            shm3 = shared_memory.SharedMemory(name=c)    
-            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-            XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
-            n = Xsh[0]
+            XI = shm_csc[layer]
+            n = XI.shape[0]
 
             meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
             meanA/=nA
@@ -218,27 +174,12 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
             vA[vA<0]=0
 
         if (nB < CUTOFF):
-            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[layer]
-            to_remove.extend([a,b,c])
-            shm1 = shared_memory.SharedMemory(name=a)
-            shm2 = shared_memory.SharedMemory(name=b)
-            shm3 = shared_memory.SharedMemory(name=c)    
-            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-            n = Xsh[0]
-            meanB,vB = sf.mean_variance_axis(sparse.csr_matrix((data,indices,indptr),shape=Xsh)[iB],axis=0)    
+            XI = shm[layer]
+            n = XI.shape[0]
+            meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
         else:
-            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm_csc[layer]
-            to_remove.extend([a,b,c])
-            shm1 = shared_memory.SharedMemory(name=a)
-            shm2 = shared_memory.SharedMemory(name=b)
-            shm3 = shared_memory.SharedMemory(name=c)    
-            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-            XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)  
-            n = Xsh[0]
+            XI = shm_csc[layer]
+            n = XI.shape[0]
 
             meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
             meanB/=nB
@@ -247,7 +188,6 @@ def compute_diffexp_ttest(shm,shm_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,
             vB[vB<0]=0            
 
     
-    _unregister_shm(to_remove, ihm)        
     return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
 
 def pickle_loader(fn):
@@ -255,9 +195,7 @@ def pickle_loader(fn):
         x = pickle.load(f)
     return x
 
-def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID,ihm):
-    to_remove = []
-
+def save_data(AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID,ihm):
     direc = pathlib.Path().absolute()        
 
     fnames = glob(f"{direc}/{userID}/emb/*.p")
@@ -283,15 +221,7 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
     f = np.isnan(X).sum(1)==0    
     filt = np.logical_and(f,obs_mask)
 
-    a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm["X"]
-    to_remove.extend([a,b,c])
-    shm1 = shared_memory.SharedMemory(name=a)
-    shm2 = shared_memory.SharedMemory(name=b)
-    shm3 = shared_memory.SharedMemory(name=c)    
-    indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-    indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-    data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-    X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+    X = shm["X"]
 
     adata = AnnData(X = X[filt],
             obs = AnnDataDict["obs"][filt],
@@ -349,28 +279,19 @@ def save_data(shm,shm_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,u
 
     for k in AnnDataDict["Xs"]:
         if k != "X":
-            a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[k]
-            to_remove.extend([a,b,c])
-            shm1 = shared_memory.SharedMemory(name=a)
-            shm2 = shared_memory.SharedMemory(name=b)
-            shm3 = shared_memory.SharedMemory(name=c)    
-            indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-            indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-            data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-            X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)    
+            X = shm[k]
             adata.layers[k] = X[filt]
 
     adata.write_h5ad(f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad")
-    _unregister_shm(to_remove, ihm)
     return f"{direc}/{userID}/{userID}_{currentLayout.replace(';','_')}.h5ad"
 
-def compute_embedding(shm,shm_csc, AnnDataDict, reembedParams, parentName, embName, userID, ihm):    
+def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, ihm):    
     obs_mask = AnnDataDict['obs_mask']    
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
     
     if embeddingMode == "Preprocess and run":
         with ServerTiming.time("layout.compute"):        
-            adata = compute_preprocess(shm, shm_csc, AnnDataDict, reembedParams, userID, ihm)
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, ihm)
             if adata.isbacked:
                 raise NotImplementedError("Backed mode is incompatible with re-embedding")
 
@@ -703,37 +624,21 @@ def compute_sankey_df(labels, name, obs_mask, userID):
     cs = list(cs)        
     return {"edges":ps,"weights":cs}
 
-def compute_preprocess(shm,shm_csc, AnnDataDict, reembedParams, userID, ihm):
-    to_remove = []
+def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
     layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
     root = AnnDataDict['X_root']
     obs_mask = AnnDataDict['obs_mask']
     kkk=layers[0]
-    a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
-    to_remove.extend([a,b,c])
-    shm1 = shared_memory.SharedMemory(name=a)
-    shm2 = shared_memory.SharedMemory(name=b)
-    shm3 = shared_memory.SharedMemory(name=c)    
-    indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-    indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-    data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-    X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)[obs_mask]
+    X = shm[kkk][obs_mask]
     adata = AnnData(X=X,obs=obs[obs_mask])
 
     adata.layers[layers[0]] = X
     for k in layers[1:]:
         kkk=k
-        a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = shm[kkk]
-        to_remove.extend([a,b,c])
-        shm1 = shared_memory.SharedMemory(name=a)
-        shm2 = shared_memory.SharedMemory(name=b)
-        shm3 = shared_memory.SharedMemory(name=c)    
-        indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-        indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-        data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-        X = sparse.csr_matrix((data,indices,indptr),shape=Xsh)[obs_mask]       
+        X = shm[kkk][obs_mask]
         adata.layers[k] = X
+
     adata.obsm["X_root"] = root[obs_mask]
 
     doBatchPrep = reembedParams.get("doBatchPrep",False)
@@ -917,7 +822,7 @@ def initialize_socket(da):
                 tMean = da.data.var[f'{layer};;tMean'].values
                 tMeanSq = da.data.var[f'{layer};;tMeanSq'].values                      
 
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,da.shm_layers_csr,da.shm_layers_csc,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)
     
     @sock.route("/reembedding")
     @auth0_token_required
@@ -974,7 +879,7 @@ def initialize_socket(da):
                         da.schema["layout"]["obs"].append(res)
                         return res
         
-                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
+                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
     
     @sock.route("/sankey")
     def sankey(ws):
@@ -1016,7 +921,7 @@ def initialize_socket(da):
 
                 AnnDataDict={"Xs":layers,"obs":da.data.obs, "var": da.data.var, "varm": varm}
 
-                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,da.shm_layers_csr,da.shm_layers_csc,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID, current_app.hosted_mode)
+                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,AnnDataDict,labels,labelNames,currentLayout,obs_mask,userID, current_app.hosted_mode)
 
  
     @sock.route("/leiden")
@@ -1101,10 +1006,11 @@ def _create_shm(X):
     return shm.name
 
 def _create_shm_from_data(X):
-    a = _create_shm(X.indices)
-    b = _create_shm(X.indptr)
-    c = _create_shm(X.data)    
-    return (a,X.indices.shape,X.indices.dtype,b,X.indptr.shape,X.indptr.dtype,c,X.data.shape,X.data.dtype,X.shape)
+    #a = _create_shm(X.indices)
+    #b = _create_shm(X.indptr)
+    #c = _create_shm(X.data)    
+    #return (a,X.indices.shape,X.indices.dtype,b,X.indptr.shape,X.indptr.dtype,c,X.data.shape,X.data.dtype,X.shape)
+    return X
 
 """
 def _create_data_from_shm(a,ash,ad,b,bsh,bd,c,csh,cd,Xsh):
@@ -1121,23 +1027,30 @@ def create_data_from_shm(r):
     return _create_data_from_shm(*r)
 """
 
-def _initializer():
+def _initializer(iXCSC,iXCSR):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    global shm
+    global shm_csc
+    shm = iXCSC
+    shm_csc = iXCSR
+
 
 class AnndataAdaptor(DataAdaptor):
 
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
-        if app_config.hosted_mode:
-            self._create_pool()
 
         self._load_data(data_locator, root_embedding=app_config.root_embedding)    
+
+        #if app_config.hosted_mode:
+        self._create_pool()
+
         print("Validating and initializing...")
         self._validate_and_initialize()
 
     def _create_pool(self):
-        self.pool = Pool(os.cpu_count(), initializer=_initializer, maxtasksperchild=None)
+        self.pool = Pool(os.cpu_count(), initializer=_initializer, initargs=(self.shm_layers_csr,self.shm_layers_csc), maxtasksperchild=None)
 
     def cleanup(self):
         pass
@@ -1604,15 +1517,7 @@ class AnndataAdaptor(DataAdaptor):
         #if row_idx is None:
         #    row_idx = np.arange(self.data.shape[0])
         to_remove = []        
-        a,ash,ad,b,bsh,bd,c,csh,cd,Xsh = self.shm_layers_csc[layer]
-        to_remove.extend([a,b,c])
-        shm1 = shared_memory.SharedMemory(name=a)
-        shm2 = shared_memory.SharedMemory(name=b)
-        shm3 = shared_memory.SharedMemory(name=c)    
-        indices =np.ndarray(ash,dtype=ad,buffer=shm1.buf)
-        indptr = np.ndarray(bsh,dtype=bd,buffer=shm2.buf)
-        data =   np.ndarray(csh,dtype=cd,buffer=shm3.buf)
-        XI = sparse.csc_matrix((data,indices,indptr),shape=Xsh)        
+        XI = self.shm_layers_csc[layer]
 
         if col_idx is None:
             col_idx = np.arange(self.data.shape[1])        

@@ -486,20 +486,9 @@ def launch(
         global in_handler
         if not in_handler:
             in_handler = True
-            if hosted:
-                app_config.server_config.data_adaptor.pool.terminate()
-                app_config.server_config.data_adaptor.pool.join()      
-
-            already_deleted = []
-            for d in [app_config.server_config.data_adaptor.shm_layers_csr,app_config.server_config.data_adaptor.shm_layers_csc]:
-                for k in d.keys():
-                    for j in [0,3,6]:
-                        if d[k][j] not in already_deleted:
-                            shm = shared_memory.SharedMemory(name=d[k][j])
-                            shm.close()
-                            shm.unlink()
-                            already_deleted.append(d[k][j])         
-
+            #if hosted:
+            app_config.server_config.data_adaptor.pool.terminate()
+            app_config.server_config.data_adaptor.pool.join()           
             sys.exit(0)
 
     signal.signal(signal.SIGINT, handler)

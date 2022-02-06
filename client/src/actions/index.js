@@ -211,7 +211,7 @@ export const downloadData = () => async (
 }
 
 export const downloadMetadata = () => async (
-  _dispatch,
+  dispatch,
   getState
 ) => {
     const state = getState();
@@ -234,7 +234,10 @@ export const downloadMetadata = () => async (
     }
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
-
+    dispatch({
+      type: "output data: request start"
+    });
+    
     const res = await fetch(
       `${API.prefix}${API.version}downloadMetadata`,
       {
@@ -252,6 +255,10 @@ export const downloadMetadata = () => async (
     );
 
     const blob = await res.blob()
+    
+    dispatch({
+      type: "output data: request complete"
+    });
 
     var a = document.createElement("a");
     document.body.appendChild(a);
@@ -259,7 +266,7 @@ export const downloadMetadata = () => async (
 
     var url = window.URL.createObjectURL(blob);
     a.href = url;
-    a.download = `${layoutChoice.current}_obs.csv`.split(";").join("_");
+    a.download = `${layoutChoice.current}_obs.txt`.split(";").join("_");
     a.click();
     window.URL.revokeObjectURL(url);
 }
@@ -477,7 +484,6 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
 
     } else if (data.cfn === "sankey"){
       const { layoutChoice } = getState();
-      console.log(data)
       const catNames = data.catNames;
       const sankey = data.response;
       const threshold = data.threshold;
