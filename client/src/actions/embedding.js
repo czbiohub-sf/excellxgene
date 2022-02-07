@@ -88,7 +88,8 @@ const res = await fetch(
 );
 
 const schema = await res.json();
-let { annoMatrix, obsCrossfilter: prevCrossfilter } = getState();
+let { annoMatrix } = getState();
+annoMatrix = annoMatrix.base();
 const newNames = [];
 toRename.forEach((item)=>{
   let newItem;
@@ -105,10 +106,8 @@ toRename.forEach((item)=>{
   annoMatrix = annoMatrix.renameObsmLayout(item,newItem,{"name": newItem, "type": "float32", "dims": [`${newItem}_0`, `${newItem}_1`]})
 })     
 
-
-const obsCrossfilter = await new AnnoMatrixObsCrossfilter(
-  annoMatrix,
-  prevCrossfilter.obsCrossfilter
+const obsCrossfilter = new AnnoMatrixObsCrossfilter(
+  annoMatrix
 )
 dispatch({type: "", annoMatrix, obsCrossfilter})
 
