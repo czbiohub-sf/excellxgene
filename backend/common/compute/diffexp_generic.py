@@ -4,7 +4,7 @@ import sklearn.utils.sparsefuncs as sf
 
 
 def diffexp_ttest(meanA,vA,nA,meanB,vB,nB, top_n=8, diffexp_lfc_cutoff=0.01):
-    return diffexp_ttest_from_mean_var(meanA, vA, nA, meanB, vB, nB, 1000, diffexp_lfc_cutoff)
+    return diffexp_ttest_from_mean_var(meanA, vA, nA, meanB, vB, nB, 150, diffexp_lfc_cutoff)
 
 
 def diffexp_ttest_from_mean_var(meanA, varA, nA, meanB, varB, nB, top_n, diffexp_lfc_cutoff):
