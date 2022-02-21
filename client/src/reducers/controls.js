@@ -23,7 +23,8 @@ const Controls = (
     hostedMode: false,
     modifyingLayouts: false,
     screenCap: false,
-    annoTracker: []
+    annoTracker: [],
+    varMetadata: ""
   },
   action
 ) => {
@@ -63,6 +64,12 @@ const Controls = (
         annoTracker
       };
     }       
+    case "set var key": {
+      return {
+        ...state,
+        varMetadata: action.key
+      }
+    }
     case "writable obs annotations - save complete": {
       return {
         ...state,

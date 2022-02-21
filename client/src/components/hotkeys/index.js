@@ -1,7 +1,7 @@
 import { useHotkeys, InputGroup } from "@blueprintjs/core";
 import React, { createRef, useMemo } from "react";
 import actions from "../../actions";
-
+import { subsetAction, resetSubsetAction } from "../../actions/viewStack";
 export const GlobalHotkeys = (props) => {
   const { dispatch } = props;
   const inputRef = createRef();
@@ -23,6 +23,23 @@ export const GlobalHotkeys = (props) => {
           dispatch({ type: "graph: lasso multi-selection off" });
         },
       },
+      {
+        combo: "SHIFT+W",
+        global: true,
+        label: "Subset to selection.",
+        onKeyDown: () => {
+          dispatch(subsetAction())
+
+        },
+      },  
+      {
+        combo: "SHIFT+E",
+        global: true,
+        label: "Unsubset selection.",
+        onKeyDown: () => {
+          dispatch(resetSubsetAction())
+        },
+      },            
     ],
     []
   );

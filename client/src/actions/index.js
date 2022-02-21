@@ -180,6 +180,9 @@ export const downloadData = () => async (
   dispatch,
   getState
 ) => {
+    dispatch({
+      type: "output data: request start"
+    }); 
 
     const state = getState();
     const { annoMatrix, layoutChoice, controls } = state;
@@ -188,26 +191,19 @@ export const downloadData = () => async (
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
 
-    const annos = []
-    const annoNames = []
+    const annoNames = [];
     
     for (const item of annoMatrix.schema.annotations?.obs?.columns) {
       if(item?.categories){
-        let labels = await annoMatrix.fetch("obs",item.name)
-        annos.push(labels)
         annoNames.push(item.name)
       }
     }
     wsDownloadAnndata.send(JSON.stringify({
       labelNames: annoNames,
-      labels: annos,
       currentLayout: layoutChoice.current,
       filter: { obs: { index: cells } }
     }))
-
-    dispatch({
-      type: "output data: request start"
-    });    
+   
 }
 
 export const downloadMetadata = () => async (
@@ -216,7 +212,7 @@ export const downloadMetadata = () => async (
 ) => {
     const state = getState();
     // get current embedding
-    const { layoutChoice, sankeySelection, annoMatrix, controls } = state;
+    const { layoutChoice, sankeySelection, annoMatrix } = state;
     const { selectedCategories } = sankeySelection;
 
     let catNames;
@@ -257,7 +253,7 @@ export const downloadMetadata = () => async (
     const blob = await res.blob()
     
     dispatch({
-      type: "output data: request complete"
+      type: "output data: request completed"
     });
 
     var a = document.createElement("a");
@@ -565,28 +561,31 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       dispatch({type: "track anno", anno: name})      
     } else if (data.cfn === "downloadAnndata"){
       const { layoutChoice } = getState();
-      const res = await fetch(`${API.prefix}${API.version}sendFile?path=${data.response}`,
-            {
-              headers: new Headers({
-                "Content-Type": "application/octet-stream",
-              }),
-              credentials: "include",
-            })
-      const blob = await res.blob()
-  
-      var a = document.createElement("a");
-      document.body.appendChild(a);
-      a.style = "display: none";
-  
-      var url = window.URL.createObjectURL(blob);
-      a.href = url;
-      a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
-      a.click();
-      window.URL.revokeObjectURL(url);
-  
-      dispatch({
-        type: "output data: request completed",
-      });    
+      if (hostedMode){
+        const a = document.createElement("a");
+        a.href = `/output/${data.response.split('/output/').at(-1)}`
+        a.style = "display: none";      
+        a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);  
+        dispatch({
+          type: "output data: request completed",
+        });            
+        await sleep(10000);
+        fetch(`${API.prefix}${API.version}downloadCallback?path=${data.response}`,
+          {
+            headers: new Headers({
+              "Content-Type": "application/octet-stream",
+            }),
+            credentials: "include",
+          })
+      } else {
+        postAsyncSuccessToast("Data saved to output folder.");
+        dispatch({
+          type: "output data: request completed",
+        });            
+      }
     }
   }   
   let wsDiffExp;
@@ -654,6 +653,10 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       wsDownloadAnndata.close(); 
     };  
   }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 const doInitialDataLoad = () =>
@@ -750,6 +753,29 @@ export function fetchGeneInfo(gene,varMetadata) {
     );  
     const r = await res.json()
     return r.response;  
+  }
+}
+export function fetchGeneInfoBulk(geneSet,varMetadata) {
+  return async (_dispatch, _getState) => {
+    if (varMetadata !== ""){
+      const res = await fetch(
+        `${API.prefix}${API.version}geneInfoBulk`,
+        {
+          method: "PUT",
+          headers: new Headers({
+            Accept: "application/octet-stream",
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({
+            geneSet: geneSet,
+            varMetadata: varMetadata
+          }),
+          credentials: "include",
+        }
+      );
+      const r = await res.json()
+      return r.response;  
+    }
   }
 }
 
@@ -953,6 +979,7 @@ function fetchJson(pathAndQuery) {
 export default {
   requestRenameGeneset,
   fetchGeneInfo,
+  fetchGeneInfoBulk,
   prefetchEmbeddings,
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,

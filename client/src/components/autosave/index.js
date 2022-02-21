@@ -111,6 +111,7 @@ class Autosave extends React.Component {
         style={{
           position: "absolute",
           display: "inherit",
+          overflowX: "auto",
           right: 8,
           bottom: 8,
           zIndex: 1,

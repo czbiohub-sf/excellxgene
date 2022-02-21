@@ -8,6 +8,7 @@ import userInfo from "./userInfo";
 import annoMatrix from "./annoMatrix";
 import obsCrossfilter from "./obsCrossfilter";
 import categoricalSelection from "./categoricalSelection";
+import geneSelection from "./geneSelection";
 import continuousSelection from "./continuousSelection";
 import graphSelection from "./graphSelection";
 import colors from "./colors";
@@ -40,6 +41,7 @@ const Reducer = undoable(
     ["genesetsUI", genesetsUI],
     ["layoutChoice", layoutChoice],
     ["categoricalSelection", categoricalSelection],
+    ["geneSelection", geneSelection],
     ["continuousSelection", continuousSelection],
     ["sankeySelection", sankeySelection],
     ["Leiden", Leiden],
@@ -62,6 +64,7 @@ const Reducer = undoable(
     "annoMatrix",
     "obsCrossfilter",
     "categoricalSelection",
+    "geneSelection",
     "continuousSelection",
     "sankeySelection",
     "Leiden",

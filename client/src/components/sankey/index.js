@@ -42,14 +42,14 @@ class Sankey extends React.Component {
     });
   };  
   constructSankey = () => {
-    const { sankeyData: data, layoutChoice } = this.props
+    const { sankeyData: data, layoutChoice, sankeyWidth } = this.props
     if(data.nodes.length===0){
       return
     }
     const { viewport } = this.state
     const topMargin = this.sankeyTopPadding
     const leftMargin = this.sankeyLeftPadding
-    const width = viewport.width 
+    const width = sankeyWidth
     const nodeWidth = 24;
     const nodePadding = 16;
     const nodeOpacity = 0.8;
@@ -304,7 +304,6 @@ class Sankey extends React.Component {
     .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
     .text(d => d.id.split('_').slice(1).join('_'))
     svg.attr("id","sankeyPlot");
-    
     d3.select('#saveSankeyButton').on('click', function(){
       var s = document.querySelector('#sankeyPlot');
       var data = (new XMLSerializer()).serializeToString(s);
@@ -341,7 +340,8 @@ class Sankey extends React.Component {
   };
   componentDidUpdate(prevProps) {
     const { dispatch, refresher, numCells, currCacheKey } = this.props
-    if(refresher !== prevProps.refresher) {
+    if(refresher !== prevProps.refresher || this.props.sankeyWidth !== prevProps.sankeyWidth) {
+      d3.selectAll("#canvas > *").remove()
       this.constructSankey()
     } else if (numCells !== prevProps.numCells){
       dispatch({type: "sankey: clear cached result",key: currCacheKey})
@@ -368,20 +368,19 @@ class Sankey extends React.Component {
   };
 
   render() {
+    const { sankeyWidth } = this.props;
     const { height } = this.state
     return (
       <div
         id="sankey-wrapper"
         style={{
-          position: "relative",
+          position: "absolute",
           top: 0,
           left: 0,
-          zIndex: -9999,
-          width: "inherit",
-          height: "inherit"
+          zIndex: -9999
         }}
       >
-        {<svg id="canvas" style={{width: "100%", height:height}}/>}
+        {<svg id="canvas" style={{width: sankeyWidth, height: height}}/>}
       </div>
     );
   }

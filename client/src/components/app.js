@@ -78,7 +78,9 @@ class App extends React.Component {
         {loading || error ? null : (
           <Layout>
             <LeftSideBar />
-            {(viewportRef) => (
+            {(viewportRef) => {
+              
+              return (
               <>
                 <GlobalHotkeys dispatch={dispatch} />
                 <MenuBar />
@@ -86,11 +88,24 @@ class App extends React.Component {
                 <Autosave />
                 <TermsOfServicePrompt />
                 <Legend viewportRef={viewportRef} />
-                {layoutChoice.sankey && <Sankey viewportRef={viewportRef}/>}
-                <Graph sankeyPlotMode={layoutChoice.sankey} key={graphRenderCounter} viewportRef={viewportRef} />
-
+                {layoutChoice.sankey &&                 <div style={{
+                    zIndex: 0,
+                    gridArea: "top / graph-start / bottom / graph-end",
+                    position: "relative",
+                    height: "inherit",
+                    overflowY: "auto"
+                  }}> <Sankey viewportRef={viewportRef} sankeyWidth={viewportRef?.clientWidth}/></div>}
+                <div style={{
+                    zIndex: 0,
+                    gridArea: "top / graph-start / bottom / graph-end",
+                    position: "relative",
+                    height: "inherit",
+                    overflowX: "auto"
+                  }}>
+                <Graph sankeyPlotMode={layoutChoice.sankey} key={graphRenderCounter} graphWidth={viewportRef?.clientWidth} viewportRef={viewportRef} />
+                </div>
               </>
-            )}
+            )}}
             <RightSideBar />
           </Layout>
         )}

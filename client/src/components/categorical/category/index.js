@@ -349,7 +349,8 @@ class Category extends React.PureComponent {
       sankeySelected,
       layoutChoiceSankey,
       sankeyController,
-      userLoggedIn
+      userLoggedIn,
+      leftSidebarWidth
     } = this.props;
     
     const sankeyLoading = !!sankeyController?.pendingFetch;
@@ -493,6 +494,7 @@ class Category extends React.PureComponent {
                   userLoggedIn={userLoggedIn}
                   pager={pager}
                   ctPage={this.state.ctPage}
+                  leftSidebarWidth={leftSidebarWidth}
                 />
               );
             }}
@@ -793,7 +795,8 @@ const CategoryRender = React.memo(
     filterValueSetter,
     userLoggedIn,
     pager,
-    ctPage
+    ctPage,
+    leftSidebarWidth
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -885,6 +888,7 @@ const CategoryRender = React.memo(
                 removeHistZeros={removeHistZeros}
                 filterValue={filterValue}
                 ctPage={ctPage}
+                leftSidebarWidth={leftSidebarWidth}
               />
               </>
             ) : null
@@ -913,7 +917,8 @@ const CategoryValueList = React.memo(
     continuousAverages,
     removeHistZeros,
     filterValue,
-    ctPage
+    ctPage,
+    leftSidebarWidth
   }) => {
     const categoryValueCountsObj = {}
     categorySummary.categoryValueCounts.forEach((item,index)=>{
@@ -926,7 +931,7 @@ const CategoryValueList = React.memo(
       if (sortDirection){
         newTuples = [];
         for (const [item,value] of continuousAverages) {
-          if (item !== "unassigned") {
+          if (item !== "unassigned" && categoryValueCountsObj[item]>0) {
             newTuples.push([item, value]);
           }
         }
@@ -944,6 +949,13 @@ const CategoryValueList = React.memo(
           }                 
         }
         newTuples.push(["unassigned",newTuples.length])
+        const f = newTuples.length;
+        for (let i = 0; i < tuples.length; i++) {
+          const item = tuples[i][0];
+          if (item !== "unassigned" && categoryValueCountsObj[item]===0) {
+            newTuples.push([item, i+f]);
+          }
+        }       
       } else {
         newTuples = [];
         let z = 0;
@@ -953,13 +965,14 @@ const CategoryValueList = React.memo(
             z = z + 1;
           } 
         }
+        newTuples.push(["unassigned",newTuples.length])
+        z+=1;            
         for (let i = 0; i < tuples.length; i++) {
           if (categoryValueCountsObj[tuples[i][0]] === 0  && tuples[i][0] !== "unassigned") {
             newTuples.push([tuples[i][0],z])
             z = z + 1;
           }
         }  
-        newTuples.push(["unassigned",newTuples.length])            
       }
     } else {
       newTuples = [];
@@ -970,13 +983,14 @@ const CategoryValueList = React.memo(
           z = z + 1;
         } 
       }
+      newTuples.push(["unassigned",newTuples.length])            
+      z+=1;
       for (let i = 0; i < tuples.length; i++) {
         if (categoryValueCountsObj[tuples[i][0]] === 0  && tuples[i][0] !== "unassigned") {
           newTuples.push([tuples[i][0],z])
           z = z + 1;
         }
       }  
-      newTuples.push(["unassigned",newTuples.length])  
     }    
     const newCategoryValues = [];
 
@@ -1019,7 +1033,8 @@ const CategoryValueList = React.memo(
               colorTable={colorTable}
               sortDirection={sortDirection}     
               continuousAverages={continuousAverages}   
-              removeHistZeros={removeHistZeros}      
+              removeHistZeros={removeHistZeros} 
+              leftSidebarWidth={leftSidebarWidth}     
             /> : null
           ))}
         </>
@@ -1029,8 +1044,8 @@ const CategoryValueList = React.memo(
     const flipKey = [...categorySummary.categoryValueIndices].map((t) => t[0]).join("");
     return (
       <Flipper flipKey={flipKey}>
-        {newTuplesFiltered.slice(ctPage*10,(ctPage+1)*10).map(([value, index]) => 
-        ((value.toString().includes(filterValue) || value === "unassigned") ?
+        {newTuplesFiltered.slice(ctPage*10,(ctPage+1)*10).map(([value, index]) => {
+        return ((value.toString().includes(filterValue) || value === "unassigned") ?
           <Flipped key={value} flipId={value}>
             <Value
               isUserAnno={isUserAnno}
@@ -1044,9 +1059,10 @@ const CategoryValueList = React.memo(
               sortDirection={sortDirection}
               continuousAverages={continuousAverages}
               removeHistZeros={removeHistZeros}
+              leftSidebarWidth={leftSidebarWidth}     
             />
           </Flipped> : null
-        ))}
+        )})}
       </Flipper>
     );
   }

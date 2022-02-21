@@ -9,21 +9,25 @@ import * as globals from "../../globals";
 }))
 class RightSidebar extends React.Component {
   render() {
+    const { rightWidth } = this.props;
+    
+    const width = rightWidth < globals.rightSidebarWidth ? globals.rightSidebarWidth : "inherit";
+
     return (
       <div
         style={{
           /* x y blur spread color */
-          borderLeft: `1px solid ${globals.lightGrey}`,
           display: "flex",
           flexDirection: "column",
           position: "relative",
+          overflowX: "auto",
           overflowY: "inherit",
           height: "inherit",
-          width: "inherit",
+          width: width,
           padding: globals.leftSidebarSectionPadding,
         }}
       >
-        <GeneExpression />
+        <GeneExpression rightWidth={rightWidth}/>
       </div>
     );
   }

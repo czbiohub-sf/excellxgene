@@ -183,7 +183,7 @@ class CategoryValue extends React.Component {
     If and only if true, update the component
     */
     const { props, state } = this;
-    const { categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable, categoryData } = props;
+    const { leftSidebarWidth, categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable, categoryData } = props;
     const {
       categoryIndex: newCategoryIndex,
       categorySummary: newCategorySummary,
@@ -193,7 +193,8 @@ class CategoryValue extends React.Component {
       currentLayout: newCurrentLayout,
       isSubsetted: newIsSubsetted,
       colorTable: newColorTable,
-      categoryData: newCategoryData
+      categoryData: newCategoryData,
+      leftSidebarWidth: newLeftSidebarWidth
     } = nextProps;
 
     const label = categorySummary.categoryValues[categoryIndex];
@@ -227,6 +228,7 @@ class CategoryValue extends React.Component {
     const plotChanged = (isSubsetted !== newIsSubsetted) || (currentLayout !== newCurrentLayout)
     const colorTableChanged = colorTable.rgb.length !== newColorTable.rgb.length;
     const categoryDataChanged = categoryData !== newCategoryData;
+    const leftSidebarWidthChanged = leftSidebarWidth !== newLeftSidebarWidth;
     return (
       labelChanged ||
       valueSelectionChange ||
@@ -240,7 +242,8 @@ class CategoryValue extends React.Component {
       removeZerosChanged || 
       plotChanged || 
       colorTableChanged ||
-      categoryDataChanged
+      categoryDataChanged ||
+      leftSidebarWidthChanged
     );
   };
 
@@ -528,9 +531,10 @@ class CategoryValue extends React.Component {
       isSelected,
       categorySummary,
       label,
-      userLoggedIn
+      userLoggedIn,
+      leftSidebarWidth
     } = this.props;
-
+    const width = leftSidebarWidth < globals.leftSidebarWidth ? globals.leftSidebarWidth : leftSidebarWidth; 
     const colorScale = colorTable?.scale;
     const ontologyEnabled = ontology?.enabled ?? false;
     const { editedLabelText } = this.state;
@@ -565,12 +569,11 @@ class CategoryValue extends React.Component {
 
     const labelWidth =
       colorAccessor && !isColorBy
-        ? globals.leftSidebarWidth -
+        ? width -
           otherElementsWidth -
           STACKED_BAR_WIDTH -
           CHART_MARGIN
-        : globals.leftSidebarWidth - otherElementsWidth;
-
+        : width - otherElementsWidth;
     return (
       <div
         className={
@@ -594,7 +597,7 @@ class CategoryValue extends React.Component {
             margin: 0,
             padding: 0,
             userSelect: "none",
-            width: globals.leftSidebarWidth - 145,
+            width: width - 145,
             display: "flex",
             justifyContent: "space-between",
           }}

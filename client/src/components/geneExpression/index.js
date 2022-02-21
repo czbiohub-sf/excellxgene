@@ -1,6 +1,8 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button, Icon, Collapse, H4, AnchorButton, Tooltip } from "@blueprintjs/core";
+import { Button, Icon, Collapse, H4, AnchorButton, Tooltip, Position, MenuItem } from "@blueprintjs/core";
+import { Select } from "@blueprintjs/select";
+
 import { IconNames } from "@blueprintjs/icons";
 import ParameterInput from "../menubar/parameterinput";
 import GeneSet from "./geneSet";
@@ -9,13 +11,13 @@ import actions from "../../actions";
 import Truncate from "../util/truncate"
 import CreateGenesetDialogue from "./menus/createGenesetDialogue";
 import * as globals from "../../globals";
-import { AnnoMatrixLoader, AnnoMatrixObsCrossfilter } from "../../annoMatrix";
 import QuickGene from "./quickGene";
 import AnnoDialog from "../annoDialog";
 import LabelInput from "../labelInput";
 
 @connect((state) => {
   return {
+    var_keys: state.annoMatrix.schema.var_keys,
     allGenes: state.controls.allGenes.__columns[0],
     colorAccessor: state.colors.colorAccessor,
     genesets: state.genesets.genesets,
@@ -31,7 +33,8 @@ class GeneExpression extends React.Component {
       geneSetsExpanded: true,
       isEditingSetName: false,
       newNameText: "",
-      nameBeingEdited: ""
+      nameBeingEdited: "",
+      varMetadata: ""
     };
   }
 
@@ -69,85 +72,101 @@ class GeneExpression extends React.Component {
     this.disableEditNameMode()
   }
 
-  renderGeneSets = () => {
-    const sets = {};
-    const { dispatch, genesets } = this.props;
-    for (const [name, geneset] of genesets) {
-      const id = geneset.genesetDescription
-      const set = (
-        <GeneSet
-          key={name}
-          setGenes={Array.from(geneset.genes.keys())}
-          setGenesWithDescriptions={geneset.genes}
-          displayLabel={name.split(' : (').at(0)}
-          setName={name}
-          genesetDescription={geneset.genesetDescription}
-        />
-      );
-      if ( id in sets ){
-        sets[id].push(set)
-      } else {
-        sets[id] = [set]
-      }
-    }
-    const els = [];
-    for ( const key in sets ){
-      const groupName = key.split(';;').at(-1);
-      els.push(
-        <div key={key}>
-            <hr/>
+  renderGeneSets = (isGenes=false) => {
 
-            <div style={{
-              display: "flex"
-            }}>
-            <AnchorButton
-              onClick={() => {
-                this.setState({ 
-                  [groupName]: !(this.state[groupName]??false)
-                });
-              }}
-              text={<Truncate><span>{groupName}</span></Truncate>}
-              fill
-              minimal
-              rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
-            />  
-            <Tooltip
-            content="Edit geneset group name"
-            position="top"
-            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
-            >             
-            <AnchorButton
-              icon={<Icon icon="edit" iconSize={10} />}     
-              minimal
-              style={{
-                cursor: "pointer",
-              }}
-              onClick={(e) => this.activateEditNameMode(e,groupName)}
+    if (!isGenes) {
+      const sets = {};
+      const { dispatch, genesets, rightWidth } = this.props;
+
+      for (const [name, geneset] of genesets) {
+        const id = geneset.genesetDescription
+        const set = (
+          <GeneSet
+            key={name}
+            setGenes={Array.from(geneset.genes.keys())}
+            setGenesWithDescriptions={geneset.genes}
+            displayLabel={name.split(' : (').at(0)}
+            setName={name}
+            genesetDescription={geneset.genesetDescription}
+            rightWidth={rightWidth}
+          />
+        );
+        if ( id in sets ){
+          sets[id].push(set)
+        } else {
+          sets[id] = [set]
+        }
+      }
+      const els = [];
+      for ( const key in sets ){
+        const groupName = key.split(';;').at(-1);
+        els.push(
+          <div key={key}>
+              <hr/>
+  
+              <div style={{
+                display: "flex"
+              }}>
+              <AnchorButton
+                onClick={() => {
+                  this.setState({ 
+                    [groupName]: !(this.state[groupName]??false)
+                  });
+                }}
+                text={<Truncate><span>{groupName}</span></Truncate>}
+                fill
+                minimal
+                rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
               />  
-            </Tooltip>                 
-            <Tooltip
-            content="Delete geneset group"
-            position="top"
-            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
-            >
-            <AnchorButton
-              icon={<Icon icon="trash" iconSize={10} />}     
-              minimal
-              intent="danger"
-              style={{
-                cursor: "pointer",
-              }}
-              onClick={() => dispatch(actions.genesetDeleteGroup(key))}
-            />    
-            </Tooltip>                        
-          </div>         
-          <Collapse isOpen={this.state[groupName]??false}>
-            {sets[key]}
-          </Collapse>
-        </div>
-      )
+              <Tooltip
+              content="Edit geneset group name"
+              position="top"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+              >             
+              <AnchorButton
+                icon={<Icon icon="edit" iconSize={10} />}     
+                minimal
+                style={{
+                  cursor: "pointer",
+                }}
+                onClick={(e) => this.activateEditNameMode(e,groupName)}
+                />  
+              </Tooltip>                 
+              <Tooltip
+              content="Delete geneset group"
+              position="top"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+              >
+              <AnchorButton
+                icon={<Icon icon="trash" iconSize={10} />}     
+                minimal
+                intent="danger"
+                style={{
+                  cursor: "pointer",
+                }}
+                onClick={() => dispatch(actions.genesetDeleteGroup(key))}
+              />    
+              </Tooltip>                        
+            </div>         
+            <Collapse isOpen={this.state[groupName]??false}>
+              {sets[key]}
+            </Collapse>
+          </div>
+        )
+      }
+      return els;      
+    } else {
+      const { allGenes, rightWidth } = this.props;
+      return (
+      <GeneSet
+        key={"All genes"}
+        setGenes={allGenes}
+        displayLabel={"All genes"}
+        setName={"All genes"}
+        allGenes
+        rightWidth={rightWidth}
+      />);
     }
-    return els;
   };
   
   handleSaveGenedata = () => {
@@ -161,7 +180,7 @@ class GeneExpression extends React.Component {
       geneSetsExpanded: !this.state.geneSetsExpanded,
     });
   };
-  
+
   /*createGeneset = (genesetName,genesArrayFromString,genesetDescription) => {
     const { dispatch } = this.props;
 
@@ -188,8 +207,8 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix, userLoggedIn } = this.props;
-    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited } = this.state;
+    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys } = this.props;
+    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata } = this.state;
 
     return (
       <div>
@@ -198,33 +217,15 @@ class GeneExpression extends React.Component {
           genesets={genesets}
         /> : null}
 
-          <div style={{
-            display: "flex",
-            justifyContent: "left",
-            textAlign: "left", 
-            float: "left",
-            paddingRight: "10px"
-          }}>
-                      
-            {userLoggedIn && <Tooltip
-              content="Save gene sets a `.csv` file."
-              position="bottom"
-              hoverOpenDelay={globals.tooltipHoverOpenDelay}
-            >                                              
-              <AnchorButton
-                  type="button"
-                  icon="floppy-disk"
-                  onClick={() => {
-                    this.handleSaveGenedata()
-                  }}
-                /> 
-              </Tooltip> }  
-            </div>       
+     
             <div style={{
               marginBottom: "20px",
               display: "flex",
               justifyContent: "right",
-            }}>                 
+            }}>   
+            <span style={{margin: "auto 0", paddingRight: "10px"}}>
+            <b>{"Expression options:"}</b>
+            </span>    
             <ParameterInput
               label="Log scale"
               param="logScaleExpr"
@@ -239,9 +240,57 @@ class GeneExpression extends React.Component {
               tooltipContent={"Expression layer used for visualization and differential expression."}
               left
             /> 
-          </div>     
-        </div>               
-        <QuickGene/>
+          </div>             
+        </div>  
+        <div style={{
+          textAlign: "right",
+          justifyContent: "right",
+          paddingBottom: "10px"
+        }}>           
+          <Tooltip
+                content={"The gene metadata to display."}
+                position={Position.RIGHT}
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+              >   
+                <Select
+                items={
+                  var_keys
+                }
+                filterable={false}
+                itemRenderer={(d, { handleClick }) => {
+                  return (
+                    <MenuItem
+                      onClick={handleClick}
+                      key={d}
+                      text={d}
+                    />
+                  );
+                }}
+                onItemSelect={(d) => {
+                  this.setState({
+                    ...this.state,
+                    varMetadata: d
+                  })
+                  dispatch({type: "set var key", key: d})                  
+                }}
+              >
+                <AnchorButton
+                  text={`Metadata: ${varMetadata}`}
+                  rightIcon="double-caret-vertical"
+                />
+              </Select>
+            </Tooltip>
+            </div>                                   
+        <div style={{
+          paddingTop: "10px",
+          paddingBottom: "20px"
+        }}>
+          {this.renderGeneSets(true)}
+        </div>
         {userLoggedIn && <div>
           <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between" }}>
             <H4
@@ -263,6 +312,28 @@ class GeneExpression extends React.Component {
             <div style={{
               marginBottom: 10, position: "relative", top: -2
             }}>
+              <div style={{
+                  display: "flex",
+                  justifyContent: "left",
+                  textAlign: "left", 
+                  float: "left",
+                  paddingRight: "10px"
+                }}>
+                            
+                  {userLoggedIn && <Tooltip
+                    content="Save gene sets a `.csv` file."
+                    position="bottom"
+                    hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                  >                                              
+                    <AnchorButton
+                        type="button"
+                        icon="floppy-disk"
+                        onClick={() => {
+                          this.handleSaveGenedata()
+                        }}
+                      /> 
+                    </Tooltip> }  
+                  </div>               
             <Button
               data-testid="open-create-geneset-dialog"
               onClick={this.handleActivateCreateGenesetMode}

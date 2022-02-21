@@ -7,7 +7,6 @@ import memoize from "memoize-one";
 import Async from "react-async";
 import { Button, Card, Elevation } from "@blueprintjs/core";
 import { Popover2 } from "@blueprintjs/popover2";
-import Sankey from "../sankey";
 import setupSVGandBrushElements from "./setupSVGandBrush";
 import _camera from "../../util/camera";
 import _drawPoints from "./drawPointsRegl";
@@ -26,6 +25,7 @@ import {
   flagBackground,
   flagSelected,
   flagHighlight,
+  flagHalfSelected
 } from "../../util/glHelpers";
 
 /*
@@ -141,7 +141,7 @@ class Graph extends React.Component {
   });
 
   computeSelectedFlags = memoize(
-    (crossfilter, colorMode, colorDf, _flagSelected, _flagUnselected) => {
+    (crossfilter, colorMode, colorDf, _flagSelected, _flagHalfSelected, _flagUnselected ) => {
       const x = crossfilter.fillByIsSelected(
         new Float32Array(crossfilter.size()),
         _flagSelected,
@@ -150,8 +150,8 @@ class Graph extends React.Component {
       if (colorDf && colorMode !== "color by categorical metadata") {
         const col = colorDf.icol(0).asArray();
         for (let i = 0, len = x.length; i < len; i += 1) {
-          if (col[i]===0){
-            x[i] = 0;
+          if (col[i]===0 && x[i] === _flagSelected){
+            x[i] = _flagHalfSelected;
           }
         }
       }
@@ -209,7 +209,7 @@ class Graph extends React.Component {
         colorMode,
         colorDf, 
         flagSelected,
-        0
+        flagHalfSelected        
       );
       const highlightFlags = this.computeHighlightFlags(
         nObs,
@@ -285,14 +285,20 @@ class Graph extends React.Component {
       currentSelection,
       graphInteractionMode,
       dataLayerExpr,
-      logScaleExpr
+      logScaleExpr,
+      graphWidth
     } = this.props;
     const { toolSVG, viewport } = this.state;
     const hasResized =
       prevState.viewport.height !== viewport.height ||
-      prevState.viewport.width !== viewport.width;
+      prevState.viewport.width !== viewport.width;// || graphWidth !== prevProps.graphWidth;
     let stateChanges = {};
-
+    if (false) {
+      stateChanges = {
+        ...stateChanges,
+        viewport: this.getViewportDimensions()
+      }
+    }
     if (
       (viewport.height && viewport.width && !toolSVG) || // first time init
       hasResized || //  window size has changed we want to recreate all SVGs
@@ -539,7 +545,7 @@ class Graph extends React.Component {
   };
 
   getViewportDimensions = () => {
-    const { viewportRef } = this.props;
+    const { viewportRef, graphWidth } = this.props;
     return {
       height: viewportRef.clientHeight,
       width: viewportRef.clientWidth,
@@ -1165,7 +1171,6 @@ class Graph extends React.Component {
       lidarRadius,
       renderedMetadata
     } = this.state;
-
     const radius = lidarRadius ?? 20;
     const cameraTF = camera?.view()?.slice();
     return (

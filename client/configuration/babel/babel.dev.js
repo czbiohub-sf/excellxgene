@@ -19,5 +19,6 @@ module.exports = {
     "@babel/plugin-proposal-export-namespace-from",
     "@babel/plugin-proposal-optional-chaining",
     "@babel/plugin-proposal-nullish-coalescing-operator",
+    ["@babel/plugin-proposal-private-methods", { "loose": true }]
   ],
 };

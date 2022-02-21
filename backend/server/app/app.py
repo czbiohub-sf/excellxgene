@@ -8,13 +8,16 @@ from flask import (
     current_app,
     make_response,
     jsonify,
+    Response,
     render_template,
     Blueprint,
     request,
     send_from_directory,
     session,
     after_this_request,
-    send_file
+    stream_with_context,
+    send_file,
+    send_from_directory
 )
 from flask_restful import Api, Resource
 import backend.server.common.rest as common_rest
@@ -211,15 +214,16 @@ class SendFileAPI(Resource):
         annotations = data_adaptor.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(data_adaptor)}"             
         assert (userID in field)
-        @after_this_request
-        def f(response):
-            try:
-                os.remove(field)
-            except Exception as error:
-                print(error)
-            return response    
-        
-        return send_file(field,as_attachment=True)    
+        os.remove(field)
+        #file_basename = field.split('/')[-1]
+        #response = make_response()
+        #response.headers['Content-Description'] = 'File Transfer'
+        #response.headers['Cache-Control'] = 'no-cache'
+        #response.headers['Content-Type'] = 'application/octet-stream'
+        #response.headers['Content-Disposition'] = 'attachment; filename=%s' % file_basename
+        #response.headers['Content-Length'] = os.path.getsize(field)
+        #response.headers['X-Accel-Redirect'] = f"/output/{file_basename}" # nginx: http://wiki.nginx.org/NginxXSendfile
+        return make_response()
 
 class AnnotationsVarAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -348,6 +352,13 @@ class GeneInfoAPI(Resource):
     def get(self, data_adaptor):
         return common_rest.gene_info_get(request, data_adaptor)
 
+class GeneInfoBulkAPI(Resource):
+    @requires_authentication
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    def put(self, data_adaptor):
+        return common_rest.gene_info_bulk_put(request, data_adaptor)
+
 class ReembedParametersAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
@@ -416,12 +427,13 @@ def get_api_dataroot_resources(bp_dataroot):
     # Initialization routes
     add_resource(SchemaAPI, "/schema")
     add_resource(InitializeUserAPI, "/initialize")
-    add_resource(SendFileAPI, "/sendFile")
+    add_resource(SendFileAPI, "/downloadCallback")
     add_resource(ConfigAPI, "/config")
     add_resource(UserInfoAPI, "/userinfo")
     add_resource(UserInfoAuth0API, "/userInfo")
     add_resource(HostedModeAPI, "/hostedMode")
     add_resource(GeneInfoAPI, "/geneInfo")
+    add_resource(GeneInfoBulkAPI, "/geneInfoBulk")
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")
     add_resource(AnnotationsVarAPI, "/annotations/var")

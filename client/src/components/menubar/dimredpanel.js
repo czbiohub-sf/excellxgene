@@ -220,14 +220,22 @@ class DimredPanel extends React.PureComponent {
       />}   
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={trshown && !reembedParams.doSAM}>   
+        <ControlGroup fill={true} vertical={false}>
+            <ParameterInput 
+              label="Use SAM weights?"
+              param="samHVG"
+              tooltipContent={"Check to use SAM weights for feature selection."}
+              disabled={disabled}
+            />   
+          </ControlGroup>        
           <ControlGroup fill={true} vertical={false}>
             <ParameterInput
               min={0}
               disabled={reembedParams.doSAM}
               max={annoMatrix.nVar}
-              label="n_top_genes"
+              label={`n_top_genes (${reembedParams.samHVG ? "SAM weights" : "dispersion"})`}
               param="nTopGenesHVG"
-              tooltipContent={"The number of highly variable genes to select."}
+              tooltipContent={`The number of genes to select using ${reembedParams.samHVG ? "SAM weights" : "dispersion"}.`}
             />        
           </ControlGroup>                    
         </Collapse>  

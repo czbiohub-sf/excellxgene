@@ -1,6 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Icon, Button, AnchorButton } from "@blueprintjs/core";
+import { AnchorButton, Tooltip, Position, Classes } from "@blueprintjs/core";
 import LabelInput from "../labelInput";
 import { FaChevronRight, FaChevronDown } from "react-icons/fa";
 import actions from "../../actions";
@@ -15,8 +15,10 @@ import HistogramBrush from "../brushableHistogram";
 @connect((state) => {
   return {
     world: state.world,
+    varMetadata: state.controls.varMetadata,
     userDefinedGenes: state.controls.userDefinedGenes,
     userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
+    userLoggedIn: state.controls.userInfo ? true : false,
   };
 })
 class GeneSet extends React.Component {
@@ -30,6 +32,9 @@ class GeneSet extends React.Component {
       maxGenePage: Math.ceil((props.setGenes.length-0.1) / 10) - 1,
       removeHistZeros: false,
       queryGene: "",
+      sortDirection: null,
+      geneMetadatas: null,
+      isSelected: false,
     };
   }
 
@@ -69,16 +74,44 @@ class GeneSet extends React.Component {
 
     return undefined;
   };
-
+  updateGeneMetadatas = () => {
+    const { dispatch, varMetadata, setGenes } = this.props;
+    const { sortDirection } = this.state;
+    if (varMetadata !== ""){
+      dispatch(actions.fetchGeneInfoBulk(setGenes, varMetadata)).then((res)=>{
+        this.setState({
+          ...this.state,
+          geneMetadatas: res
+        })
+        if (sortDirection === "descending") { 
+          this.onSortGenesDescending();
+        } else if (sortDirection === "ascending") {
+          this.onSortGenesAscending();  
+        } else { 
+          this.onSortGenesReset(); 
+        } 
+      })
+    }
+  }
+  componentDidMount() {
+    const { varMetadata } = this.props;
+    if (varMetadata !== "") {
+      this.updateGeneMetadatas()
+    }
+  }
   componentDidUpdate = (prevProps) => {
-    const { setGenes } = this.props;
-    const { setGenes: setGenesPrev } = prevProps;
+    const { setGenes, varMetadata } = this.props;
+    const { setGenes: setGenesPrev, varMetadata: varMetadataPrev } = prevProps;
     if (setGenes !== setGenesPrev) {
       this.setState({
         ...this.state,
         maxGenePage: Math.ceil((setGenes.length-0.1) / 10) - 1,
       })
+      this.updateGeneMetadatas();
+    } else if (varMetadata !== varMetadataPrev) {
+      this.updateGeneMetadatas();
     }
+    
   }
   onQueryGeneChange = (e) => {
     this.setState({...this.state, queryGene: e})
@@ -103,16 +136,148 @@ class GeneSet extends React.Component {
   }  
   onGenesetMenuClick = () => {
     const { isOpen } = this.state;
+    if (isOpen) {
+      this.onSortGenes(true);
+    }
     this.setState({ isOpen: !isOpen });
+
+
   };
+  onSortGenesReset = (sortD=false) => {
+    const { setGenes } = this.props;
+    const { geneMetadatas, sortDirection } = this.state;
+    let setGenesSorted = setGenes;
+    let geneMetadatasSorted = geneMetadatas;    
 
+    this.setState({
+      ...this.state,
+      setGenesSorted: setGenesSorted,
+      geneMetadatasSorted: geneMetadatasSorted,
+      sortDirection: sortD ? null : sortDirection    
+    })
+  }
 
+  onSortGenesDescending = (sortD=false) => {
+    const dsu = (arr1, arr2) => arr1
+    .map((item, index) => [arr2[index], item]) 
+    .sort(([arg1], [arg2]) => arg2 - arg1) 
+    .map(([, item]) => item); 
+
+    const { setGenes } = this.props;
+    const { geneMetadatas, sortDirection } = this.state;
+    
+    
+    let setGenesSorted = setGenes;
+    let geneMetadatasSorted = geneMetadatas;    
+    
+    const isString = typeof geneMetadatas[0] === "string";
+    if (!isString) {
+      setGenesSorted = dsu(setGenes, geneMetadatas);
+      geneMetadatasSorted = geneMetadatas.slice().sort().reverse();  
+    } else {
+      const map = Object.fromEntries(geneMetadatas.map((k, i) => [k, setGenes[i]]));
+      geneMetadatasSorted = geneMetadatas.slice().sort().reverse();  
+      setGenesSorted = [];
+      geneMetadatasSorted.forEach((item)=>{
+        setGenesSorted.push(map[item]);
+      })
+    }
+
+    this.setState({
+      ...this.state,
+      setGenesSorted: setGenesSorted,
+      geneMetadatasSorted: geneMetadatasSorted,
+      sortDirection: sortD ? "descending" : sortDirection
+    })   
+  }  
+
+  onSortGenesAscending = (sortD=false) => {
+    const dsu = (arr1, arr2) => arr1
+    .map((item, index) => [arr2[index], item]) 
+    .sort(([arg1], [arg2]) => arg2 - arg1) 
+    .map(([, item]) => item); 
+
+    const { setGenes } = this.props;
+    const { geneMetadatas, sortDirection } = this.state;
+    let setGenesSorted = setGenes;
+    let geneMetadatasSorted = geneMetadatas;    
+
+    const isString = typeof geneMetadatas[0] === "string";
+    if (!isString) {
+      setGenesSorted = dsu(setGenes, geneMetadatas).reverse();
+      geneMetadatasSorted = geneMetadatas.slice().sort();  
+    } else {
+      const map = Object.fromEntries(geneMetadatas.map((k, i) => [k, setGenes[i]]));
+      geneMetadatasSorted = geneMetadatas.slice().sort();  
+      setGenesSorted = [];
+      geneMetadatasSorted.forEach((item)=>{
+        setGenesSorted.push(map[item]);
+      })
+    }
+
+    this.setState({
+      ...this.state,
+      setGenesSorted: setGenesSorted,
+      geneMetadatasSorted: geneMetadatasSorted,
+      sortDirection: sortD ? "ascending" : sortDirection
+    })   
+  }  
+
+  onSortGenes = (reset=false) => {
+    const { sortDirection } = this.state;
+
+    if (reset) {
+      this.onSortGenesReset(true)
+    } else {
+      if (sortDirection === "descending") { 
+        this.onSortGenesAscending(true);
+      } else if (sortDirection === "ascending") {
+        this.onSortGenesReset(true);  
+      } else { 
+        this.onSortGenesDescending(true); 
+      }      
+    }
+  }
+  toggleAllOff = () => {
+    const { dispatch, setGenes } = this.props;
+    dispatch({type: "unselect genes", genes: setGenes})
+    this.setState({
+      ...this.state,
+      isSelected: false
+    })     
+  }
+  toggleAllOn = () => {
+    const { dispatch, setGenes } = this.props;
+    dispatch({type: "select genes", genes: setGenes})   
+    this.setState({
+      ...this.state,
+      isSelected: true
+    }) 
+  }  
   renderGenes() {
-    const { setName, setGenes, setGenesWithDescriptions } = this.props;
-    const { genePage, removeHistZeros } = this.state;
-    return setGenes.slice(genePage*10,(genePage+1)*10).map((gene) => {
-      const { geneDescription } = setGenesWithDescriptions.get(gene);
-
+    const { setName, setGenes, setGenesWithDescriptions, rightWidth } = this.props;
+    const { genePage, removeHistZeros, geneMetadatas, setGenesSorted, geneMetadatasSorted } = this.state;
+    let genes = setGenes;
+    let genesM = geneMetadatas;
+    if (setGenesSorted && geneMetadatasSorted) {
+      genes = setGenesSorted;
+      genesM = geneMetadatasSorted;
+    }
+    return genes.slice(genePage*10,(genePage+1)*10).map((gene,i) => {
+      let geneDescription;
+      if (setGenesWithDescriptions) {
+        const { geneDescription: x } = setGenesWithDescriptions.get(gene);
+        geneDescription = x;
+      } else {
+        geneDescription = gene;
+      }
+      
+      let geneInfo;
+      if (genesM){
+        geneInfo = genesM[genePage*10+i];
+      } else {
+        geneInfo = ""
+      }
       return (
         <Gene
           key={gene}
@@ -120,27 +285,51 @@ class GeneSet extends React.Component {
           geneDescription={geneDescription}
           geneset={setName}
           removeHistZeros={removeHistZeros}
+          geneInfo={geneInfo}
+          rightWidth={rightWidth}
         />
       );
     });
   }
 
   render() {
-    const { setName, setGenes, genesetDescription, displayLabel } = this.props;
-    const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene } = this.state;
+    const { setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn } = this.props;
+    const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene, sortDirection, isSelected } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
-
+    let sortIcon = "expand-all";
+    
+    if (sortDirection === "ascending"){
+      sortIcon="chevron-up"
+    } else if (sortDirection === "descending"){
+      sortIcon="chevron-down"
+    }
+    
     return (
-      <div style={{ marginBottom: 3 }}>
+      <div style={{ marginBottom: 3}}>
+        <div style={{display: "flex"}}>
+          {userLoggedIn && 
+            <div style={{paddingTop: "3px", paddingRight: "10px", backgroundColor: "#E0E0E0"}}>
+              <input
+                id={`${setName}-checkbox-selection`}
+                className={`${Classes.CONTROL} ${Classes.CHECKBOX}`}
+
+                onChange={isSelected ? this.toggleAllOff : this.toggleAllOn}
+                data-testclass="geneset-select"
+                data-testid={`geneset-select-${setName}`}
+                checked={isSelected}
+                type="checkbox"
+              />
+           </div>}   
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "baseline",
-            backgroundColor: "#E0E0E0	",
+            backgroundColor: "#E0E0E0",
+            width: "100%"
           }}
-        >
+        >       
           <span
             role="menuitem"
             tabIndex="0"
@@ -181,7 +370,34 @@ class GeneSet extends React.Component {
               />
             )}
           </span>
-          <div>
+          <div style={{display: "flex", textAlign: "right"}}>
+          <Tooltip
+            content={
+              "Click to sort genes by the chosen var metadata."
+            }
+            position={Position.RIGHT}
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            modifiers={{
+              preventOverflow: { enabled: false },
+              hide: { enabled: false },
+            }}          
+          >
+          <AnchorButton
+            onClick={(e) => {this.onSortGenes()}}
+            active={sortDirection}
+            minimal
+            disabled={varMetadata === "" || !isOpen}
+            icon={sortIcon}
+          />
+          </Tooltip>          
+          {allGenes ? <div>
+            <AnchorButton
+              minimal
+              icon={"vertical-bar-chart-desc"}
+              onClick={() => {this.setState({...this.state,removeHistZeros: !removeHistZeros})}}
+              active={removeHistZeros}
+            /> 
+          </div> : <div>
             <GenesetMenus 
               isOpen={isOpen}
               genesetsEditable 
@@ -194,7 +410,9 @@ class GeneSet extends React.Component {
               toggleText={removeHistZeros ? "Include zeros in histograms." : "Exclude zeros in histograms."}
               removeHistZeros={removeHistZeros}
               />
+          </div>}
           </div>
+        </div>
         </div>
 
         <div style={{ marginLeft: 15, marginTop: 5, marginRight: 0 }}>
@@ -204,7 +422,7 @@ class GeneSet extends React.Component {
             </p>
           )}
         </div>
-        {isOpen && !genesetIsEmpty && setGenes.length > 0 && (
+        {isOpen && !allGenes && !genesetIsEmpty && setGenes.length > 0 && (
           <HistogramBrush
             isGeneSetSummary
             field={setName}

@@ -56,6 +56,7 @@ export const subsetAction = () => (dispatch, getState) => {
     annoMatrix,
     obsCrossfilter,
   });
+  return [annoMatrix, obsCrossfilter];
 };
 
 export const resetSubsetAction = () => (dispatch, getState) => {

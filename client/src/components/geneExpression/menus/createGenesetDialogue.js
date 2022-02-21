@@ -14,6 +14,7 @@ import actions from "../../../actions";
   obsCrossfilter: state.obsCrossfilter,
   genesets: state.genesets.genesets,
   genesetsUI: state.genesetsUI,
+  geneSelection: Object.keys(state.geneSelection)
 }))
 class CreateGenesetDialogue extends React.PureComponent {
   constructor(props) {
@@ -39,7 +40,7 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   createGeneset = (e) => {
-    const { dispatch } = this.props;
+    const { dispatch , geneSelection} = this.props;
     const {
       genesetName,
       genesToPopulateGeneset,
@@ -51,6 +52,7 @@ class CreateGenesetDialogue extends React.PureComponent {
       genesetName,
       genesetDescription,
     });
+
     if (genesToPopulateGeneset) {
       const genesTmpHardcodedFormat = [];
 
@@ -65,6 +67,14 @@ class CreateGenesetDialogue extends React.PureComponent {
         });
       });
 
+      dispatch(actions.genesetAddGenes(genesetName, genesTmpHardcodedFormat));
+    } else {
+      const genesTmpHardcodedFormat = [];
+      geneSelection.forEach((_gene) => {
+        genesTmpHardcodedFormat.push({
+          geneSymbol: _gene,
+        });
+      });
       dispatch(actions.genesetAddGenes(genesetName, genesTmpHardcodedFormat));
     }
     dispatch({
@@ -173,6 +183,10 @@ class CreateGenesetDialogue extends React.PureComponent {
                   }}
                   newLabelMessage="populate geneset with genes"
                 />
+                <p style={{ marginTop: 20 }}>
+                <span style={{ fontWeight: 700 }}>OR</span>{" "} leave empty to populate the
+                geneset with the currently selected genes.
+                </p>                
               </div>
             </div>
             <div className={Classes.DIALOG_FOOTER}>

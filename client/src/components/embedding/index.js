@@ -154,7 +154,7 @@ class Embedding extends React.Component {
     e.preventDefault()    
   }
   render() {
-    const { annoMatrix: test, layoutChoice, schema, crossfilter } = this.props;
+    const { layoutChoice, schema, crossfilter } = this.props;
     const { newLayoutText, isEmbeddingExpanded } = this.state;
     const { annoMatrix } = crossfilter;
     return (

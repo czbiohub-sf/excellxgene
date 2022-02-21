@@ -50,16 +50,16 @@ const Profile = (props) => {
 }))
 class LeftSideBar extends React.Component {
   render() {
-    const { scatterplotXXaccessor, scatterplotYYaccessor, userInfo, hostedMode } = this.props;
-
+    const { scatterplotXXaccessor, scatterplotYYaccessor, userInfo, hostedMode, leftWidth } = this.props;
+    const width = leftWidth < globals.leftSidebarWidth ? globals.leftSidebarWidth : "inherit";
     return (
       <div
         style={{
           /* x y blur spread color */
-          borderRight: `1px solid ${globals.lightGrey}`,
           display: "flex",
           flexDirection: "column",
           height: "100%",
+          overflowX: "auto",
         }}
       >
         <TopLeftLogoAndTitle />
@@ -67,7 +67,7 @@ class LeftSideBar extends React.Component {
         <div style={{
           textAlign: "right",
           float: "right",
-          width: globals.leftSidebarWidth,
+          width: width,
           padding: globals.leftSidebarSectionPadding
 
         }}>
@@ -77,11 +77,11 @@ class LeftSideBar extends React.Component {
         <div
           style={{
             height: "100%",
-            width: globals.leftSidebarWidth,
+            width: width,
             overflowY: "auto",
           }}
         >
-          <Categorical />
+          <Categorical leftSidebarWidth={leftWidth}/>
           <Continuous />
         </div>
         {scatterplotXXaccessor && scatterplotYYaccessor ? (

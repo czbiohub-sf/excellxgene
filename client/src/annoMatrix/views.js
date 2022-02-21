@@ -28,7 +28,11 @@ class AnnoMatrixView extends AnnoMatrix {
   }
 
   async removeObsAnnoCategory(col, category, unassignedCategory) {
-    const newAnnoMatrix = this._clone();
+    let newAnnoMatrix = await this.resetObsColumnValues(
+      col,
+      category,
+      unassignedCategory
+    );  
     newAnnoMatrix.viewOf = await this.viewOf.removeObsAnnoCategory(
       col,
       category,

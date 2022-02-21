@@ -88,6 +88,7 @@ const defaultDimredParams = {
   neighborsMethod: "umap",
   distanceMetric: "cosine",
   doSAM: false,
+  samHVG: false,
   nnaSAM: 50,
   scaleData: false,
   weightModeSAM: "rms",

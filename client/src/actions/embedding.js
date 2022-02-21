@@ -3,8 +3,9 @@ action creators related to embeddings choice
 */
 
 import { AnnoMatrixObsCrossfilter } from "../annoMatrix";
-import { _setEmbeddingSubset } from "../util/stateManager/viewStackHelpers";
+import { _setEmbeddingSubset, _userSubsetAnnoMatrix } from "../util/stateManager/viewStackHelpers";
 import { API } from "../globals";
+import { subsetAction } from "./viewStack";
 
 export async function _switchEmbedding(
   prevAnnoMatrix,
@@ -88,8 +89,7 @@ const res = await fetch(
 );
 
 const schema = await res.json();
-let { annoMatrix } = getState();
-annoMatrix = annoMatrix.base();
+let { annoMatrix, layoutChoice } = getState();
 const newNames = [];
 toRename.forEach((item)=>{
   let newItem;
@@ -104,12 +104,28 @@ toRename.forEach((item)=>{
   }
   newNames.push(newItem);
   annoMatrix = annoMatrix.renameObsmLayout(item,newItem,{"name": newItem, "type": "float32", "dims": [`${newItem}_0`, `${newItem}_1`]})
-})     
+})    
+const item = layoutChoice.current;
+let newCurrent;
+if (item.includes(`;;${oldName};;`)) { // middle
+  newCurrent = item.replace(`;;${oldName};;`,`;;${newName};;`)
+} else if (item.includes(`${oldName};;`)) { // root
+  newCurrent = item.replace(`${oldName};;`,`${newName};;`)
+} else if (item.includes(`;;${oldName}`)) { // leaf
+  newCurrent = item.replace(`;;${oldName}`,`;;${newName}`)    
+} else if (item === oldName) { // no children
+  newCurrent = newName;
+} else {
+  newCurrent = item;
+}
 
-const obsCrossfilter = new AnnoMatrixObsCrossfilter(
-  annoMatrix
-)
+
+let obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
+obsCrossfilter = await obsCrossfilter.select("emb", newCurrent, {
+  mode: "all",
+});
 dispatch({type: "", annoMatrix, obsCrossfilter})
+
 
 toRename.forEach((item,index)=>{
   dispatch({type: "reembed: rename reembedding", embName: item, newName: newNames[index]});

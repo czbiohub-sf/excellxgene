@@ -12,7 +12,6 @@ import actions from "../../actions";
 import {
   Dataframe,
 } from "../../util/dataframe";
-import Truncate from "../util/truncate";
 
 @connect((state) => ({
   annoMatrix: state.annoMatrix,
@@ -29,7 +28,8 @@ import Truncate from "../util/truncate";
   refresher: state.sankeySelection.refresher,
   numChecked: state.sankeySelection.numChecked,
   layoutChoice: state.layoutChoice,
-  userLoggedIn: state.controls.userInfo ? true : false
+  userLoggedIn: state.controls.userInfo ? true : false,
+  outputController: state.outputController
 }))
 class Categories extends React.Component {
   constructor(props) {
@@ -402,7 +402,6 @@ class Categories extends React.Component {
       annoDtypes
     } = this.state;
     const {
-      writableCategoriesEnabled,
       schema,
       ontology,
       userInfo,
@@ -411,11 +410,13 @@ class Categories extends React.Component {
       preprocessController,
       dispatch,
       layoutChoice,
-      userLoggedIn
+      userLoggedIn,
+      leftSidebarWidth,
+      outputController
     } = this.props;
     const ontologyEnabled = ontology?.enabled ?? false;
     const loading = !!leidenController?.pendingFetch || !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
-
+    const saveLoading = !!outputController?.pendingFetch;
     /* all names, sorted in display order.  Will be rendered in this order */
     const allCategoryNames = ControlsHelpers.selectableCategoryNames(
       schema
@@ -477,6 +478,7 @@ class Categories extends React.Component {
               >                                              
                 <AnchorButton
                     type="button"
+                    loading={saveLoading}
                     icon="floppy-disk"
                     onClick={() => {
                       this.handleSaveMetadata()
@@ -713,6 +715,7 @@ class Categories extends React.Component {
                 onExpansionChange={this.onExpansionChange}
                 isExpanded={expandedCats.has(catName)}
                 createAnnoModeActive={createAnnoModeActive}
+                leftSidebarWidth={leftSidebarWidth}
               />
             ) : null
           )}
@@ -752,6 +755,7 @@ class Categories extends React.Component {
               onExpansionChange={this.onExpansionChange}
               isExpanded={expandedCats.has(catName)}
               createAnnoModeActive={createAnnoModeActive}
+              leftSidebarWidth={leftSidebarWidth}
             />
           ) : null
         )}</Collapse>       

@@ -1,11 +1,9 @@
 import React from "react";
 import { connect } from "react-redux";
-import * as globals from "../../globals";
-import { AnchorButton, Button, Icon, MenuItem, Position, Tooltip, } from "@blueprintjs/core";
-import { Select } from "@blueprintjs/select";
+import { Classes, Button, Icon, Tooltip } from "@blueprintjs/core";
 import Truncate from "../util/truncate";
 import HistogramBrush from "../brushableHistogram";
-
+import * as globals from "../../globals";
 import actions from "../../actions";
 
 const MINI_HISTOGRAM_WIDTH = 110;
@@ -14,21 +12,21 @@ const MINI_HISTOGRAM_WIDTH = 110;
   const { gene } = ownProps;
 
   return {
-    var_keys: state.annoMatrix.schema.var_keys,
+    varMetadata: state.controls.varMetadata,
+    isSelected: state.geneSelection?.[gene] ?? false,
     isColorAccessor: state.colors.colorAccessor === gene,
     isScatterplotXXaccessor: state.controls.scatterplotXXaccessor === gene,
     isScatterplotYYaccessor: state.controls.scatterplotYYaccessor === gene,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
-    logScaleExpr: state.reembedParameters.logScaleExpr
+    logScaleExpr: state.reembedParameters.logScaleExpr,
+    userLoggedIn: state.controls.userInfo ? true : false
   };
 })
 class Gene extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      geneIsExpanded: false,
-      geneInfo: "",
-      varMetadata: ""
+      geneIsExpanded: false
     };
   }
 
@@ -62,7 +60,14 @@ class Gene extends React.Component {
     const { dispatch, gene, geneset } = this.props;
     dispatch(actions.genesetDeleteGenes(geneset, [gene]));
   };
-
+  toggleOff = () => {
+    const { dispatch, gene } = this.props;
+    dispatch({type: "unselect gene",gene})
+  }
+  toggleOn = () => {
+    const { dispatch, gene } = this.props;
+    dispatch({type: "select gene",gene})
+  }  
   render() {
     const {
       dispatch,
@@ -73,10 +78,14 @@ class Gene extends React.Component {
       isScatterplotYYaccessor,
       removeHistZeros,
       removeGene,
-      var_keys,
+      varMetadata,
+      geneInfo,
+      userLoggedIn,
+      isSelected,
+      rightWidth
     } = this.props;
-    const { geneIsExpanded, varMetadata, geneInfo } = this.state;
-    const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0);
+    const { geneIsExpanded } = this.state;
+    const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0) + Math.max(0,(rightWidth - globals.rightSidebarWidth));
     return (
       <div>
         <div
@@ -100,33 +109,41 @@ class Gene extends React.Component {
               display: "flex",
               justifyContent: "space-between",
               width: "100%",
+              margin: "auto 0"
             }}
           >
-            <div>
-              <Icon
-                icon="drag-handle-horizontal"
-                iconSize={12}
+            <div style={{display: "flex", marginTop: "2px"}}>           
+            {userLoggedIn && 
+              <input
+                id={`${gene}-checkbox-selection`}
+                className={`${Classes.CONTROL} ${Classes.CHECKBOX}`}
+
+                onChange={isSelected ? this.toggleOff : this.toggleOn}
+                data-testclass="gene-value-select"
+                data-testid={`gene-value-select-${gene}`}
+                checked={isSelected}
+                type="checkbox"
                 style={{
                   marginRight: 7,
-                  cursor: "grab",
                   position: "relative",
                   top: -1,
-                }}
+                }}                
               />
-              <Truncate
-                tooltipAddendum={geneDescription && `: ${geneDescription}`}
+            }   
+            <Truncate
+              tooltipAddendum={geneDescription && `: ${geneDescription}`}
+            >
+              <span
+                style={{
+                  width: geneSymbolWidth,
+                  display: "inline-block",
+                  paddingRight: "5px"
+                }}
+                data-testid={`${gene}:gene-label`}
               >
-                <span
-                  style={{
-                    width: geneSymbolWidth,
-                    display: "inline-block",
-                  }}
-                  data-testid={`${gene}:gene-label`}
-                >
-                  {gene}
-                </span>
-              </Truncate>
-            </div>
+                {gene}
+              </span>
+            </Truncate>
             {!geneIsExpanded ? (
               <HistogramBrush
                 isUserDefined
@@ -135,7 +152,8 @@ class Gene extends React.Component {
                 width={MINI_HISTOGRAM_WIDTH}
                 removeHistZeros={removeHistZeros}
               />
-            ) : null}
+            ) : null}            
+            </div>
           </div>
           <div style={{ flexShrink: 0, marginLeft: 2 }}>
             <Button
@@ -200,51 +218,9 @@ class Gene extends React.Component {
               paddingTop:"5px",
               paddingBotton: "5px"
             }}>
-              <Tooltip
-                content={"The gene metadata to display."}
-                position={Position.BOTTOM}
-                hoverOpenDelay={globals.tooltipHoverOpenDelay}
-                modifiers={{
-                  preventOverflow: { enabled: false },
-                  hide: { enabled: false },
-                }}
-              >   
-                <Select
-                items={
-                  var_keys
-                }
-                filterable={false}
-                itemRenderer={(d, { handleClick }) => {
-                  return (
-                    <MenuItem
-                      onClick={handleClick}
-                      key={d}
-                      text={d}
-                    />
-                  );
-                }}
-                onItemSelect={(d) => {
-                  this.setState({
-                    ...this.state,
-                    varMetadata: d
-                  })
-                  dispatch(actions.fetchGeneInfo(gene, d)).then((res) => {
-                    this.setState({
-                      ...this.state,
-                      geneInfo: res
-                    })
-                  })                  
-                }}
-              >
-                <AnchorButton
-                  text={`Metadata: ${varMetadata}`}
-                  rightIcon="double-caret-vertical"
-                />
-              </Select>
-            </Tooltip>
-            <div style={{margin: "auto 0"}}>
-            {geneInfo} 
-            </div>
+            {(varMetadata !== "") && <div style={{margin: "0 auto"}}>
+            {`${varMetadata}: ${geneInfo}`} 
+            </div>}
             
           </div>}          
  

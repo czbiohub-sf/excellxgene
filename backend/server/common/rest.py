@@ -186,6 +186,15 @@ def gene_info_get(request,data_adaptor):
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
 
+def gene_info_bulk_put(request,data_adaptor):
+    args = request.get_json()
+    geneSet = args['geneSet']
+    varM = args['varMetadata']
+    if varM != "":
+        return make_response(jsonify({"response": list(data_adaptor.data.var.set_index("name_0")[varM][geneSet])}), HTTPStatus.OK)
+    else:
+        return make_response(jsonify({"response": "ok"}), HTTPStatus.OK)        
+
 def config_get(app_config, data_adaptor):
     config = get_client_config(app_config, data_adaptor)
     return make_response(jsonify(config), HTTPStatus.OK)

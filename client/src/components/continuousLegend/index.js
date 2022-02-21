@@ -108,14 +108,16 @@ const continuous = (selectorId, colorScale, colorAccessor) => {
   colors: state.colors,
   genesets: state.genesets.genesets,
   dataLayerExpr: state.reembedParameters.dataLayerExpr,
-  logScaleExpr: state.reembedParameters.logScaleExpr
+  logScaleExpr: state.reembedParameters.logScaleExpr,
+  layoutChoice: state.layoutChoice
 }))
 class ContinuousLegend extends React.Component {
   async componentDidUpdate(prevProps) {
-    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr } = this.props;
+    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr, layoutChoice } = this.props;
     if (!colors || !annoMatrix) return;
 
-    if (logScaleExpr !== prevProps.logScaleExpr || dataLayerExpr !== prevProps.dataLayerExpr || colors !== prevProps?.colors || annoMatrix !== prevProps?.annoMatrix) {
+    if (logScaleExpr !== prevProps.logScaleExpr || dataLayerExpr !== prevProps.dataLayerExpr || colors !== prevProps?.colors || annoMatrix !== prevProps?.annoMatrix
+        || layoutChoice.sankey !== prevProps.layoutChoice.sankey) {
       const { schema } = annoMatrix;
       const { colorMode, colorAccessor, userColors } = colors;
 
@@ -141,8 +143,7 @@ class ContinuousLegend extends React.Component {
 
       /* always remove it, if it's not continuous we don't put it back. */
       d3.select("#continuous_legend").selectAll("*").remove();
-
-      if (colorAccessor && colorScale && range && domainMin < domainMax) {
+      if (colorAccessor && colorScale && range && domainMin < domainMax && !layoutChoice.sankey) {
         /* fragile! continuous range is 0 to 1, not [#fa4b2c, ...], make this a flag? */
         if (range()[0][0] !== "#") {
           continuous(
@@ -162,7 +163,7 @@ class ContinuousLegend extends React.Component {
         style={{
           position: "absolute",
           left: 8,
-          top: 35,
+          top: 80,
           zIndex: 1,
           pointerEvents: "none",
         }}

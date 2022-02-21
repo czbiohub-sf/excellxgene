@@ -352,14 +352,14 @@ class MenuBar extends React.PureComponent {
       <div
         style={{
           position: "absolute",
-          right: 8,
+          left: 0,
           top: 0,
           display: "flex",
           flexDirection: "row-reverse",
-          alignItems: "flex-start",
+          alignItems: "flex-end",
           flexWrap: "wrap",
-          justifyContent: "flex-start",
-          zIndex: 3,
+          justifyContent: "flex-end",
+          zIndex: 10000000000000,
         }}
       >
         <UndoRedoReset
@@ -383,7 +383,7 @@ class MenuBar extends React.PureComponent {
             this.handleClipPercentileMinValueChange
           }
         />
-        {userLoggedIn && <ButtonGroup className={styles.menubarButton}>
+        {userLoggedIn && <ButtonGroup className={styles.menubarButton} style={{zIndex: 100000000000}}>
           <Reembedding />
         </ButtonGroup>}
         <Tooltip
@@ -582,9 +582,11 @@ class MenuBar extends React.PureComponent {
         /></Tooltip></div>
          </div> : <div style={{
           width: "20%",
-          textAlign: "right",
+          textAlign: "left",
           display: "flex",
-          justifyContent: "right",
+          justifyContent: "left",
+          flexDirection: "row",
+          paddingLeft: "8px"
         }}>
           <Tooltip
           content="Screenshot the current embedding"
