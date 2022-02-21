@@ -154,7 +154,7 @@ def schema_get_helper(data_adaptor):
         elif str(ax) == "obs":
             fns = glob(f"{userID}/obs/*.p")
             for ann in fns:
-                ann=ann.split('.p')[0].split('/')[-1]
+                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
                 x = pickle_loader(f"{userID}/obs/{ann}.p")
                 ann_schema = {"name": ann, "writable": True}
                 ann_schema.update(get_schema_type_hint_of_array(x))

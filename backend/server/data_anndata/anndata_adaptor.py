@@ -216,7 +216,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     params={}
     pcas = {}
     for f in fnames:
-        n = f.split('/')[-1][:-2]
+        n = f.split('/')[-1].split('\\')[-1][:-2]
         if name == n.split(';')[-1]:
             if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p") and exists(f"{direc}/{userID}/pca/{n}.p"):
                 embs[n] = pickle_loader(f)
@@ -1200,7 +1200,7 @@ class AnndataAdaptor(DataAdaptor):
                         adata = anndata.read_h5ad(file, backed=backed)
 
                     adatas.append(adata)
-                    batch.append([file.split('.h5ad')[0].split('/')[-1]]*adata.shape[0])
+                    batch.append([file.split('.h5ad')[0].split('/')[-1].split('\\')[-1]]*adata.shape[0])
                 
                 adata = anndata.concat(adatas,join='inner',axis=0)
                 if "orig.ident" not in adata.obs.keys():
@@ -1373,7 +1373,7 @@ class AnndataAdaptor(DataAdaptor):
         else:
             obs = glob(f"{userID}/obs/*.p")
             for ann in obs:
-                ann=ann.split('.p')[0].split('/')[-1]
+                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
                 x = pickle_loader(f"{userID}/obs/{ann}.p")
                 dtype = x.dtype
                 if hasattr(dtype,'numpy_dtype'):
