@@ -34,4 +34,3 @@ Pillow==8.4.0
 requests==2.26.0
 scikit-learn==1.0.1
 tables==3.6.1
-flask-kaccel

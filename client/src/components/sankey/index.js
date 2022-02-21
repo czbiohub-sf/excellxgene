@@ -43,7 +43,7 @@ class Sankey extends React.Component {
   };  
   constructSankey = () => {
     const { sankeyData: data, layoutChoice, sankeyWidth } = this.props
-    if(data.nodes.length===0){
+    if((data?.nodes ?? true) || data?.nodes?.length===0){
       return
     }
     const { viewport } = this.state

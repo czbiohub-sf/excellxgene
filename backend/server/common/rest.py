@@ -169,7 +169,7 @@ def schema_get_helper(data_adaptor):
             schema["annotations"][ax]["columns"].append(ann_schema)
 
     
-    for layout in [x.split(f"{userID}/emb/")[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
+    for layout in [x.split('/')[-1].split('\\')[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
         layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
         schema["layout"]["obs"].append(layout_schema)
     return schema

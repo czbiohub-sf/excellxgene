@@ -5,27 +5,23 @@ import sys
 import webbrowser
 import os
 import click
-from http import HTTPStatus
 from flask_compress import Compress
 from flask_cors import CORS
 from backend.server.default_config import default_config
 from backend.server.app.app import Server
 from backend.server.common.config.app_config import AppConfig
-from flask import redirect, session, jsonify, make_response, request, send_file, after_this_request, current_app
+from flask import redirect, session, jsonify, current_app
 from six.moves.urllib.parse import urlencode
 from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
 from flask_sock import Sock
 import multiprocessing
 from authlib.integrations.flask_client import OAuth
-from multiprocessing import shared_memory
 import sys
 import signal
-from backend.server.data_anndata.anndata_adaptor import AnndataAdaptor
 from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 from functools import wraps
-import pathlib
 from dotenv import load_dotenv
 load_dotenv()
 
