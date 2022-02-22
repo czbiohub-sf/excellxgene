@@ -59,7 +59,6 @@ class LeftSideBar extends React.Component {
           display: "flex",
           flexDirection: "column",
           height: "100%",
-          overflowX: "auto",
         }}
       >
         <TopLeftLogoAndTitle />

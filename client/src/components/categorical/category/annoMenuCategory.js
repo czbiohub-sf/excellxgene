@@ -84,7 +84,7 @@ class AnnoMenuCategory extends React.PureComponent {
               />
             </Tooltip>
             <Popover
-              interactionKind={PopoverInteractionKind.HOVER}
+              interactionKind={PopoverInteractionKind.CLICK}
               boundary="window"
               position={Position.RIGHT_TOP}
               content={

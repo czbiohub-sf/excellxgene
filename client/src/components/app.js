@@ -99,7 +99,7 @@ class App extends React.Component {
                     zIndex: 0,
                     gridArea: "top / graph-start / bottom / graph-end",
                     position: "relative",
-                    height: "inherit",
+                    height: layoutChoice.sankey ? "0px" : "inherit",
                     overflowX: "auto"
                   }}>
                 <Graph sankeyPlotMode={layoutChoice.sankey} key={graphRenderCounter} graphWidth={viewportRef?.clientWidth} viewportRef={viewportRef} />

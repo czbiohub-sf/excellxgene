@@ -20,8 +20,6 @@ class RightSidebar extends React.Component {
           display: "flex",
           flexDirection: "column",
           position: "relative",
-          overflowX: "auto",
-          overflowY: "inherit",
           height: "inherit",
           width: width,
           padding: globals.leftSidebarSectionPadding,

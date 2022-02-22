@@ -85,7 +85,7 @@ class GenesetMenus extends React.PureComponent {
             </Tooltip2>
             <AddGeneToGenesetDialogue geneset={geneset} />
             <Popover
-              interactionKind={PopoverInteractionKind.HOVER}
+              interactionKind={PopoverInteractionKind.CLICK}
               boundary="window"
               position={Position.BOTTOM}
               content={
