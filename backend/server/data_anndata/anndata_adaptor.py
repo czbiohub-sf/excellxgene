@@ -623,7 +623,158 @@ def compute_sankey_df(labels, name, obs_mask, userID):
     ps = np.vstack(ps)
     cs = np.concatenate(cs)
     ps = [list(x) for x in ps]
-    cs = list(cs)        
+    cs = list(cs)     
+    return {"edges":ps,"weights":cs}
+
+def generate_correlation_map(x, y):
+        mu_x = x.mean(1)
+        mu_y = y.mean(1)
+        n = x.shape[1]
+        if n != y.shape[1]:
+            raise ValueError("x and y must " + "have the same number of timepoints.")
+        s_x = x.std(1, ddof=n - 1)
+        s_y = y.std(1, ddof=n - 1)
+        s_x[s_x == 0] = 1
+        s_y[s_y == 0] = 1
+        cov = np.dot(x, y.T) - n * np.dot(mu_x[:, None], mu_y[None, :])
+        return cov / np.dot(s_x[:, None], s_y[None, :])
+
+def compute_sankey_df_corr(labels, obs_mask, params, var):    
+    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]])[obs_mask],var=var)
+
+    if params["samHVG"]:
+        adata = adata[:,np.sort(np.argsort(-np.array(list(adata.var[params['geneMetadata']])))[:min(params['numGenes'],adata.shape[1])])]
+    else:
+        sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(params['numGenes'],adata.shape[1]), n_bins=20)                
+        adata = adata[:,adata.var['highly_variable']] 
+
+    cl=[]
+    clu = []
+    for i,c in enumerate(labels):
+        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])[obs_mask]
+        clu0 = np.unique(cl0)
+        cl.append(cl0)
+        clu.append(clu0)
+    
+    ps=[]
+    cs=[]
+    for i in range(len(cl[:-1])):
+        j=i+1
+        c1 = cl[i]
+        c2 = cl[j]
+        cu1= clu[i]
+        cu2 = clu[j]
+
+        X1 = get_avgs(adata.X,c1,cu1)
+        X2 = get_avgs(adata.X,c2,cu2)
+        corr = generate_correlation_map(X1,X2)
+        corr[corr<0]=0
+        x,y = corr.nonzero()
+        ps.append(np.vstack((cu1[x],cu2[y])).T)
+        cs.append(corr[x,y])
+
+    ps = np.vstack(ps)
+    cs = np.concatenate(cs)
+    ps = [list(x) for x in ps]
+    cs = list(cs)           
+    return {"edges":ps,"weights":cs}
+
+def get_avgs(X,c,cu):
+    Xs=[]
+    for i in cu:
+        Xs.append(X[c==i].mean(0).A.flatten())
+    return np.vstack(Xs)
+
+def compute_sankey_df_corr_sg(labels, obs_mask, params, var):
+    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]])[obs_mask])    
+    adata = adata[:,var[params["selectedGenes"]].values]
+
+    cl=[]
+    clu = []
+    for i,c in enumerate(labels):
+        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])[obs_mask]
+        clu0 = np.unique(cl0)
+        cl.append(cl0)
+        clu.append(clu0)
+    
+    ps=[]
+    cs=[]
+    for i in range(len(cl[:-1])):
+        j=i+1
+        c1 = cl[i]
+        c2 = cl[j]
+        cu1= clu[i]
+        cu2 = clu[j]
+
+        X1 = get_avgs(adata.X,c1,cu1)
+        X2 = get_avgs(adata.X,c2,cu2)
+        corr = generate_correlation_map(X1,X2)
+        corr[corr<0]=0
+        x,y = corr.nonzero()
+        ps.append(np.vstack((cu1[x],cu2[y])).T)
+        cs.append(corr[x,y])
+
+    ps = np.vstack(ps)
+    cs = np.concatenate(cs)
+    ps = [list(x) for x in ps]
+    cs = list(cs)     
+    return {"edges":ps,"weights":cs}
+
+def generate_coclustering_matrix(cl1,cl2):
+    import scipy.sparse as sp
+    vs=[]
+    xs=[]
+    cl = cl1
+    cl = np.array(list(cl))
+    clu=np.unique(cl)    
+    cl = pd.Series(index=clu,data=np.arange(clu.size))[cl].values
+    v = np.zeros((cl.size,clu.size))
+    v[np.arange(v.shape[0]),cl]=1
+    v = v.T
+    su = v.sum(1)[:,None]
+    su[su==0]=1
+    V = v/su
+
+    cl = cl2
+    cl = np.array(list(cl))
+    clu=np.unique(cl)    
+    cl = pd.Series(index=clu,data=np.arange(clu.size))[cl].values
+    v2 = np.zeros((cl.size,clu.size))
+    v2[np.arange(v2.shape[0]),cl]=1
+    v2 = v2.T
+    su = v2.sum(1)[:,None]
+    su[su==0]=1
+    V2 = v2/su    
+    
+    return (V.dot(v2.T) + ( V2.dot(v.T) ).T)/2
+
+def compute_sankey_df_coclustering(labels, obs_mask):
+    cl=[]
+    clu = []
+    for i,c in enumerate(labels):
+        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])[obs_mask]
+        clu0 = np.unique(cl0)
+        cl.append(cl0)
+        clu.append(clu0)
+    
+    ps=[]
+    cs=[]
+    for i in range(len(cl[:-1])):
+        j = i+1
+        c1 = cl[i]
+        c2 = cl[j]
+        cu1= clu[i]
+        cu2 = clu[j]
+
+        corr = generate_coclustering_matrix(c1,c2)
+        x,y = corr.nonzero()
+        ps.append(np.vstack((cu1[x],cu2[y])).T)
+        cs.append(corr[x,y])
+
+    ps = np.vstack(ps)
+    cs = np.concatenate(cs)
+    ps = [list(x) for x in ps]
+    cs = list(cs)     
     return {"edges":ps,"weights":cs}
 
 def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
@@ -885,11 +1036,21 @@ def initialize_socket(da):
                 labels = data.get("labels", None)
                 name = data.get("name", None)
                 filter = data.get("filter",None)
+                params = data.get("params",{"samHVG": False,"numGenes": 2000, "sankeyMethod": "Graph alignment", "selectedGenes": [], "dataLayer": "X"})
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
-
+                var = da.data.var.copy()
+                var.index = pd.Index(np.arange(var.shape[0]))
+                
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
-                _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,labels, name, obs_mask, userID)              
+                if params["sankeyMethod"] == "Graph alignment":
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,labels, name, obs_mask, userID)              
+                elif params["sankeyMethod"] == "Correlation":
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr, "sankey",data,None,labels, obs_mask, params, var)
+                elif params["sankeyMethod"] == "Correlation (selected genes)":
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr_sg, "sankey",data,None,labels, obs_mask, params,pd.Series(index=var['name_0'].values,data=np.arange(var.shape[0])))
+                elif params["sankeyMethod"] == "Co-labeling":
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_coclustering, "sankey",data,None,labels, obs_mask)                                        
 
     @sock.route("/downloadAnndata")
     @auth0_token_required

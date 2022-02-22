@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup } from "@blueprintjs/core";
 
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -12,6 +12,7 @@ import DiffexpButtons from "./diffexpButtons";
 import Reembedding from "./reembedding";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
+import StateParameterInput from "./parameterinputstate";
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -39,6 +40,8 @@ function HotkeysDialog(props) {
   return {
     subsetPossible,
     subsetResetPossible,
+    var_keys: state.annoMatrix.schema.var_keys,
+    geneSelection: Object.keys(state.geneSelection),
     tooManyCells: numberCells > 50000,
     graphInteractionMode: state.controls.graphInteractionMode,
     clipPercentileMin: Math.round(100 * (annoMatrix?.clipRange?.[0] ?? 0)),
@@ -67,7 +70,8 @@ function HotkeysDialog(props) {
     currCacheKey: state.sankeySelection.currCacheKey,
     maxLink: state.sankeySelection.maxLink,
     alignmentThreshold: state.sankeySelection.alignmentThreshold,
-    userLoggedIn: state.controls.userInfo ? true : false
+    userLoggedIn: state.controls.userInfo ? true : false,
+    annoMatrix
   };
 })
 class MenuBar extends React.PureComponent {
@@ -99,16 +103,26 @@ class MenuBar extends React.PureComponent {
     super(props);
     this.state = {
       pendingClipPercentiles: null,
-      saveName: "",
       threshold: 0,
-      saveDataWarningDialogOpen: false
+      saveDataWarningDialogOpen: false,
+      revealSankeyDialog: false,
+      sankeyMethod: "Graph alignment",
+      samHVG: false,
+      numGenes: 2000,
+      dataLayer: "X",
+      geneMetadata: "sam_weights"
     };
   }
 
-  handleSankey = (threshold,reset) => {
-    const { dispatch, layoutChoice } = this.props;
+  handleSankey = (threshold,reset,params={sankeyMethod: "Graph alignment",numGenes: 2000, samHVG: false, dataLayer: "X", geneMetadata: "sam_weights"}) => {
+    const { dispatch, layoutChoice, geneSelection } = this.props;
+    if (params['sankeyMethod'] === "Correlation (selected genes)"){
+      params["selectedGenes"] = geneSelection
+    } else {
+      params["selectedGenes"] = [];
+    }
     if (!layoutChoice.sankey || !reset) {
-      const res = dispatch(requestSankey(threshold));
+      const res = dispatch(requestSankey(threshold,params));
       res.then((resp)=>{
         if (resp) {
           const sankey = resp[0];
@@ -212,9 +226,7 @@ class MenuBar extends React.PureComponent {
       e.preventDefault();
     }
   };
-  handleSaveChange = (e) => {
-    this.setState({saveName: e.target.value})
-  };
+
   handleClipPercentileMinValueChange = (v) => {
     /*
     Ignore anything that isn't a legit number
@@ -245,8 +257,9 @@ class MenuBar extends React.PureComponent {
 
   onRelease = (value) => {
     const { dispatch } = this.props;
+    const { samHVG, sankeyMethod, numGenes, dataLayer, geneMetadata } = this.state;
     dispatch({type: "sankey: set alignment score threshold", threshold: value})
-    this.handleSankey(value,false)
+    this.handleSankey(value,false,{samHVG,sankeyMethod,numGenes,dataLayer, geneMetadata})
     this.setState({
       ...this.state,
       threshold: value
@@ -315,6 +328,7 @@ class MenuBar extends React.PureComponent {
   render() {
     const {
       dispatch,
+      annoMatrix,
       disableDiffexp,
       undoDisabled,
       redoDisabled,
@@ -327,8 +341,6 @@ class MenuBar extends React.PureComponent {
       colorAccessor,
       subsetPossible,
       subsetResetPossible,
-      userInfo,
-      auth,
       displaySankey,
       layoutChoice,
       outputController,
@@ -336,9 +348,11 @@ class MenuBar extends React.PureComponent {
       currCacheKey,
       maxLink,
       userLoggedIn,
-      tooManyCells
+      tooManyCells,
+      var_keys,
+      geneSelection
     } = this.props;
-    const { pendingClipPercentiles, saveName, threshold, saveDataWarningDialogOpen } = this.state;
+    const { pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
     const loading = !!outputController?.pendingFetch;
     const loadingSankey = !!sankeyController?.pendingFetch;
@@ -475,11 +489,18 @@ class MenuBar extends React.PureComponent {
                 disabled={!displaySankey && !layoutChoice.sankey}
                 loading={loadingSankey}
                 onClick={() => {
-                  this.handleSankey(0,true)
-                  dispatch({
-                    type: "change graph interaction mode",
-                    data: "select",
-                  });                  
+                  if (layoutChoice.sankey) {
+                    this.handleSankey(0,true)
+                    dispatch({
+                      type: "change graph interaction mode",
+                      data: "select",
+                    });
+                  } else {
+                    this.setState({
+                      ...this.state,
+                      revealSankeyDialog: true
+                    })
+                  }
                 }}
               />           
             </Tooltip>}
@@ -531,7 +552,91 @@ class MenuBar extends React.PureComponent {
           }}
         > OK </AnchorButton>         
         </div>
-        </Dialog>}        
+        </Dialog>}  
+        <Dialog
+          title="Sankey plot options"
+          isOpen={revealSankeyDialog}
+          onClose={()=>{
+            this.setState({...this.state, revealSankeyDialog: false})
+            }
+          }
+        > 
+          <div style={{paddingLeft: "10px", paddingTop: "10px"}}>
+            <StateParameterInput 
+              label="Method"
+              value={sankeyMethod}
+              options={["Graph alignment", "Co-labeling", "Correlation","Correlation (selected genes)"]}
+              tooltipContent={"Method to compute the sankey edges."}
+              setter={(d)=>{this.setState({sankeyMethod: d})}}
+            />       
+            {sankeyMethod === "Correlation" && <div style={{paddingTop: "10px"}}>
+              <ControlGroup fill={true} vertical={false}>
+                  <StateParameterInput 
+                    label={<b>Sort by metadata?</b>}
+                    value={samHVG}
+                    tooltipContent={"Check to use SAM weights for feature selection."}
+                    setter={()=>this.setState({samHVG: !samHVG})}
+                  />   
+                  <StateParameterInput
+                    label="Metadata"
+                    value={geneMetadata}
+                    options={var_keys}
+                    tooltipContent={"Expression layer on which correlations will be computed."}
+                    left
+                    setter={(d)=>{this.setState({geneMetadata: d})}}
+                  />                     
+              </ControlGroup>
+              <ControlGroup fill={true} vertical={false}>
+                  <StateParameterInput
+                    min={2}
+                    max={annoMatrix.nVar}
+                    label={`n_top_genes (${samHVG ? `${geneMetadata}` : "scanpy HVG"})`}
+                    value={numGenes}
+                    setter={(d)=>{this.setState({numGenes: d})}}
+                    tooltipContent={`The number of genes to select using ${samHVG ? `${geneMetadata}` : "scanpy HVG"}.`}
+                  />   
+                  <StateParameterInput
+                    label="Data layer"
+                    value={dataLayer}
+                    options={annoMatrix.schema.layers}
+                    tooltipContent={"Expression layer on which correlations will be computed."}
+                    left
+                    setter={(d)=>{this.setState({dataLayer: d})}}
+                  />      
+                </ControlGroup>                    
+
+            </div>} 
+            {sankeyMethod === "Correlation (selected genes)" && <div style={{paddingTop: "10px"}}>
+              <ControlGroup fill={true} vertical={false}>
+                  <StateParameterInput
+                    label="Data layer"
+                    value={dataLayer}
+                    options={annoMatrix.schema.layers}
+                    tooltipContent={"Expression layer on which correlations will be computed."}
+                    left
+                    setter={(d)=>{this.setState({dataLayer: d})}}
+                  />      
+                </ControlGroup>                    
+
+            </div>}             
+            <div style={{textAlign: "right", paddingTop: "20px",paddingRight: "10px"}}>
+            <AnchorButton
+                type="button"
+                icon="fork"
+                intent="primary"
+                disabled={sankeyMethod === "Correlation (selected genes)" && geneSelection.length === 0}
+                onClick={() => {
+                  this.handleSankey(0,true, {sankeyMethod, samHVG, numGenes, dataLayer, geneMetadata})
+                  this.setState({revealSankeyDialog: false})
+                  dispatch({
+                    type: "change graph interaction mode",
+                    data: "select",
+                  });                 
+                }}
+              > Create sankey </AnchorButton>  
+            </div>                     
+          </div>
+        </Dialog>              
         {userLoggedIn && <ButtonGroup className={styles.menubarButton}>   
           <Tooltip
             content="Save current subset to an `.h5ad` file."
@@ -562,7 +667,7 @@ class MenuBar extends React.PureComponent {
           type="button"
           onClick={()=>{
             dispatch({type: "sankey: clear cached result",key: currCacheKey})
-            this.handleSankey(threshold,false)
+            this.handleSankey(threshold,false,{samHVG, sankeyMethod, numGenes, dataLayer, geneMetadata})
           }}
           intent="primary"
           disabled={loadingSankey}

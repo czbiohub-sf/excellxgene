@@ -483,13 +483,16 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       const catNames = data.catNames;
       const sankey = data.response;
       const threshold = data.threshold;
+      const params = data.params;
+      const cacheString = `${catNames.join(";")}_${layoutChoice.current}_${params.samHVG}_${params.sankeyMethod}_${params.dataLayer}_${params.selectedGenes.join(";")}_${params.geneMetadata}`;
+
       dispatch({
         type: "sankey: request completed",
       });
       dispatch({
         type: "sankey: cache results",
         sankey,
-        key: `${catNames.join(";")}_${layoutChoice.current}`
+        key: cacheString
       })
       const links = []
       const nodes = []

@@ -11,7 +11,6 @@ import actions from "../../actions";
 import Truncate from "../util/truncate"
 import CreateGenesetDialogue from "./menus/createGenesetDialogue";
 import * as globals from "../../globals";
-import QuickGene from "./quickGene";
 import AnnoDialog from "../annoDialog";
 import LabelInput from "../labelInput";
 

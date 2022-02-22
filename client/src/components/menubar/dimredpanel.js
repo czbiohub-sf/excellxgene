@@ -233,9 +233,9 @@ class DimredPanel extends React.PureComponent {
               min={0}
               disabled={reembedParams.doSAM}
               max={annoMatrix.nVar}
-              label={`n_top_genes (${reembedParams.samHVG ? "SAM weights" : "dispersion"})`}
+              label={`n_top_genes (${reembedParams.samHVG ? "SAM weights" : "scanpy HVG"})`}
               param="nTopGenesHVG"
-              tooltipContent={`The number of genes to select using ${reembedParams.samHVG ? "SAM weights" : "dispersion"}.`}
+              tooltipContent={`The number of genes to select using ${reembedParams.samHVG ? "SAM weights" : "scanpy HVG"}.`}
             />        
           </ControlGroup>                    
         </Collapse>  
