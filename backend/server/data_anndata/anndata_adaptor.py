@@ -1221,20 +1221,20 @@ class AnndataAdaptor(DataAdaptor):
                 if not sparse.issparse(adata.layers[k]):
                     adata.layers[k] = sparse.csr_matrix(adata.layers[k])
 
+            self.rootName = self.find_valid_root_embedding(adata.obsm)
             if root_embedding is not None:
                 if root_embedding in adata.obsm.keys():
                     if np.isnan(adata.obsm[root_embedding]).sum()>0:
-                        self.rootName = "X_root"
-                        adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))
+                        if self.rootName == "X_root":
+                            adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))
                     else:
                         self.rootName = root_embedding
                 else:
-                    self.rootName = "X_root"
-                    adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))                        
-
+                    if self.rootName == "X_root":
+                        adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))
             else:
-                self.rootName = "X_root"
-                adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))
+                if self.rootName == "X_root":
+                    adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))            
             
             adata.obs_names_make_unique()
 
@@ -1292,6 +1292,15 @@ class AnndataAdaptor(DataAdaptor):
             
             self.data = adata
             print("Finished loading the data.")
+    
+    def find_valid_root_embedding(self,obsm):
+        root = "X_root"
+        for k in obsm.keys():
+            if np.isnan(obsm[k]).sum()==0:
+                root = k
+                break
+        return root
+
 
     def dispersion_ranking_NN(self, X, nnm, weight_mode='rms'):
         import scipy.sparse as sp
