@@ -110,11 +110,12 @@ class MenuBar extends React.PureComponent {
       samHVG: false,
       numGenes: 2000,
       dataLayer: "X",
-      geneMetadata: "sam_weights"
+      geneMetadata: "sam_weights",
+      numEdges: 5
     };
   }
 
-  handleSankey = (threshold,reset,params={sankeyMethod: "Graph alignment",numGenes: 2000, samHVG: false, dataLayer: "X", geneMetadata: "sam_weights"}) => {
+  handleSankey = (threshold,reset,params={sankeyMethod: "Graph alignment",numGenes: 2000, samHVG: false, dataLayer: "X", geneMetadata: "sam_weights", numEdges: 5}) => {
     const { dispatch, layoutChoice, geneSelection } = this.props;
     if (params['sankeyMethod'] === "Correlation (selected genes)"){
       params["selectedGenes"] = geneSelection
@@ -257,9 +258,9 @@ class MenuBar extends React.PureComponent {
 
   onRelease = (value) => {
     const { dispatch } = this.props;
-    const { samHVG, sankeyMethod, numGenes, dataLayer, geneMetadata } = this.state;
+    const { samHVG, sankeyMethod, numGenes, dataLayer, geneMetadata, numEdges } = this.state;
     dispatch({type: "sankey: set alignment score threshold", threshold: value})
-    this.handleSankey(value,false,{samHVG,sankeyMethod,numGenes,dataLayer, geneMetadata})
+    this.handleSankey(value,false,{samHVG,sankeyMethod,numGenes,dataLayer, geneMetadata, numEdges})
     this.setState({
       ...this.state,
       threshold: value
@@ -352,7 +353,7 @@ class MenuBar extends React.PureComponent {
       var_keys,
       geneSelection
     } = this.props;
-    const { pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
+    const { pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
     const loading = !!outputController?.pendingFetch;
     const loadingSankey = !!sankeyController?.pendingFetch;
@@ -562,13 +563,23 @@ class MenuBar extends React.PureComponent {
           }
         > 
           <div style={{paddingLeft: "10px", paddingTop: "10px"}}>
-            <StateParameterInput 
-              label="Method"
-              value={sankeyMethod}
-              options={["Graph alignment", "Co-labeling", "Correlation","Correlation (selected genes)"]}
-              tooltipContent={"Method to compute the sankey edges."}
-              setter={(d)=>{this.setState({sankeyMethod: d})}}
-            />       
+            <ControlGroup fill={true} vertical={false}>
+              <StateParameterInput 
+                label="Method"
+                value={sankeyMethod}
+                options={["Graph alignment", "Co-labeling", "Correlation","Correlation (selected genes)"]}
+                tooltipContent={"Method to compute the sankey edges."}
+                setter={(d)=>{this.setState({sankeyMethod: d})}}
+              />       
+              <StateParameterInput 
+                min={1}
+                max={annoMatrix.nObs}
+                label="Max # edges"
+                value={numEdges}
+                setter={(d)=>{this.setState({numEdges: d})}}
+                tooltipContent={`The maximum number of edges to show per label.`}
+              />             
+            </ControlGroup>
             {sankeyMethod === "Correlation" && <div style={{paddingTop: "10px"}}>
               <ControlGroup fill={true} vertical={false}>
                   <StateParameterInput 
@@ -626,7 +637,7 @@ class MenuBar extends React.PureComponent {
                 intent="primary"
                 disabled={sankeyMethod === "Correlation (selected genes)" && geneSelection.length === 0}
                 onClick={() => {
-                  this.handleSankey(0,true, {sankeyMethod, samHVG, numGenes, dataLayer, geneMetadata})
+                  this.handleSankey(0,true, {sankeyMethod, samHVG, numGenes, dataLayer, geneMetadata, numEdges})
                   this.setState({revealSankeyDialog: false})
                   dispatch({
                     type: "change graph interaction mode",
@@ -667,7 +678,7 @@ class MenuBar extends React.PureComponent {
           type="button"
           onClick={()=>{
             dispatch({type: "sankey: clear cached result",key: currCacheKey})
-            this.handleSankey(threshold,false,{samHVG, sankeyMethod, numGenes, dataLayer, geneMetadata})
+            this.handleSankey(threshold,false,{samHVG, sankeyMethod, numGenes, dataLayer, geneMetadata, numEdges})
           }}
           intent="primary"
           disabled={loadingSankey}

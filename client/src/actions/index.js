@@ -484,7 +484,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       const sankey = data.response;
       const threshold = data.threshold;
       const params = data.params;
-      const cacheString = `${catNames.join(";")}_${layoutChoice.current}_${params.samHVG}_${params.sankeyMethod}_${params.dataLayer}_${params.selectedGenes.join(";")}_${params.geneMetadata}`;
+      const cacheString = `${catNames.join(";")}_${layoutChoice.current}_${params.samHVG}_${params.sankeyMethod}_${params.dataLayer}_${params.selectedGenes.join(";")}_${params.geneMetadata}_${params.numEdges}`;
 
       dispatch({
         type: "sankey: request completed",

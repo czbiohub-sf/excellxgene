@@ -1,32 +1,8 @@
 <img src="./cellxgene-logo.png" width="300">
 
 # Exploratory CellxGene (ExCellxGene)
-This fork implements some of the key features that have been highly requested by the data science team at CZBiohub.
 
-Features include:
-- Hotkeys (SHIFT+? to see a tooltip describing all available  hotkeys)
-- End-to-end interactive analysis and reembedding, with new embeddings hierarchically organized.
-- LIDAR graph interaction mode (the airplane) - Show an interactive tooltip describing the cells underneath your cursor. Very helpful for the color impaired or for large datasets with hundreds of labels.
-- Sankey plots
-- Leiden clustering
-- Label fusion and deletion
-- Interactive selection of data layer for expression visualization
-- Many other quality-of-life improvements.
-
-## Patch notes (v1.2.5)
-- When displaying continuous metadata, cells with value zero are drawn as if they are unselected to send them to the background.
-- Category and geneset menus now have a new menu item to include/exclude zeros from the histograms. This is useful  when the distributions are super zero-inflated.
-
-## Patch notes (v1.2.3)
-- Gene sets are now grouped based on their descriptions under collapsible headers.
-- Gene sets are now more compact, displaying 10 genes at a time with buttons to flip through pages.
-- Differential expression now calculates the top 100 genes.
-- A new button in the menubar allows you to calculate marker genes for all labels in a selected category.
-- Embeddings are now indented according to their hierarchical organization, and nested embeddings are collapsible.
-- Categorical labels are now sortable based on the currently displayed continuous medatada.
-- All preprocessing and reembedding parameters now have a tooltip.
-- Added a button to display hotkey menu to the menubar.
-- Various bugfixes.
+Video vignettes to come!
 
 ### Installation
 

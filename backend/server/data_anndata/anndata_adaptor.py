@@ -514,7 +514,7 @@ def compute_leiden(obs_mask,name,resolution,userID):
     clusters[obs_mask] = result.astype('str')
     return list(result)
 
-def compute_sankey_df(labels, name, obs_mask, userID):
+def compute_sankey_df(labels, name, obs_mask, userID, numEdges):
     def reducer(a, b):
         result_a, inv_ndx = np.unique(a, return_inverse=True)
         result_b = np.bincount(inv_ndx, weights=b)
@@ -614,6 +614,9 @@ def compute_sankey_df(labels, name, obs_mask, userID):
 
 
         CSIM = np.stack((CSIM,CSIM2.T),axis=2).min(2)
+        
+        CSIM = saturate_edges(CSIM,numEdges)
+        
         x,y = CSIM.nonzero()
         d = CSIM[x,y]
         x,y = rixer1[clu1[x]].values,rixer2[clu2[y]].values
@@ -625,6 +628,15 @@ def compute_sankey_df(labels, name, obs_mask, userID):
     ps = [list(x) for x in ps]
     cs = list(cs)     
     return {"edges":ps,"weights":cs}
+
+def saturate_edges(CSIM,numEdges):
+    IX1 = np.argsort(-CSIM,axis=1)[:,numEdges:]
+    IX2 = np.argsort(-CSIM.T,axis=1)[:,numEdges:]
+    CSIM[np.tile(np.arange(CSIM.shape[0])[:,None],(1,IX1.shape[1])).flatten(),IX1.flatten()] = 0
+    CSIM = CSIM.T
+    CSIM[np.tile(np.arange(CSIM.shape[0])[:,None],(1,IX2.shape[1])).flatten(),IX2.flatten()] = 0
+    CSIM = CSIM.T
+    return CSIM
 
 def generate_correlation_map(x, y):
         mu_x = x.mean(1)
@@ -651,7 +663,7 @@ def compute_sankey_df_corr(labels, obs_mask, params, var):
     cl=[]
     clu = []
     for i,c in enumerate(labels):
-        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])[obs_mask]
+        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])
         clu0 = np.unique(cl0)
         cl.append(cl0)
         clu.append(clu0)
@@ -669,6 +681,7 @@ def compute_sankey_df_corr(labels, obs_mask, params, var):
         X2 = get_avgs(adata.X,c2,cu2)
         corr = generate_correlation_map(X1,X2)
         corr[corr<0]=0
+        corr = saturate_edges(corr,params['numEdges'])
         x,y = corr.nonzero()
         ps.append(np.vstack((cu1[x],cu2[y])).T)
         cs.append(corr[x,y])
@@ -692,7 +705,7 @@ def compute_sankey_df_corr_sg(labels, obs_mask, params, var):
     cl=[]
     clu = []
     for i,c in enumerate(labels):
-        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])[obs_mask]
+        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])
         clu0 = np.unique(cl0)
         cl.append(cl0)
         clu.append(clu0)
@@ -710,6 +723,7 @@ def compute_sankey_df_corr_sg(labels, obs_mask, params, var):
         X2 = get_avgs(adata.X,c2,cu2)
         corr = generate_correlation_map(X1,X2)
         corr[corr<0]=0
+        corr = saturate_edges(corr,params['numEdges'])
         x,y = corr.nonzero()
         ps.append(np.vstack((cu1[x],cu2[y])).T)
         cs.append(corr[x,y])
@@ -748,11 +762,11 @@ def generate_coclustering_matrix(cl1,cl2):
     
     return (V.dot(v2.T) + ( V2.dot(v.T) ).T)/2
 
-def compute_sankey_df_coclustering(labels, obs_mask):
+def compute_sankey_df_coclustering(labels, obs_mask, numEdges):
     cl=[]
     clu = []
     for i,c in enumerate(labels):
-        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])[obs_mask]
+        cl0 = np.array(['A'+str(i)+'_'+str(x).replace(' ','_').replace('(','_').replace(')','_') for x in c])
         clu0 = np.unique(cl0)
         cl.append(cl0)
         clu.append(clu0)
@@ -767,6 +781,7 @@ def compute_sankey_df_coclustering(labels, obs_mask):
         cu2 = clu[j]
 
         corr = generate_coclustering_matrix(c1,c2)
+        corr = saturate_edges(corr,numEdges)        
         x,y = corr.nonzero()
         ps.append(np.vstack((cu1[x],cu2[y])).T)
         cs.append(corr[x,y])
@@ -1036,7 +1051,7 @@ def initialize_socket(da):
                 labels = data.get("labels", None)
                 name = data.get("name", None)
                 filter = data.get("filter",None)
-                params = data.get("params",{"samHVG": False,"numGenes": 2000, "sankeyMethod": "Graph alignment", "selectedGenes": [], "dataLayer": "X"})
+                params = data.get("params",{"samHVG": False,"numGenes": 2000, "sankeyMethod": "Graph alignment", "selectedGenes": [], "dataLayer": "X", "numEdges": 5})
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                 var = da.data.var.copy()
@@ -1044,13 +1059,13 @@ def initialize_socket(da):
                 
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
                 if params["sankeyMethod"] == "Graph alignment":
-                    _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,labels, name, obs_mask, userID)              
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,labels, name, obs_mask, userID, params['numEdges'])              
                 elif params["sankeyMethod"] == "Correlation":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df_corr, "sankey",data,None,labels, obs_mask, params, var)
                 elif params["sankeyMethod"] == "Correlation (selected genes)":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df_corr_sg, "sankey",data,None,labels, obs_mask, params,pd.Series(index=var['name_0'].values,data=np.arange(var.shape[0])))
                 elif params["sankeyMethod"] == "Co-labeling":
-                    _multiprocessing_wrapper(da,ws,compute_sankey_df_coclustering, "sankey",data,None,labels, obs_mask)                                        
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_coclustering, "sankey",data,None,labels, obs_mask, params['numEdges'])                                        
 
     @sock.route("/downloadAnndata")
     @auth0_token_required

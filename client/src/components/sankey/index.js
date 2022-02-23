@@ -1,8 +1,7 @@
-import React, { useEffect } from "react";
+import React from "react";
 import * as d3 from "d3";
 import * as d3s from "d3-sankey";
 import { connect } from "react-redux";
-import { requestSankey } from "../../actions/sankey";
 import Canvg, {
   presets
 } from 'canvg';
@@ -13,8 +12,6 @@ import Canvg, {
     sankeyData: state.sankeySelection.sankeyData,
     refresher: state.sankeySelection.dataRefresher,
     alignmentThreshold: state.sankeySelection.alignmentThreshold,
-    numCells: state.annoMatrix.nObs,
-    currCacheKey: state.sankeySelection.currCacheKey
 }))
 class Sankey extends React.Component {
   constructor(props) {
@@ -28,11 +25,6 @@ class Sankey extends React.Component {
       height: viewport.height
     };
   }
-
-  handleSankey = () => {
-    const { dispatch, alignmentThreshold: threshold } = this.props;
-    dispatch(requestSankey(threshold));
-  };  
 
   handleResize = () => {
     const viewport = this.getViewportDimensions();
@@ -339,13 +331,10 @@ class Sankey extends React.Component {
     this.constructSankey()
   };
   componentDidUpdate(prevProps) {
-    const { dispatch, refresher, numCells, currCacheKey } = this.props
+    const { refresher } = this.props
     if(refresher !== prevProps.refresher || this.props.sankeyWidth !== prevProps.sankeyWidth) {
       d3.selectAll("#canvas > *").remove()
       this.constructSankey()
-    } else if (numCells !== prevProps.numCells){
-      dispatch({type: "sankey: clear cached result",key: currCacheKey})
-      this.handleSankey()
     }
   }
   componentDidMount() {

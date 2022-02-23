@@ -45,7 +45,7 @@ export function requestSankey(threshold, params) {
         
         let cells = annoMatrix.rowIndex.labels();
         cells = Array.isArray(cells) ? cells : Array.from(cells);
-        const cacheString = `${catNames.join(";")}_${layoutChoice.current}_${params.samHVG}_${params.sankeyMethod}_${params.dataLayer}_${params.selectedGenes.join(";")}_${params.geneMetadata}`;
+        const cacheString = `${catNames.join(";")}_${layoutChoice.current}_${params.samHVG}_${params.sankeyMethod}_${params.dataLayer}_${params.selectedGenes.join(";")}_${params.geneMetadata}_${params.numEdges}`;
         dispatch({type: "sankey: set current cache key", key: cacheString})
         if (cacheString in cachedSankey) {
           return [cachedSankey[cacheString],catNames]
