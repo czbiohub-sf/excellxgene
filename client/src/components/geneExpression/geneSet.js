@@ -5,7 +5,6 @@ import LabelInput from "../labelInput";
 import { FaChevronRight, FaChevronDown } from "react-icons/fa";
 import actions from "../../actions";
 import Gene from "./gene";
-import { memoize } from "../../util/dataframe/util";
 import Truncate from "../util/truncate";
 import * as globals from "../../globals";
 import GenesetMenus from "./menus/genesetMenus";
@@ -19,10 +18,10 @@ import HistogramBrush from "../brushableHistogram";
     userDefinedGenes: state.controls.userDefinedGenes,
     userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
     userLoggedIn: state.controls.userInfo ? true : false,
+    layoutChoice: state.layoutChoice
   };
 })
 class GeneSet extends React.Component {
-  _memoGenesToUpper = memoize(this._genesToUpper, (arr) => arr);
 
   constructor(props) {
     super(props);
@@ -38,42 +37,6 @@ class GeneSet extends React.Component {
     };
   }
 
-  _genesToUpper = (listGenes) => {
-    // Has to be a Map to preserve index
-    const upperGenes = new Map();
-    for (let i = 0, { length } = listGenes; i < length; i += 1) {
-      upperGenes.set(listGenes[i].toUpperCase(), i);
-    }
-
-    return upperGenes;
-  };
-
-  fetchGenes = () => {
-    const { world, dispatch, setGenes } = this.props;
-    const varIndexName = world.schema.annotations.var.index;
-
-    const worldGenes = world.varAnnotations.col(varIndexName).asArray();
-
-    const upperGenes = this._genesToUpper(setGenes);
-    const upperWorldGenes = this._memoGenesToUpper(worldGenes);
-
-    dispatch({ type: "bulk user defined gene start" });
-
-    Promise.all(
-      [...upperGenes.keys()].map((upperGene) => {
-        const indexOfGene = upperWorldGenes.get(upperGene);
-
-        return dispatch(
-          actions.requestUserDefinedGene(worldGenes[indexOfGene])
-        );
-      })
-    ).then(
-      () => dispatch({ type: "bulk user defined gene complete" }),
-      () => dispatch({ type: "bulk user defined gene error" })
-    );
-
-    return undefined;
-  };
   updateGeneMetadatas = () => {
     const { dispatch, varMetadata, setGenes } = this.props;
     const { sortDirection } = this.state;
@@ -100,7 +63,7 @@ class GeneSet extends React.Component {
     }
   }
   componentDidUpdate = (prevProps) => {
-    const { setGenes, varMetadata } = this.props;
+    const { setGenes, varMetadata, layoutChoice } = this.props;
     const { setGenes: setGenesPrev, varMetadata: varMetadataPrev } = prevProps;
     if (setGenes !== setGenesPrev) {
       this.setState({
@@ -108,7 +71,7 @@ class GeneSet extends React.Component {
         maxGenePage: Math.ceil((setGenes.length-0.1) / 10) - 1,
       })
       this.updateGeneMetadatas();
-    } else if (varMetadata !== varMetadataPrev) {
+    } else if (varMetadata !== varMetadataPrev || layoutChoice.current !== prevProps.layoutChoice.current) {
       this.updateGeneMetadatas();
     }
     
@@ -255,7 +218,7 @@ class GeneSet extends React.Component {
     }) 
   }  
   renderGenes() {
-    const { setName, setGenes, setGenesWithDescriptions, rightWidth } = this.props;
+    const { setName, allGenes, genesetDescription, setGenes, setGenesWithDescriptions, rightWidth } = this.props;
     const { genePage, removeHistZeros, geneMetadatas, setGenesSorted, geneMetadatasSorted } = this.state;
     let genes = setGenes;
     let genesM = geneMetadatas;
@@ -287,6 +250,8 @@ class GeneSet extends React.Component {
           removeHistZeros={removeHistZeros}
           geneInfo={geneInfo}
           rightWidth={rightWidth}
+          group={genesetDescription}
+          allGenes
         />
       );
     });
@@ -409,6 +374,7 @@ class GeneSet extends React.Component {
               } 
               toggleText={removeHistZeros ? "Include zeros in histograms." : "Exclude zeros in histograms."}
               removeHistZeros={removeHistZeros}
+              group={genesetDescription}
               />
           </div>}
           </div>

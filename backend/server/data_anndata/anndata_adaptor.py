@@ -52,8 +52,6 @@ if current_process().name == 'MainProcess':
     if sys.platform.startswith('linux'):
         set_start_method("spawn")
 
-#config.THREADING_LAYER = 'tbb'
-
 global process_count
 process_count = 0
 
@@ -236,8 +234,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
 
     X = _create_data_from_shm(*shm["X"])
 
-    adata = AnnData(X = X[filt],
-            var = AnnDataDict["var"])
+    adata = AnnData(X = X[filt])
     adata.obs_names = pd.Index(cids[filt])
 
     for k in AnnDataDict['varm'].keys():
@@ -249,7 +246,19 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             l = pickle_loader(f"{direc}/{userID}/obs/{n}.p")[filt]
             if n != "name_0":
                 adata.obs[n] = pd.Categorical(l)        
-             
+
+    fnames = glob(f"{direc}/{userID}/var/*.p")
+    for f in fnames:
+        n = f.split('/')[-1].split('\\')[-1][:-2]
+        if ';;' in n:
+            tlay = n.split(';;')[-1]
+        else:
+            tlay = name
+
+        if name == tlay:
+            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+            if n != "name_0":
+                adata.var[n] = pd.Series(l)              
 
     temp = {}
     for key in nnms.keys():
@@ -446,8 +455,10 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
     if exists(f"{userID}/emb/{name}.p"):
         name = f"{name}_{str(hex(int(time.time())))[2:]}"
         
+
     dims = [f"{name}_0", f"{name}_1"]
     layout_schema = {"name": name, "type": "float32", "dims": dims}
+    nnm_sub = nnm.copy()
 
     IXer = pd.Series(index =np.arange(nnm.shape[0]), data = np.where(obs_mask.flatten())[0])
     x,y = nnm.nonzero()
@@ -471,6 +482,14 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
             
     if (parentParams is not None):
         reembedParams[f"parentParams"]=parentParams
+
+    dataLayer = reembedParams.get("dataLayer","X")
+    obs_mask = AnnDataDict['obs_mask']
+    X = _create_data_from_shm(*shm[dataLayer])[obs_mask]
+
+    var = dispersion_ranking_NN(X,nnm_sub)
+    for k in var.keys():
+        pickle_dumper(np.array(list(var[k])).astype('float'),f"{direc}/{userID}/var/{k};;{name}.p")
 
     pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
     pickle_dumper(X_umap, f"{direc}/{userID}/emb/{name}.p")
@@ -1027,8 +1046,21 @@ def initialize_socket(da):
                     for k in OBS_KEYS:
                         obs[k] = pickle_loader(f"{direc}/{userID}/obs/{k}.p")
                     obs.index = pd.Index(np.arange(obs.shape[0]))
-                    var = da.data.var.copy()
-                    var.index = pd.Index(np.arange(var.shape[0]))
+                    
+                    fnames = glob(f"{direc}/{userID}/var/*.p")
+                    var = pd.DataFrame()
+                    for f in fnames:
+                        n = f.split('/')[-1].split('\\')[-1][:-2]
+                        if ';;' in n:
+                            tlay = n.split(';;')[-1]
+                        else:
+                            tlay = parentName
+
+                        if parentName == tlay:
+                            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                            if n != "name_0":
+                                var[n] = pd.Series(l)
+                    
                     AnnDataDict = {
                         "Xs": layers,
                         "obs": obs,
@@ -1054,9 +1086,23 @@ def initialize_socket(da):
                 params = data.get("params",{"samHVG": False,"numGenes": 2000, "sankeyMethod": "Graph alignment", "selectedGenes": [], "dataLayer": "X", "numEdges": 5})
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
-                var = da.data.var.copy()
-                var.index = pd.Index(np.arange(var.shape[0]))
+               
+                direc = pathlib.Path().absolute()   
+                fnames = glob(f"{direc}/{userID}/var/*.p")
                 
+                var = pd.DataFrame()
+                for f in fnames:
+                    n = f.split('/')[-1].split('\\')[-1][:-2]
+                    if ';;' in n:
+                        tlay = n.split(';;')[-1]
+                    else:
+                        tlay = name
+
+                    if name == tlay:
+                        l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                        if n != "name_0":
+                            var[n] = pd.Series(l)
+                                                              
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
                 if params["sankeyMethod"] == "Graph alignment":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,labels, name, obs_mask, userID, params['numEdges'])              
@@ -1089,7 +1135,7 @@ def initialize_socket(da):
                 for k in da.data.varm.keys():
                     varm[k] = da.data.varm[k]
 
-                AnnDataDict={"Xs":layers, "var": da.data.var, "varm": varm}
+                AnnDataDict={"Xs":layers, "varm": varm}
 
                 _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,AnnDataDict,labelNames,np.array(list(da.data.obs['name_0'])),currentLayout,obs_mask,userID, current_app.hosted_mode)
 
@@ -1202,6 +1248,58 @@ def _initializer(ishm,ishm_csc):
     shm = ishm
     shm_csc = ishm_csc
 
+def dispersion_ranking_NN(X, nnm, weight_mode='rms'):
+    import scipy.sparse as sp
+
+    f = nnm.sum(1).A
+    f[f==0]=1
+    D_avg = (nnm.multiply(1 / f)).dot(X)
+
+    if sp.issparse(D_avg):
+        mu, var = sf.mean_variance_axis(D_avg, axis=0)            
+        if weight_mode == 'rms':
+            D_avg.data[:]=D_avg.data**2
+            mu,_ =sf.mean_variance_axis(D_avg, axis=0)
+            mu=mu**0.5
+            
+        if weight_mode == 'combined':
+            D_avg.data[:]=D_avg.data**2
+            mu2,_ =sf.mean_variance_axis(D_avg, axis=0)
+            mu2=mu2**0.5                
+    else:
+        mu = D_avg.mean(0)
+        var = D_avg.var(0)
+            
+    VARS = {}
+    if weight_mode == 'dispersion' or weight_mode == 'rms' or weight_mode == 'combined':
+        dispersions = np.zeros(var.size)
+        dispersions[mu > 0] = var[mu > 0] / mu[mu > 0]
+        VARS["sam_spatial_dispersions"] = dispersions.copy()
+        
+        if weight_mode == 'combined':
+            dispersions2 = np.zeros(var.size)
+            dispersions2[mu2 > 0] = var[mu2 > 0] / mu2[mu2 > 0]
+            
+
+    elif weight_mode == 'variance':
+        dispersions = var
+        VARS["sam_spatial_variances"] = dispersions.copy()
+    else:
+        raise ValueError('`weight_mode` ',weight_mode,' not recognized.')
+
+    ma = dispersions.max()
+    dispersions[dispersions >= ma] = ma
+
+    weights = ((dispersions / dispersions.max()) ** 0.5).flatten()
+    
+    if weight_mode == 'combined':
+        ma = dispersions2.max()
+        dispersions2[dispersions2 >= ma] = ma
+
+        weights2 = ((dispersions2 / dispersions2.max()) ** 0.5).flatten()
+        weights = np.vstack((weights,weights2)).max(0)
+    VARS['sam_weights']=weights
+    return VARS
 
 class AnndataAdaptor(DataAdaptor):
 
@@ -1429,7 +1527,7 @@ class AnndataAdaptor(DataAdaptor):
 
             if 'connectivities' in adata.obsp.keys():
                 print('Found connectivities adjacency matrix. Computing SAM gene weights...')
-                var = self.dispersion_ranking_NN(adata.X,adata.obsp['connectivities'])
+                var = dispersion_ranking_NN(adata.X,adata.obsp['connectivities'])
                 for k in var.keys():
                     adata.var[k]=var[k]
 
@@ -1477,60 +1575,6 @@ class AnndataAdaptor(DataAdaptor):
                 break
         return root
 
-
-    def dispersion_ranking_NN(self, X, nnm, weight_mode='rms'):
-        import scipy.sparse as sp
-
-        f = nnm.sum(1).A
-        f[f==0]=1
-        D_avg = (nnm.multiply(1 / f)).dot(X)
-
-        if sp.issparse(D_avg):
-            mu, var = sf.mean_variance_axis(D_avg, axis=0)            
-            if weight_mode == 'rms':
-                D_avg.data[:]=D_avg.data**2
-                mu,_ =sf.mean_variance_axis(D_avg, axis=0)
-                mu=mu**0.5
-                
-            if weight_mode == 'combined':
-                D_avg.data[:]=D_avg.data**2
-                mu2,_ =sf.mean_variance_axis(D_avg, axis=0)
-                mu2=mu2**0.5                
-        else:
-            mu = D_avg.mean(0)
-            var = D_avg.var(0)
-                
-        VARS = {}
-        if weight_mode == 'dispersion' or weight_mode == 'rms' or weight_mode == 'combined':
-            dispersions = np.zeros(var.size)
-            dispersions[mu > 0] = var[mu > 0] / mu[mu > 0]
-            VARS["sam_spatial_dispersions"] = dispersions.copy()
-            
-            if weight_mode == 'combined':
-                dispersions2 = np.zeros(var.size)
-                dispersions2[mu2 > 0] = var[mu2 > 0] / mu2[mu2 > 0]
-                
-
-        elif weight_mode == 'variance':
-            dispersions = var
-            VARS["sam_spatial_variances"] = dispersions.copy()
-        else:
-            raise ValueError('`weight_mode` ',weight_mode,' not recognized.')
-
-        ma = dispersions.max()
-        dispersions[dispersions >= ma] = ma
-
-        weights = ((dispersions / dispersions.max()) ** 0.5).flatten()
-        
-        if weight_mode == 'combined':
-            ma = dispersions2.max()
-            dispersions2[dispersions2 >= ma] = ma
-
-            weights2 = ((dispersions2 / dispersions2.max()) ** 0.5).flatten()
-            weights = np.vstack((weights,weights2)).max(0)
-        VARS['sam_weights']=weights
-        return VARS
-
     def _initialize_user_folders(self,userID):
         if not os.path.exists("output/"):
             os.makedirs("output/")
@@ -1541,11 +1585,14 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/params/")
             os.makedirs(f"{userID}/pca/")
             os.makedirs(f"{userID}/obs/")
+            os.makedirs(f"{userID}/var/")
 
             for k in self._obs_init.keys():
                 pickle_dumper(np.array(list(self._obs_init[k]),dtype='object'),f"{userID}/obs/{k}.p")
-                
-            pickle_dumper(np.array(list(self._obs_init.index),dtype='object'),f"{userID}/obs/name_0.p")                
+            pickle_dumper(np.array(list(self._obs_init.index),dtype='object'),f"{userID}/obs/name_0.p")                                
+            for k in self._var_init.keys():
+                pickle_dumper(np.array(list(self._var_init[k]),dtype='object'),f"{userID}/var/{k}.p")
+            pickle_dumper(np.array(list(self._var_init.index),dtype='object'),f"{userID}/var/name_0.p")                
 
             for k in self._obsm_init.keys():
                 k2 = "X_".join(k.split("X_")[1:])
@@ -1565,6 +1612,16 @@ class AnndataAdaptor(DataAdaptor):
                     dtype = dtype.numpy_dtype
                 x = x.astype(dtype)  
                 pickle_dumper(x,f"{userID}/obs/{ann}.p")
+
+            var = glob(f"{userID}/var/*.p")
+            for ann in var:
+                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+                x = pickle_loader(f"{userID}/var/{ann}.p")
+                dtype = x.dtype
+                if hasattr(dtype,'numpy_dtype'):
+                    dtype = dtype.numpy_dtype
+                x = x.astype(dtype)  
+                pickle_dumper(x,f"{userID}/var/{ann}.p")                
 
     def _validate_and_initialize(self):
         if anndata_version_is_pre_070():
@@ -1596,6 +1653,11 @@ class AnndataAdaptor(DataAdaptor):
             #sam.adata.obs[k] = pd.Categorical(sam.adata.obs[k].astype('str'))        
         self._obsm_init = self.data.obsm
         self._obs_init = self.data.obs
+        l = []
+        for i in self.data.var.keys():
+            if ";;tMean" in i:
+                l.append(i)
+        self._var_init = self.data.var.drop(labels=l,axis=1)
         self._uns_init = self.data.uns
         self._obsp_init = self.data.obsp
 
@@ -1606,8 +1668,10 @@ class AnndataAdaptor(DataAdaptor):
 
         self.data.obsm[self.rootName] = self._obsm_init[self.rootName]
         self.data.obs["name_0"] = self._obs_init["name_0"]
+        self.data.var["name_0"] = self._var_init["name_0"]
 
         self._obs_init = self._obs_init.set_index("name_0")
+        self._var_init = self._var_init.set_index("name_0")
 
 
         # heuristic
@@ -1683,9 +1747,15 @@ class AnndataAdaptor(DataAdaptor):
             else:
                 df = self.data.obs
         else:
-            df = self.data.var
+            if labels is not None and not labels.empty:
+                labels["name_0"] = list(self.data.var["name_0"])
+                df = labels
+            else:
+                df = self.data.var
+        
         if fields is not None and len(fields) > 0:
             df = df[fields]
+        
         return encode_matrix_fbs(df, col_idx=df.columns)
 
     def get_embedding_names(self):

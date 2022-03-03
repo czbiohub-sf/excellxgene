@@ -1,3 +1,5 @@
+import _ from "lodash";
+
 /**
  * Gene set state. Geneset UI state is in a different reducer.
  *
@@ -26,7 +28,7 @@ const GeneSets = (
   state = {
     initialized: false,
     lastTid: undefined,
-    genesets: new Map(),
+    genesets: {},
     diffExpListsLists: [],
     diffExpListsNames: []
   },
@@ -43,33 +45,7 @@ const GeneSets = (
     case "geneset: initial load": {
       const { data } = action;
 
-      if (
-        !data ||
-        typeof data.tid !== "number" ||
-        !Array.isArray(data.genesets)
-      )
-        throw new Error("missing or malformed JSON response");
-
-      const lastTid = data.tid;
-      const genesetsData = data.genesets;
-      const genesets = new Map();
-
-      for (const gsData of genesetsData) {
-        const genes = new Map();
-        for (const gene of gsData.genes) {
-          genes.set(gene.gene_symbol, {
-            geneSymbol: gene.gene_symbol,
-            geneDescription: gene?.gene_description ?? "",
-          });
-        }
-        const gs = {
-          genesetName: gsData.geneset_name,
-          genesetDescription: gsData?.geneset_description ?? "",
-          genes,
-        };
-        genesets.set(gsData.geneset_name, gs);
-      }
-
+      const { tid: lastTid, genesets } = data;
       return {
         ...state,
         initialized: true,
@@ -95,20 +71,13 @@ const GeneSets = (
         genesetDescription === undefined
       )
         throw new Error("geneset: create -- name or description unspecified.");
-      if (state.genesets.has(genesetName))
-        throw new Error("geneset: create -- name already defined.");
 
-      const genesets = new Map([
-        [
-          genesetName,
-          {
-            genesetName,
-            genesetDescription,
-            genes: new Map(),
-          },
-        ],
-        ...state.genesets,
-      ]); // clone and add new geneset to beginning
+      const genesets = {...state.genesets};
+      const gs = genesets?.[genesetDescription] ?? {};
+      const symbols = gs?.[genesetName] ?? [];
+      
+      genesets[genesetDescription] = gs;
+      genesets[genesetDescription][genesetName] = symbols;
 
       return {
         ...state,
@@ -124,92 +93,105 @@ const GeneSets = (
      * }
      */
     case "geneset: delete": {
-      const { genesetName } = action;
-      if (!state.genesets.has(genesetName))
+      const { genesetDescription, genesetName } = action;
+      if (!(genesetDescription in state.genesets))
+        throw new Error("geneset: delete -- geneset group does not exist.");
+      if (!(genesetName in state.genesets[genesetDescription]))
         throw new Error("geneset: delete -- geneset name does not exist.");
 
-      const genesets = new Map(state.genesets); // clone
-      genesets.delete(genesetName);
+      const genesets = {...state.genesets}; // clone
+      const gs = genesets[genesetDescription];
+      const {[genesetName]: _, ...gsNew} = gs;
+      genesets[genesetDescription] = gsNew;
       return {
         ...state,
         genesets,
       };
     }
-    case "geneset: batch delete": {
-      const { genesetNames } = action;
-      const genesets = new Map(state.genesets); // clone
-
-      for (const genesetName of genesetNames) {
-        if (!state.genesets.has(genesetName))
-          throw new Error("geneset: delete -- geneset name does not exist.");
-        genesets.delete(genesetName);
-      }
+    case "geneset: group delete": {
+      const { genesetDescription } = action;
+      const {[genesetDescription]: _, ...genesetsNew} = state.genesets;
       return {
         ...state,
-        genesets,
+        genesets: genesetsNew
       };
     }    
 
-    /**
-     * Update the named geneset with a new name and description.  Preserves the existing
-     * order of the geneset, even when the genesetName changes.
-     * {
-     *    type: "geneset: update",
-     *    genesetName: string, current name of geneset to be updated
-     *    update: {
-     *        genesetName: string, new name
-     *        genesetDescription: string, new description
-     *    }
-     * }
-     *
-     * For example, if you want to update JUST the description:
-     *   dispatch({
-     *     action: "geneset: update",
-     *     genesetName: "foo",
-     *     update: { genesetName: "foo", genesetDescription: "a new description"}
-     *   })
-     */
     case "geneset: update": {
-      const { genesetName, update } = action;
+      const { genesetDescription, genesetName, update } = action;
 
-      if (
-        typeof genesetName !== "string" ||
-        !genesetName ||
-        !state.genesets.has(genesetName)
-      )
-        throw new Error(
-          "geneset: update -- geneset name unspecified or does not exist."
-        );
+      
+      if (!(genesetDescription in state.genesets))
+        throw new Error("geneset: update -- geneset group does not exist.");
 
-      /* now that we've confirmed the gene set exists, check for duplicates */
-      const genesetNameIsDuplicate = state.genesets.has(update.genesetName);
-      const descriptionIsDuplicate =
-        state.genesets.get(update.genesetName) &&
-        state.genesets.get(update.genesetName).genesetDescription ===
-          update.genesetDescription;
+      if (genesetName) {
+        if (!(genesetName in state.genesets[genesetDescription]))
+          throw new Error("geneset: update -- geneset name does not exist.");
 
-      if (genesetNameIsDuplicate && descriptionIsDuplicate)
-        throw new Error(
-          "geneset: update -- update specified existing name and description."
-        );
+        /* now that we've confirmed the gene set exists, check for duplicates */
+        const descriptionIsDuplicate = update.genesetDescription in state.genesets;
+        let genesetNameIsDuplicate;
+        if (descriptionIsDuplicate){
+          genesetNameIsDuplicate = update.genesetName in state.genesets[update.genesetDescription];
+        } else {
+          genesetNameIsDuplicate = false;
+        }
 
-      const prevGs = state.genesets.get(genesetName);
-      const newGs = {
-        ...update,
-        genes: prevGs.genes,
-      }; // clone
-
-      // clone the map, preserving current insert order, but mapping name->newName.
-      const genesets = new Map();
-      for (const [name, gs] of state.genesets) {
-        if (name === genesetName) genesets.set(newGs.genesetName, newGs);
-        else genesets.set(name, gs);
-      }
-
-      return {
-        ...state,
-        genesets,
-      };
+        if (genesetNameIsDuplicate && descriptionIsDuplicate)
+          throw new Error(
+            "geneset: update -- update specified existing name and description."
+          );
+        
+        
+        const newGenesets = {};
+        const genesets = state.genesets;
+        
+        for (const key in genesets) {
+          if (key === genesetDescription) {
+            if (!(genesetDescription in newGenesets)){
+              newGenesets[genesetDescription] = {};          
+            }
+            if (!(update.genesetDescription in newGenesets)){
+              newGenesets[update.genesetDescription] = {};
+            }
+          } else {
+            if (!(key in newGenesets)){
+              newGenesets[key] = {};
+            }
+          }
+          
+          
+          for (const key2 in genesets[key]) {
+            if (key === genesetDescription && key2 === genesetName) {
+              newGenesets[update.genesetDescription][update.genesetName] = genesets[key][key2]
+            } else {
+              newGenesets[key][key2] = genesets[key][key2]
+            }
+          }
+          if (Object.keys(newGenesets[key]).length === 0) {
+            delete newGenesets[key];
+          }
+        }
+        return {
+          ...state,
+          genesets: newGenesets,
+        };          
+      } else {
+        const newGenesets = {};
+        const genesets = state.genesets;
+        
+        for (const key in genesets) {
+          if (key === genesetDescription) {
+            newGenesets[update.genesetDescription] = {...genesets[key]};
+          } else {
+            newGenesets[key] = {...genesets[key]}
+          }         
+        }
+        return {
+          ...state,
+          genesets: newGenesets,
+        }; 
+      }        
     }
 
     /**
@@ -232,32 +214,19 @@ const GeneSets = (
      *   });
      */
     case "geneset: add genes": {
-      const { genesetName, genes } = action;
-
-      if (!state.genesets.has(genesetName))
-        throw new Error("geneset: add genes -- geneset name does not exist.");
-
-      // clone
-      const genesets = new Map(state.genesets);
-      const gs = {
-        ...genesets.get(genesetName),
-        genes: new Map(genesets.get(genesetName).genes),
-      };
-      genesets.set(genesetName, gs);
+      const { genesetDescription, genesetName, genes } = action;
+      if (!(genesetDescription in state.genesets))
+        throw new Error("geneset: add genes -- geneset group does not exist.");
+      if (!(genesetName in state.genesets[genesetDescription]))
+        throw new Error("geneset: add genes -- geneset name does not exist.");        
 
       // add
-      const newGenes = gs.genes;
-      for (const gene of genes) {
-        const { geneSymbol } = gene;
-        const geneDescription = gene?.geneDescription ?? "";
-        // ignore genes already present
-        if (!newGenes.has(geneSymbol))
-          newGenes.set(geneSymbol, {
-            geneSymbol,
-            geneDescription,
-          });
-      }
+      const union = [...new Set([...state.genesets[genesetDescription][genesetName],...genes])];
 
+      const genesets = {...state.genesets};
+      const gs = {...genesets[genesetDescription]}
+      gs[genesetName] = union;
+      genesets[genesetDescription] = gs;
       return {
         ...state,
         genesets,
@@ -281,79 +250,20 @@ const GeneSets = (
      *  })
      */
     case "geneset: delete genes": {
-      const { genesetName, geneSymbols } = action;
-      if (!state.genesets.has(genesetName))
-        throw new Error(
-          "geneset: delete genes -- geneset name does not exist."
-        );
+      const { genesetDescription, genesetName, geneSymbols } = action;
+      if (!(genesetDescription in state.genesets))
+        throw new Error("geneset: add genes -- geneset group does not exist.");
+      if (!(genesetName in state.genesets[genesetDescription]))
+        throw new Error("geneset: add genes -- geneset name does not exist.");        
 
-      // clone
-      const genesets = new Map(state.genesets);
-      const gs = {
-        ...genesets.get(genesetName),
-        genes: new Map(genesets.get(genesetName).genes),
-      };
-      genesets.set(genesetName, gs);
-
-      // delete
-      const { genes } = gs;
+      const genesets = {...state.genesets};
+      const gs = {...state.genesets[genesetDescription]}
+      let genes = gs[genesetName].slice();
       for (const geneSymbol of geneSymbols) {
-        genes.delete(geneSymbol);
+        genes = genes.filter(item => item !== geneSymbol)
       }
-      return {
-        ...state,
-        genesets,
-      };
-    }
-
-    /**
-     * Set/update the description of the gene.  NOTE that this does not allow the name
-     * of the gene to change - only "geneset: add" and "geneset: delete" can change
-     * the genes in a geneset.  Use this to update a gene description AFTER you add it
-     * to the geneset.
-     * {
-     *    type: "geneset: set gene description",
-     *    genesetName: <string>, // the geneset to update
-     *    update: {
-     *      geneSymbol: <string>, // the gene to update, MUST exist already in the geneset
-     *      geneDescription: <string>
-     *    }
-     * }
-     *
-     * Example:
-     *  dispatch({
-     *      type: "geneset: set gene description",
-     *      genesetName: "my fav geneset",
-     *      update: {
-     *        geneSymbol: "F5",
-     *        geneDescription: "tada, moar description"
-     *      }
-     *  })
-     */
-    case "geneset: set gene description": {
-      const { genesetName, update } = action;
-      if (!state.genesets.has(genesetName))
-        throw new Error(
-          "geneset: set gene description -- geneset name does not exist."
-        );
-
-      // clone
-      const genesets = new Map(state.genesets);
-      const gs = {
-        ...genesets.get(genesetName),
-        genes: new Map(genesets.get(genesetName).genes),
-      };
-      genesets.set(genesetName, gs);
-
-      const { geneSymbol, geneDescription } = update;
-      const gene = gs.genes.get(geneSymbol);
-      if (!gene)
-        throw new Error("geneset: set gene description -- no such gene");
-      gs.genes.set(geneSymbol, {
-        geneSymbol,
-        geneDescription,
-      });
-
+      gs[genesetName] = genes;
+      genesets[genesetDescription] = gs;
       return {
         ...state,
         genesets,
@@ -376,35 +286,18 @@ const GeneSets = (
     }
     case "request differential expression all success": {
       const { dataList, nameList, dateString, grouping } = action;
-      const diffExpGeneSets = [];
+      const genesets = {...state.genesets};
+      genesets[`${grouping} (${dateString})`] = {};
 
       for (const [i, data] of dataList.entries()) {
         const name = nameList[i];
 
-        const genesetNames = {
-          positive: `${name} : (${dateString})`,
-        };
-  
-        for (const polarity of Object.keys(genesetNames)) {
-          const genes = new Map(
-            data[polarity].map((diffExpGene) => [
-              diffExpGene[0],
-              {
-                geneSymbol: diffExpGene[0],
-              },
-            ])
-          );
-          diffExpGeneSets.push([
-            genesetNames[polarity],
-            {
-              genesetName: genesetNames[polarity],
-              genesetDescription: `${grouping} (${dateString})`,
-              genes,
-            },
-          ]);
-        }
+        const polarity = `${name}`;
+        const genes = data['positive'].map((diffExpGene) =>
+            diffExpGene[0])
+        genesets[`${grouping} (${dateString})`][polarity] = genes;
+
       }
-      const genesets = new Map([...diffExpGeneSets, ...state.genesets]); // clone
       return {
         ...state,
         genesets,
@@ -428,32 +321,18 @@ const GeneSets = (
       const dateString = new Date().toLocaleString();
 
       const genesetNames = {
-        positive: `Pop1 high : (${dateString})`,
-        negative: `Pop2 high : (${dateString})`,
+        positive: `Pop1 high`,
+        negative: `Pop2 high`,
       };
+      
+      const genesets = {...state.genesets};
+      genesets[`${dateString}`] = {};
 
-      const diffExpGeneSets = [];
       for (const polarity of Object.keys(genesetNames)) {
-        const genes = new Map(
-          data[polarity].map((diffExpGene) => [
-            diffExpGene[0],
-            {
-              geneSymbol: diffExpGene[0],
-            },
-          ])
-        );
-        diffExpGeneSets.push([
-          genesetNames[polarity],
-          {
-            genesetName: genesetNames[polarity],
-            genesetDescription: `${dateString}`,
-            genes,
-          },
-        ]);
+        const genes = data[polarity].map((diffExpGene) =>
+            diffExpGene[0])
+        genesets[`${dateString}`][genesetNames[polarity]] = genes;
       }
-
-      const genesets = new Map([...diffExpGeneSets, ...state.genesets]); // clone
-
       return {
         ...state,
         genesets,

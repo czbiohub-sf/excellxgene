@@ -26,8 +26,8 @@ class AnnoDialog extends React.PureComponent {
       secondaryButtonText,
       handleSecondaryButtonSubmit,
       primaryButtonProps,
+      allowEmpty
     } = this.props;
-
     return (
       <Dialog icon="tag" title={title} isOpen={isActive} onClose={handleCancel}>
         <form
@@ -67,7 +67,7 @@ class AnnoDialog extends React.PureComponent {
               {handleSecondaryButtonSubmit && secondaryButtonText ? (
                 <Button
                   onClick={handleSecondaryButtonSubmit}
-                  disabled={!text || validationError}
+                  disabled={(!text && !allowEmpty) || validationError}
                   intent="none"
                   type="button"
                 >
@@ -77,7 +77,7 @@ class AnnoDialog extends React.PureComponent {
               <Button
                 {...primaryButtonProps} // eslint-disable-line react/jsx-props-no-spreading -- Spreading props allows for modularity
                 onClick={handleSubmit}
-                disabled={!text || validationError}
+                disabled={(!text && !allowEmpty) || validationError}
                 intent="primary"
                 type="submit"
               >

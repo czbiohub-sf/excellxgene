@@ -505,7 +505,7 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
   const state = getState();
 
   // bail if gene sets not available, or in readonly mode.
-  const { config, controls } = state;
+  const { config } = state;
   const { lastTid, genesets } = state.genesets;
 
   const genesetsAreAvailable =
@@ -526,24 +526,13 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
 
   /* Create the JSON OTA data structure */
   const tid = (lastTid ?? 0) + 1;
-  const genesetsOTA = [];
-  for (const [name, gs] of genesets) {
-    const genes = [];
-    for (const g of gs.genes.values()) {
-      genes.push({
-        gene_symbol: g.geneSymbol,
-        gene_description: g.geneDescription,
-      });
-    }
-    genesetsOTA.push({
-      geneset_name: name,
-      geneset_description: gs.genesetDescription,
-      genes,
-    });
-  }
+  //const gs = [];
+  //for (const key in genesets) {
+  //  gs.push({...genesets[key], genesetGroupID: key})
+  //}
   const ota = {
     tid,
-    genesets: genesetsOTA,
+    genesets,
   };
 
   /* Save to server */

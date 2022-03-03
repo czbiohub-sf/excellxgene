@@ -85,10 +85,10 @@ const ColorsReducer = (
 
       const resetCurrent =
         action.type === state.colorMode &&
-        action.geneset === state.colorAccessor;
+        `${action.group}::${action.geneset}` === state.colorAccessor;
       
       const colorMode = !resetCurrent ? action.type : null;
-      const colorAccessor = !resetCurrent ? action.geneset : null;
+      const colorAccessor = !resetCurrent ? `${action.group}::${action.geneset}` : null;
       return {
         ...state,
         colorMode,

@@ -37,6 +37,7 @@ class RenameGeneset extends React.PureComponent {
 
     dispatch({
       type: "geneset: update",
+      genesetDescription: genesetsUI.isEditingGenesetGroup,
       genesetName: genesetsUI.isEditingGenesetName,
       update: {
         genesetName: newGenesetName,
@@ -78,10 +79,10 @@ class RenameGeneset extends React.PureComponent {
           primaryButtonProps={{
             "data-testid": `${genesetsUI.isEditingGenesetName}:submit-geneset`,
           }}
-          title="Edit gene set name and description"
+          title="Edit gene set name and grouping"
           instruction={`Rename ${name.split(' : (').at(0)}`}
           cancelTooltipContent="Close this dialog without renaming the gene set."
-          primaryButtonText="Edit gene set name and description"
+          primaryButtonText="Edit gene set name and grouping"
           text={newGenesetName}
           secondaryText={newGenesetDescription}
           validationError={
@@ -100,7 +101,7 @@ class RenameGeneset extends React.PureComponent {
               }}
             />
           }
-          secondaryInstructions="Edit description"
+          secondaryInstructions="Edit geneset group name"
           secondaryInput={
             <LabelInput
               label={newGenesetDescription}

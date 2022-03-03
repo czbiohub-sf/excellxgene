@@ -90,12 +90,16 @@ export const DgeHotkeys = (props) => {
         global: true,
         label: "Run differential expression.",
         onKeyDown: () =>
-          dispatch(
-            actions.requestDifferentialExpression(
-              differential.celllist1,
-              differential.celllist2
+        {
+          if ((differential.celllist1?.length ?? 0 > 0) && (differential.celllist2?.length ?? 0 > 0)) {
+            dispatch(
+              actions.requestDifferentialExpression(
+                differential.celllist1,
+                differential.celllist2
+              )
             )
-          ),
+          }      
+        }
       },
     ],
     [differential]
@@ -124,17 +128,34 @@ export const GenesetHotkeys = (props) => {
       {
         combo: "SHIFT+Q",
         global: true,
-        label: "Delete the most recent geneset.",
+        label: "Delete the most recent geneset group.",
         onKeyDown: async () => {
-          const geneset = Array.from(genesets.values())[0]?.genesetDescription;
+          const group = Object.keys(genesets).filter(item => item !== "")[0];
+          if (group) {
+            dispatch({
+              type: "color by nothing"
+            });
+            dispatch(actions.genesetDeleteGroup(group));
+          }
+        },
+      },
+      {
+        combo: "SHIFT+G",
+        global: true,
+        label: "Delete the most recent ungrouped geneset.",
+        onKeyDown: async () => {
+          let geneset;
+          if ("" in genesets) {
+            geneset = Object.keys(genesets[""])[0];
+          }
           if (geneset) {
             dispatch({
               type: "color by nothing"
             });
-            dispatch(actions.genesetDeleteGroup(geneset));
+            dispatch(actions.genesetDelete("", geneset));
           }
         },
-      },
+      },      
     ],
     [genesets]
   );

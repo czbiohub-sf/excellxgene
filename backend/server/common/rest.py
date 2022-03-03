@@ -144,13 +144,21 @@ def schema_get_helper(data_adaptor):
     
     for ax in Axis:
         if str(ax) == "var":
-            curr_axis = getattr(data_adaptor.data, "var")
-            for ann in curr_axis:
+            fns = glob(f"{userID}/var/*.p")
+            for ann in fns:
+                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+                x = pickle_loader(f"{userID}/var/{ann}.p")
                 ann_schema = {"name": ann, "writable": True}
-                ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-                if ann_schema['type']!='categorical':
-                    ann_schema['writable']=False
+                ann_schema.update(get_schema_type_hint_of_array(x))
                 schema["annotations"]["var"]["columns"].append(ann_schema)
+            
+            ann = "name_0"
+            curr_axis = data_adaptor.data.var
+            ann_schema = {"name": ann, "writable": True}
+            ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
+            if ann_schema['type']!='categorical':
+                ann_schema['writable']=False
+            schema["annotations"][ax]["columns"].append(ann_schema)
         elif str(ax) == "obs":
             fns = glob(f"{userID}/obs/*.p")
             for ann in fns:
@@ -181,8 +189,17 @@ def schema_get(data_adaptor):
 def gene_info_get(request,data_adaptor):
     gene = request.args.get("gene", None)
     varM = request.args.get("varM", None)    
+    name = request.args.get("embName",None)
+    userID = _get_user_id(data_adaptor)
+    direc = pathlib.Path().absolute()    
+
     if varM is not None and gene is not None:
-        return make_response(jsonify({"response": data_adaptor.data.var.set_index("name_0")[varM][gene]}), HTTPStatus.OK)
+        try:
+            X = pickle_loader(f"{direc}/{userID}/var/{varM};;{name}.p")
+        except:
+            X = pickle_loader(f"{direc}/{userID}/var/{varM}.p")
+        n = pickle_loader(f"{direc}/{userID}/var/name_0.p")                    
+        return make_response(jsonify({"response": X[n==gene]}), HTTPStatus.OK)
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
 
@@ -190,8 +207,18 @@ def gene_info_bulk_put(request,data_adaptor):
     args = request.get_json()
     geneSet = args['geneSet']
     varM = args['varMetadata']
+    name = args.get("embName",None)
+    userID = _get_user_id(data_adaptor)
+    direc = pathlib.Path().absolute()  
+
     if varM != "":
-        return make_response(jsonify({"response": list(data_adaptor.data.var.set_index("name_0")[varM][geneSet])}), HTTPStatus.OK)
+        try:
+            X = pickle_loader(f"{direc}/{userID}/var/{varM};;{name}.p")
+        except:
+            X = pickle_loader(f"{direc}/{userID}/var/{varM}.p")
+        n = pickle_loader(f"{direc}/{userID}/var/name_0.p")   
+
+        return make_response(jsonify({"response": list(pd.Series(data=X,index=n)[geneSet].values)}), HTTPStatus.OK)
     else:
         return make_response(jsonify({"response": "ok"}), HTTPStatus.OK)        
 
@@ -228,6 +255,54 @@ def annotations_obs_get(request, data_adaptor):
     except KeyError as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
+def annotations_var_get(request, data_adaptor):
+    fields = request.args.getlist("annotation-name", None)
+    name = request.args.get("embName", None)
+    num_columns_requested = len(data_adaptor.get_var_keys()) if len(fields) == 0 else len(fields)
+    if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
+        return abort(HTTPStatus.BAD_REQUEST)
+    preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
+    if preferred_mimetype != "application/octet-stream":
+        return abort(HTTPStatus.NOT_ACCEPTABLE)
+
+    try:
+        labels = None
+        annotations = data_adaptor.dataset_config.user_annotations
+        if annotations.user_annotations_enabled():
+            userID = _get_user_id(data_adaptor)
+            labels=pd.DataFrame()
+            for f in fields:
+                try:
+                    labels[f] = pickle_loader(f"{userID}/var/{f};;{name}.p")
+                except:
+                    labels[f] = pickle_loader(f"{userID}/var/{f}.p")
+            labels.index = pd.Index(np.array(list(data_adaptor.data.var['name_0']),dtype='object'))
+        fbs = data_adaptor.annotation_to_fbs_matrix(Axis.VAR, fields, labels)
+        return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
+    except KeyError as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
+def annotations_var_put(request, data_adaptor):
+    annotations = data_adaptor.dataset_config.user_annotations
+    if not annotations.user_annotations_enabled():
+        return abort(HTTPStatus.NOT_IMPLEMENTED)
+
+    anno_collection = request.args.get("annotation-collection-name", default=None)
+    name = request.args.get("embName", default=None)
+    fbs = inflate(request.get_data())
+
+    if anno_collection is not None:
+        if not annotations.is_safe_collection_name(anno_collection):
+            return abort(HTTPStatus.BAD_REQUEST, "Bad annotation collection name")
+        annotations.set_collection(anno_collection)
+
+    try:
+        annotations_put_fbs_helper_var(data_adaptor, fbs, name)
+        res = json.dumps({"status": "OK"})
+        return make_response(res, HTTPStatus.OK, {"Content-Type": "application/json"})
+    except (ValueError, DisabledFeatureError, KeyError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def pickle_dumper(x,fn):
     with open(fn,"wb") as f:
@@ -252,7 +327,55 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
         for col in new_label_df:
             pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),f"{userID}/obs/{col}.p")
 
+def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
+    """helper function to write annotations from fbs"""
+    annotations = data_adaptor.dataset_config.user_annotations
+    if not annotations.user_annotations_enabled():
+        raise DisabledFeatureError("Writable annotations are not enabled")
 
+    new_label_df = decode_matrix_fbs(fbs)
+    if not new_label_df.empty:
+        new_label_df = check_new_labels_var(new_label_df)
+    if not new_label_df.empty:
+        userID = _get_user_id(data_adaptor)
+        for col in new_label_df:
+            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),f"{userID}/var/{col};;{name}.p")
+
+def check_new_labels_var(self, labels_df):
+    """Check the new annotations labels, then set the labels_df index"""
+    if labels_df is None or labels_df.empty:
+        return
+
+    labels_df.index = self.get_var_index()
+    if labels_df.index.name is None:
+        labels_df.index.name = "index"
+
+    # all labels must have a name, which must be unique and not used in obs column names
+    if not labels_df.columns.is_unique:
+        raise KeyError("All column names specified in user annotations must be unique.")
+
+    # the label index must be unique, and must have same values the anndata obs index
+    if not labels_df.index.is_unique:
+        raise KeyError("All row index values specified in user annotations must be unique.")
+
+    # labels must have same count as obs annotations
+    shape = self.get_shape()
+    if labels_df.shape[0] != shape[0]:
+        raise ValueError("Labels file must have same number of rows as data file.")
+
+    # This will convert a float column that contains integer data into an integer type.
+    # This case can occur when a user makes a copy of a category that originally contained integer data.
+    # The client always copies array data to floats, therefore the copy will contain floats instead of integers.
+    # float data is not allowed as a categorical type.
+    if any([np.issubdtype(coltype.type, np.floating) for coltype in labels_df.dtypes]):
+        labels_df = labels_df.convert_dtypes()
+        for col, dtype in zip(labels_df, labels_df.dtypes):
+            if isinstance(dtype, pd.Int32Dtype):
+                labels_df[col] = labels_df[col].astype("int32")
+            if isinstance(dtype, pd.Int64Dtype):
+                labels_df[col] = labels_df[col].astype("int64")
+    
+    return labels_df
 
 def inflate(data):
     return zlib.decompress(data)
@@ -276,25 +399,6 @@ def annotations_obs_put(request, data_adaptor):
         res = json.dumps({"status": "OK"})
         return make_response(res, HTTPStatus.OK, {"Content-Type": "application/json"})
     except (ValueError, DisabledFeatureError, KeyError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
-
-def annotations_var_get(request, data_adaptor):
-    fields = request.args.getlist("annotation-name", None)
-    num_columns_requested = len(data_adaptor.get_var_keys()) if len(fields) == 0 else len(fields)
-    if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
-        return abort(HTTPStatus.BAD_REQUEST)
-    preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
-    if preferred_mimetype != "application/octet-stream":
-        return abort(HTTPStatus.NOT_ACCEPTABLE)
-
-    try:
-        labels = None
-        return make_response(
-            data_adaptor.annotation_to_fbs_matrix(Axis.VAR, fields, labels),
-            HTTPStatus.OK,
-            {"Content-Type": "application/octet-stream"},
-        )
-    except KeyError as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
@@ -495,7 +599,12 @@ def delete_obsm_put(request, data_adaptor):
             if os.path.exists(f"{userID}/params/{embName}.p"):
                 os.remove(f"{userID}/params/{embName}.p")                
             if os.path.exists(f"{userID}/pca/{embName}.p"):
-                os.remove(f"{userID}/pca/{embName}.p")                                
+                os.remove(f"{userID}/pca/{embName}.p")           
+
+            fns = glob(f"{userID}/var/*.p")
+            for f in fns:
+                if ";;"+embName in f:
+                    os.remove(f)
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
@@ -580,6 +689,11 @@ def rename_obsm_put(request, data_adaptor):
                 os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{newItem}.p")
             if os.path.exists(f"{userID}/pca/{embName}.p"):
                 os.rename(f"{userID}/pca/{embName}.p",f"{userID}/pca/{newItem}.p")
+            
+            fns = glob(f"{userID}/var/*.p")
+            for f in fns:
+                if ";;"+embName in f:
+                    os.rename(f,f.replace(embName,newItem))              
     try:
         layout_schema = {"name": newName, "type": "float32", "dims": [f"{newName}_0", f"{newName}_1"]}
         return make_response(jsonify({"schema": layout_schema}), HTTPStatus.OK, {"Content-Type": "application/json"})
@@ -702,25 +816,27 @@ def genesets_get(request, data_adaptor):
     if preferred_mimetype not in ("application/json", "text/csv"):
         return abort(HTTPStatus.NOT_ACCEPTABLE)
 
-    try:
-        annotations = data_adaptor.dataset_config.user_annotations
-        (genesets, tid) = annotations.read_gene_sets(data_adaptor)
+    annotations = data_adaptor.dataset_config.user_annotations
+    (genesets, tid) = annotations.read_gene_sets(data_adaptor)
+    
+    for k in list(genesets.keys()):
+        if len(genesets[k])==0:
+            del genesets[k]
+    
+    if preferred_mimetype == "text/csv":
+        return make_response(
+            annotations.gene_sets_to_csv(genesets),
+            HTTPStatus.OK,
+            {
+                "Content-Type": "text/csv",
+                "Content-Disposition": "attachment; filename=genesets.csv",
+            },
+        )
+    else:
+        return make_response(
+            jsonify({"genesets": genesets, "tid": tid}), HTTPStatus.OK
+        )
 
-        if preferred_mimetype == "text/csv":
-            return make_response(
-                annotations.gene_sets_to_csv(genesets),
-                HTTPStatus.OK,
-                {
-                    "Content-Type": "text/csv",
-                    "Content-Disposition": "attachment; filename=genesets.csv",
-                },
-            )
-        else:
-            return make_response(
-                jsonify({"genesets": annotations.gene_sets_to_response(genesets), "tid": tid}), HTTPStatus.OK
-            )
-    except (ValueError, KeyError, AnnotationsError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e))
 
 def reembed_parameters_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
@@ -757,19 +873,14 @@ def genesets_put(request, data_adaptor):
         annotations.set_collection(anno_collection)
 
     args = request.get_json()
-    try:
-        genesets = args.get("genesets", None)
-        tid = args.get("tid", None)
-        if genesets is None:
-            abort(HTTPStatus.BAD_REQUEST)
+    genesets = args.get("genesets", None)
+    tid = args.get("tid", None)
+    if genesets is None:
+        abort(HTTPStatus.BAD_REQUEST)
 
-        annotations.write_gene_sets(genesets, tid, data_adaptor)
-        return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
-    except (ValueError, DisabledFeatureError, KeyError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
-    except (ObsoleteRequest, TypeError) as e:
-        return abort(HTTPStatus.NOT_FOUND, description=str(e))
-
+    annotations.write_gene_sets(genesets, tid, data_adaptor)
+    return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
+   
 def genesets_rename_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
     if not annotations.gene_sets_save_enabled():
@@ -782,22 +893,18 @@ def genesets_rename_put(request, data_adaptor):
         annotations.set_collection(anno_collection)
 
     args = request.get_json()
-    try:
-        oldName = args.get("oldName", None)
-        newName = args.get("newName", None)
-        if oldName is None or newName is None:
-            abort(HTTPStatus.BAD_REQUEST)
+    
+    oldName = args.get("oldName", None)
+    newName = args.get("newName", None)
+    if oldName is None or newName is None:
+        abort(HTTPStatus.BAD_REQUEST)
 
-        genesets, _ = annotations.read_gene_sets(data_adaptor)
-        for k in genesets.keys():
-            geneset = genesets[k]
-            if geneset["geneset_description"] == oldName:
-                geneset["geneset_description"] = newName
+    genesets, _ = annotations.read_gene_sets(data_adaptor)
+    genesets[newName] = genesets[oldName]
+    del genesets[oldName]
+    annotations.write_gene_sets(genesets, annotations.last_geneset_tid+1, data_adaptor)
+    return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
 
-        annotations.write_gene_sets(genesets, annotations.last_geneset_tid+1, data_adaptor)
-        return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
-    except (ValueError, DisabledFeatureError, KeyError, Exception) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
 def summarize_var_helper(request, data_adaptor, key, raw_query):

@@ -112,17 +112,6 @@ class Annotations(metaclass=ABCMeta):
         """
         from io import StringIO
 
-        if isinstance(genesets, dict):
-            genesets = genesets.values()
-
         with StringIO() as sio:
             write_gene_sets_tidycsv(sio, genesets)
             return sio.getvalue()
-
-    @staticmethod
-    def gene_sets_to_response(genesets):
-        """
-        Convert the internal gene sets format (returned by read_gene_set) into
-        the dict expected by the JSON REST API
-        """
-        return list(genesets.values())

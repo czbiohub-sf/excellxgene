@@ -57,8 +57,8 @@ class Gene extends React.Component {
   };
 
   handleDeleteGeneFromSet = () => {
-    const { dispatch, gene, geneset } = this.props;
-    dispatch(actions.genesetDeleteGenes(geneset, [gene]));
+    const { dispatch, group, gene, geneset } = this.props;
+    dispatch(actions.genesetDeleteGenes(group, geneset, [gene]));
   };
   toggleOff = () => {
     const { dispatch, gene } = this.props;
@@ -82,7 +82,8 @@ class Gene extends React.Component {
       geneInfo,
       userLoggedIn,
       isSelected,
-      rightWidth
+      rightWidth,
+      allGenes
     } = this.props;
     const { geneIsExpanded } = this.state;
     const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0) + Math.max(0,(rightWidth - globals.rightSidebarWidth));
@@ -156,7 +157,7 @@ class Gene extends React.Component {
             </div>
           </div>
           <div style={{ flexShrink: 0, marginLeft: 2 }}>
-            <Button
+            {!allGenes && <Button
               minimal
               small
               data-testid={`delete-from-geneset-${gene}`}
@@ -164,7 +165,7 @@ class Gene extends React.Component {
               intent="none"
               style={{ fontWeight: 700, marginRight: 2 }}
               icon={<Icon icon="trash" iconSize={10} />}
-            />
+            />}
             <Button
               minimal
               small

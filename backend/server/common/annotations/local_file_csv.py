@@ -170,30 +170,18 @@ class AnnotationsLocalFile(Annotations):
         gene_sets = data_adaptor.check_new_gene_sets(gene_sets)
 
         with self.gene_sets_lock:
-            # skip if the request is stale
-            if tid is not None:
-                if tid <= self.last_geneset_tid:
-                    raise ObsoleteRequest("TID is stale.")
-                self.last_geneset_tid = tid
 
-            lastmod = data_adaptor.get_last_mod_time()
-            lastmodstr = "'unknown'" if lastmod is None else lastmod.isoformat(timespec="seconds")
-            header = (
-                f"# Gene set generated on {datetime.now().isoformat(timespec='seconds')} "
-                f"using cellxgene version {cellxgene_version}\n"
-                f"# Input data file was {data_adaptor.get_location()}, "
-                f"which was last modified on {lastmodstr}\n"
-            )
+            if tid is not None:
+                self.last_geneset_tid = tid
 
             fname = self._get_genesets_filename(data_adaptor)
             self._backup(fname)
             with open(fname, "w", newline="") as f:
-                f.write(header)
                 f.write(self.gene_sets_to_csv(gene_sets))
 
             # update the cache
             self.last_geneset_fname = fname
-            self.last_geneset = gene_sets if type(gene_sets) == dict else {g["geneset_name"]: g for g in gene_sets}
+            self.last_geneset = gene_sets
 
     def _get_userdata_idhash(self, data_adaptor):
         """

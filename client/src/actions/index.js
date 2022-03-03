@@ -80,14 +80,14 @@ export async function userInfoFetch(dispatch) {
 async function genesetsFetch(dispatch, config) {
   /* request genesets ONLY if the backend supports the feature */
   const defaultResponse = {
-    genesets: [],
+    genesets: {},
     tid: 0,
   };
   if (config?.parameters?.annotations_genesets ?? false) {
     fetchJson("genesets").then((response) => {
       dispatch({
         type: "geneset: initial load",
-        data: response ?? defaultResponse,
+        data: response ? response : defaultResponse,
       });
     });
   } else {
@@ -743,9 +743,10 @@ function requestSingleGeneExpressionCountsForColoringPOST(gene) {
   };
 }
 export function fetchGeneInfo(gene,varMetadata) {
-  return async (_dispatch, _getState) => {
+  return async (_dispatch, getState) => {
+    const { layoutChoice } = getState();
     const res = await fetch(
-      `${API.prefix}${API.version}geneInfo?gene=${gene}&varM=${varMetadata}`,
+      `${API.prefix}${API.version}geneInfo?gene=${gene}&varM=${varMetadata}&embName=${layoutChoice.current}`,
       {
          headers: new Headers({
           Accept: "application/octet-stream",
@@ -759,8 +760,9 @@ export function fetchGeneInfo(gene,varMetadata) {
   }
 }
 export function fetchGeneInfoBulk(geneSet,varMetadata) {
-  return async (_dispatch, _getState) => {
+  return async (_dispatch, getState) => {
     if (varMetadata !== ""){
+      const { layoutChoice } = getState();
       const res = await fetch(
         `${API.prefix}${API.version}geneInfoBulk`,
         {
@@ -771,7 +773,8 @@ export function fetchGeneInfoBulk(geneSet,varMetadata) {
           }),
           body: JSON.stringify({
             geneSet: geneSet,
-            varMetadata: varMetadata
+            varMetadata: varMetadata,
+            embName: layoutChoice.current
           }),
           credentials: "include",
         }
@@ -909,53 +912,6 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
   }
 };
 
-export const requestRenameGeneset = (oldName,newName) => async (
-  dispatch,
-  getState
-) => {
-  
-const res = await fetch(
-  `${API.prefix}${API.version}genesets/rename`,
-  {
-    method: "PUT",
-    headers: new Headers({
-      Accept: "application/octet-stream",
-      "Content-Type": "application/json",
-    }),
-    body: JSON.stringify({
-      oldName: oldName,
-      newName: newName
-    }),
-    credentials: "include",
-  }
-);
-
-/*const { lastTid } = getState().genesets;
-const tid = (lastTid ?? 0) + 1;
-dispatch({
-  type: "geneset: set tid",
-  tid,
-})*/
-fetchJson("genesets").then((response) => {
-  dispatch({
-    type: "geneset: initial load",
-    data: response,
-  });
-});
-
-if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
-  return true;
-}
-
-// else an error
-let msg = `Unexpected HTTP response ${res.status}, ${res.statusText}`;
-const body = await res.text();
-if (body && body.length > 0) {
-  msg = `${msg} -- ${body}`;
-}
-throw new Error(msg);
-}
-
 const selectAll = () => async (dispatch, getState) => {
   dispatch({ type: "select all observations" });
   try {
@@ -980,7 +936,6 @@ function fetchJson(pathAndQuery) {
 }
 
 export default {
-  requestRenameGeneset,
   fetchGeneInfo,
   fetchGeneInfoBulk,
   prefetchEmbeddings,

@@ -5,7 +5,7 @@ action creators related to embeddings choice
 import { AnnoMatrixObsCrossfilter } from "../annoMatrix";
 import { _setEmbeddingSubset, _userSubsetAnnoMatrix } from "../util/stateManager/viewStackHelpers";
 import { API } from "../globals";
-import { subsetAction } from "./viewStack";
+import { resetSubsetAction } from "./viewStack";
 
 export async function _switchEmbedding(
   prevAnnoMatrix,
@@ -163,12 +163,14 @@ export const layoutChoiceAction = (newLayoutChoice) => async (
   dispatch({
     type: "reset subset"
   })  
-  const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
+  let [annoMatrix, obsCrossfilter] = await _switchEmbedding(
     prevAnnoMatrix,
     prevCrossfilter,
     layoutChoice.current,
     newLayoutChoice
   );
+  [annoMatrix, obsCrossfilter] = dispatch(resetSubsetAction({annoMatrix}))
+
   dispatch({
     type: "set layout choice",
     layoutChoice: newLayoutChoice,

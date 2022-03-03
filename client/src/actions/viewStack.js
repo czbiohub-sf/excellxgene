@@ -59,19 +59,23 @@ export const subsetAction = () => (dispatch, getState) => {
   return [annoMatrix, obsCrossfilter];
 };
 
-export const resetSubsetAction = () => (dispatch, getState) => {
+export const resetSubsetAction = (props) => (dispatch, getState) => {
   /*
   Reset the annoMatrix to all data.  Because we may have multiple views
   stacked, we pop them all.  By convention, any clip transformation will
   be the top of the stack, and must be preserved.
   */
 
-  const { annoMatrix: prevAnnoMatrix } = getState();
+  const { annoMatrix: prev } = getState();
+  const prevAnnoMatrix = props?.annoMatrix ?? prev;
   const annoMatrix = _userResetSubsetAnnoMatrix(prevAnnoMatrix);
   const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
   dispatch({
     type: "reset subset",
     annoMatrix,
     obsCrossfilter,
-  });
+  });  
+  if (props?.annoMatrix) {
+    return [annoMatrix, obsCrossfilter]
+  }
 };

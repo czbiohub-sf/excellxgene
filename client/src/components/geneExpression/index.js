@@ -1,6 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button, Icon, Collapse, H4, AnchorButton, Tooltip, Position, MenuItem } from "@blueprintjs/core";
+import { Button, Icon, Collapse, H4, AnchorButton, Tooltip, Position, MenuItem, Dialog } from "@blueprintjs/core";
 import { Select } from "@blueprintjs/select";
 
 import { IconNames } from "@blueprintjs/icons";
@@ -33,7 +33,9 @@ class GeneExpression extends React.Component {
       isEditingSetName: false,
       newNameText: "",
       nameBeingEdited: "",
-      varMetadata: ""
+      varMetadata: "",
+      fileName: "Choose file...",
+      uploadMetadataOpen: false
     };
   }
 
@@ -66,106 +68,206 @@ class GeneExpression extends React.Component {
     const newName = newNameText;
 
     if (oldName !== newName) {
-      dispatch(actions.requestRenameGeneset(oldName,newName))
+      dispatch({type: "geneset: update",genesetDescription: oldName, update: {genesetDescription: newName}})
     }
     this.disableEditNameMode()
   }
+  setupFileInput = () => {
+    const context = this;
+    const { dispatch, schema } = this.props;
 
-  renderGeneSets = (isGenes=false) => {
+    function uploadDealcsv () {};
+    uploadDealcsv.prototype.getCsv = function(e) {
+      let input = document.getElementById('dealCsv2');
+      input.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
 
-    if (!isGenes) {
-      const sets = {};
-      const { dispatch, genesets, rightWidth } = this.props;
+            var myFile = this.files[0];
+            var reader = new FileReader();
+            context.setState({...context.state,fileName: myFile.name})
+            reader.addEventListener('load', function (e) {
+                
+                let csvdata = e.target.result; 
+                parseCsv.getParsecsvdata(csvdata); // calling function for parse csv data 
+                context.resetFileState();
+            });
+            
+            reader.readAsBinaryString(myFile);
+        }
+      });
+    }
+    uploadDealcsv.prototype.getParsecsvdata = function(data) {
+      const genesets = {};
 
-      for (const [name, geneset] of genesets) {
-        const id = geneset.genesetDescription
-        const set = (
-          <GeneSet
-            key={name}
-            setGenes={Array.from(geneset.genes.keys())}
-            setGenesWithDescriptions={geneset.genes}
-            displayLabel={name.split(' : (').at(0)}
-            setName={name}
-            genesetDescription={geneset.genesetDescription}
-            rightWidth={rightWidth}
-          />
-        );
-        if ( id in sets ){
-          sets[id].push(set)
+      let newLinebrk = data.split("\n");
+      if (newLinebrk.at(-1)===""){
+        newLinebrk = newLinebrk.slice(0,-1)
+      }
+
+      for(let i = 0; i < newLinebrk.length; i++) {
+        const y = newLinebrk[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+        const x = [];
+        y.forEach((item)=>{
+          if (item.startsWith("\"") && item.endsWith("\"")){
+            x.push(item.substring(1,item.length-1).split("\r").at(0))
+          } else {
+            x.push(item.split("\r").at(0))
+          }
+        })
+        if (x[0] === "gene_set_description" && x[1] === "gene_set_name" && x.length === 2){
+          continue;
+        }
+
+        if (x[0] in genesets) {
+          genesets[x[0]][x[1]] = x.slice(2)
         } else {
-          sets[id] = [set]
+          genesets[x[0]]={}
+          genesets[x[0]][x[1]] = x.slice(2)
         }
       }
-      const els = [];
-      for ( const key in sets ){
-        const groupName = key.split(';;').at(-1);
-        els.push(
-          <div key={key}>
-              <hr/>
-  
-              <div style={{
-                display: "flex"
-              }}>
-              <AnchorButton
-                onClick={() => {
-                  this.setState({ 
-                    [groupName]: !(this.state[groupName]??false)
-                  });
-                }}
-                text={<Truncate><span>{groupName}</span></Truncate>}
-                fill
-                minimal
-                rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
-              />  
-              <Tooltip
-              content="Edit geneset group name"
-              position="top"
-              hoverOpenDelay={globals.tooltipHoverOpenDelay}            
-              >             
-              <AnchorButton
-                icon={<Icon icon="edit" iconSize={10} />}     
-                minimal
-                style={{
-                  cursor: "pointer",
-                }}
-                onClick={(e) => this.activateEditNameMode(e,groupName)}
-                />  
-              </Tooltip>                 
-              <Tooltip
-              content="Delete geneset group"
-              position="top"
-              hoverOpenDelay={globals.tooltipHoverOpenDelay}            
-              >
-              <AnchorButton
-                icon={<Icon icon="trash" iconSize={10} />}     
-                minimal
-                intent="danger"
-                style={{
-                  cursor: "pointer",
-                }}
-                onClick={() => dispatch(actions.genesetDeleteGroup(key))}
-              />    
-              </Tooltip>                        
-            </div>         
-            <Collapse isOpen={this.state[groupName]??false}>
-              {sets[key]}
-            </Collapse>
-          </div>
-        )
+      for (const key1 in genesets) {
+        for (const key2 in genesets[key1]) {
+          dispatch({
+            type: "geneset: create",
+            genesetName: key2,
+            genesetDescription: key1,
+          });
+          dispatch(actions.genesetAddGenes(key1, key2, genesets[key1][key2]));  
+        }
       }
-      return els;      
-    } else {
+  
+
+    }
+    var parseCsv = new uploadDealcsv();
+    parseCsv.getCsv();
+  }
+
+  resetFileState = () => {
+    this.setState({...this.state, 
+      fileName: "Choose file...", 
+      uploadMetadataOpen: false,
+    })
+  }
+
+  renderGeneSets = (isGenes=false) => {
+    if (isGenes) {
       const { allGenes, rightWidth } = this.props;
       return (
-      <GeneSet
-        key={"All genes"}
-        setGenes={allGenes}
-        displayLabel={"All genes"}
-        setName={"All genes"}
-        allGenes
-        rightWidth={rightWidth}
-      />);
+        <GeneSet
+          key={"All genes"}
+          setGenes={allGenes}
+          displayLabel={"All genes"}
+          setName={"All genes"}
+          allGenes
+          rightWidth={rightWidth}
+        />
+      );  
     }
+    const { dispatch, genesets, rightWidth } = this.props;    
+    
+    const nogroups = [];
+    if ("" in genesets) {
+      for (const name in genesets[""]) {
+        nogroups.push(
+          <GeneSet
+            key={name}
+            setGenes={genesets[""][name]}
+            displayLabel={name.split(' : (').at(0)}
+            setName={name}
+            genesetDescription={""}
+            rightWidth={rightWidth}
+          />
+        );        
+      }
+    }
+
+    const sets = {};
+    
+    for (const group in genesets) {
+      if (group !== "") {
+        for (const name in genesets[group]) {
+          const set = (
+            <GeneSet
+              key={name}
+              setGenes={genesets[group][name]}
+              displayLabel={name.split(' : (').at(0)}
+              setName={name}
+              genesetDescription={group}
+              rightWidth={rightWidth}
+            />
+          );
+          if ( group in sets ){
+            sets[group].push(set)
+          } else {
+            sets[group] = [set]
+          }     
+        }
+      }
+    }
+
+    const els = [];
+    let count = 0;
+    for ( const key in sets ){
+      const groupName = key.split(';;').at(-1);
+      count += 1;
+      
+      const style = count > 1 ? {borderLeft: "1px solid black",
+                                 borderRight: "1px solid black",
+                                 borderBottom: "1px solid black"} : {border: "1px solid black"}
+      els.push(
+        <div key={key} style={style}>
+            <div style={{
+              display: "flex",
+              backgroundColor: "#F0F0F0",
+            }}>
+            <AnchorButton
+              onClick={() => {
+                this.setState({ 
+                  [groupName]: !(this.state[groupName]??false)
+                });
+              }}
+              text={<Truncate><span>{groupName}</span></Truncate>}
+              fill
+              minimal
+              rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
+            />  
+            <Tooltip
+            content="Edit geneset group name"
+            position="top"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+            >             
+            <AnchorButton
+              icon={<Icon icon="edit" iconSize={10} />}     
+              minimal
+              style={{
+                cursor: "pointer",
+              }}
+              onClick={(e) => this.activateEditNameMode(e,groupName)}
+              />  
+            </Tooltip>                 
+            <Tooltip
+            content="Delete geneset group"
+            position="top"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+            >
+            <AnchorButton
+              icon={<Icon icon="trash" iconSize={10} />}     
+              minimal
+              intent="danger"
+              style={{
+                cursor: "pointer",
+              }}
+              onClick={() => dispatch(actions.genesetDeleteGroup(key))}
+            />    
+            </Tooltip>                        
+          </div>         
+          <Collapse isOpen={this.state[groupName]??false}>
+            {sets[key]}
+          </Collapse>
+        </div>
+      )
+    }
+    return [nogroups, els];      
   };
   
   handleSaveGenedata = () => {
@@ -180,25 +282,6 @@ class GeneExpression extends React.Component {
     });
   };
 
-  /*createGeneset = (genesetName,genesArrayFromString,genesetDescription) => {
-    const { dispatch } = this.props;
-
-    dispatch({
-      type: "geneset: create",
-      genesetName,
-      genesetDescription,
-    });
-    const genesTmpHardcodedFormat = [];
-
-    genesArrayFromString.forEach((_gene) => {
-      genesTmpHardcodedFormat.push({
-        geneSymbol: _gene,
-      });
-    });
-
-    dispatch(actions.genesetAddGenes(genesetName, genesTmpHardcodedFormat));
-
-  };*/
 
   handleActivateCreateGenesetMode = () => {
     const { dispatch } = this.props;
@@ -207,8 +290,8 @@ class GeneExpression extends React.Component {
 
   render() {
     const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys } = this.props;
-    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata } = this.state;
-
+    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata, uploadMetadataOpen, fileName } = this.state;
+    const [nogroupElements,genesetElements]=this.renderGeneSets();
     return (
       <div>
        {userLoggedIn ?  <GenesetHotkeys
@@ -289,7 +372,7 @@ class GeneExpression extends React.Component {
           paddingBottom: "20px"
         }}>
           {this.renderGeneSets(true)}
-        </div>
+        </div>      
         {userLoggedIn && <div>
           <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between" }}>
             <H4
@@ -331,7 +414,44 @@ class GeneExpression extends React.Component {
                           this.handleSaveGenedata()
                         }}
                       /> 
-                    </Tooltip> }  
+                    </Tooltip> }
+                <Tooltip
+                content="Upload gene metadata from a `.csv`, comma-delimited file."
+                position="bottom"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              >                                              
+                <AnchorButton
+                    type="button"
+                    icon="upload"
+                    disabled={!userLoggedIn}
+                    onClick={() => {
+                      this.setState({...this.state,uploadMetadataOpen: true})
+                    }}
+                  /> 
+                </Tooltip>                 
+                  <Dialog
+                    title="Upload gene metadata file (comma-delimited .csv)"
+                    isOpen={uploadMetadataOpen}
+                    onOpened={()=>this.setupFileInput()}
+                    onClose={()=>{
+                      this.resetFileState();
+                      }
+                    }
+                  >
+                    <div style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      paddingLeft: "10px",
+                      paddingTop: "10px",
+                      width: "90%",
+                      margin: "0 auto"
+                    }}>
+                      <label className="bp3-file-input">
+                        <input type="file" id="dealCsv2"/>
+                        <span className="bp3-file-upload-input">{fileName}</span>
+                      </label>           
+                    </div>                                
+                  </Dialog>                       
                   </div>               
             <Button
               data-testid="open-create-geneset-dialog"
@@ -346,7 +466,16 @@ class GeneExpression extends React.Component {
           <CreateGenesetDialogue />
 
           { 
-            geneSetsExpanded && <div>{this.renderGeneSets()}</div>
+            geneSetsExpanded && <div>
+              {(nogroupElements.length > 0) && <div style={{paddingBottom: "5px"}}>
+                <b>Ungrouped genesets</b>
+              </div>}              
+              {nogroupElements}
+              {(genesetElements.length > 0) && <div style={{paddingBottom: "5px"}}>
+                <b>Grouped genesets</b>
+              </div> }                         
+              {genesetElements}
+              </div>
           }
         </div>}
         {userLoggedIn && <AnnoDialog
@@ -366,7 +495,8 @@ class GeneExpression extends React.Component {
           text={newNameText}
           handleSubmit={this.handleEditName}
           handleCancel={this.disableEditNameMode}
-          validationError={newNameText==="" || newNameText===nameBeingEdited}
+          validationError={newNameText===nameBeingEdited}
+          allowEmpty
           annoInput={
             <LabelInput
               label={newNameText}

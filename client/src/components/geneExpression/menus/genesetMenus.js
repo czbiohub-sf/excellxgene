@@ -30,39 +30,42 @@ class GenesetMenus extends React.PureComponent {
   }
 
   activateAddGeneToGenesetMode = () => {
-    const { dispatch, geneset } = this.props;
+    const { dispatch, group, geneset } = this.props;
     dispatch({
       type: "geneset: activate add new genes mode",
+      group,
       geneset,
     });
   };
 
   activateEditGenesetNameMode = () => {
-    const { dispatch, geneset } = this.props;
+    const { dispatch, group, geneset } = this.props;
 
     dispatch({
       type: "geneset: activate rename geneset mode",
-      data: geneset,
+      group: group,
+      name: geneset,
     });
   };
 
   handleColorByEntireGeneset = () => {
-    const { dispatch, geneset } = this.props;
+    const { dispatch, group, geneset } = this.props;
 
     dispatch({
       type: "color by geneset mean expression",
+      group,
       geneset,
     });
   };
 
   handleDeleteCategory = () => {
-    const { dispatch, geneset } = this.props;
-    dispatch(actions.genesetDelete(geneset));
+    const { dispatch, group, geneset } = this.props;
+    dispatch(actions.genesetDelete(group, geneset));
   };
 
   render() {
-    const { geneset, genesetsEditable, createText, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros } = this.props;
-    const isColorBy = geneset === colorAccessor;
+    const { group, geneset, genesetsEditable, createText, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros } = this.props;
+    const isColorBy = `${group}::${geneset}` === colorAccessor;
 
     return (
       <>
@@ -76,14 +79,14 @@ class GenesetMenus extends React.PureComponent {
               <Button
                 style={{ marginLeft: 0, marginRight: 2 }}
                 data-testclass="handleAddNewLabelToCategory"
-                data-testid={`${geneset}:add-new-label-to-category`}
+                data-testid={`${group}-${geneset}:add-new-label-to-category`}
                 icon={<Icon icon="plus" iconSize={10} />}
                 onClick={this.activateAddGeneToGenesetMode}
                 small
                 minimal
               />
             </Tooltip2>
-            <AddGeneToGenesetDialogue geneset={geneset} />
+            <AddGeneToGenesetDialogue group={group} geneset={geneset} />
             <Popover
               interactionKind={PopoverInteractionKind.CLICK}
               boundary="window"
@@ -93,14 +96,14 @@ class GenesetMenus extends React.PureComponent {
                   <MenuItem
                     icon="edit"
                     data-testclass="activateEditGenesetNameMode"
-                    data-testid={`${geneset}:edit-genesetName-mode`}
+                    data-testid={`${group}-${geneset}:edit-genesetName-mode`}
                     onClick={this.activateEditGenesetNameMode}
-                    text="Edit gene set name and description"
+                    text="Edit gene set name and grouping"
                   />
                   <MenuItem
                     icon={"vertical-bar-chart-desc"}
                     data-testclass="handleToggleHistZeros"
-                    data-testid={`${geneset}:toggle-hist-zeros`}
+                    data-testid={`${group}-${geneset}:toggle-hist-zeros`}
                     onClick={histToggler}
                     text={toggleText}
                     disabled={disableToggle}
@@ -110,7 +113,7 @@ class GenesetMenus extends React.PureComponent {
                     icon="trash"
                     intent="danger"
                     data-testclass="handleDeleteCategory"
-                    data-testid={`${geneset}:delete-category`}
+                    data-testid={`${group}-${geneset}:delete-category`}
                     onClick={this.handleDeleteCategory}
                     text="Delete this gene set (destructive, will remove set and collection of genes)"
                   />
@@ -120,7 +123,7 @@ class GenesetMenus extends React.PureComponent {
               <Button
                 style={{ marginLeft: 0, marginRight: 5 }}
                 data-testclass="seeActions"
-                data-testid={`${geneset}:see-actions`}
+                data-testid={`${group}-${geneset}:see-actions`}
                 icon={<Icon icon="more" iconSize={10} />}
                 small
                 minimal
@@ -137,7 +140,7 @@ class GenesetMenus extends React.PureComponent {
                 style={{ marginLeft: 0 }}
                 onClick={this.handleColorByEntireGeneset}
                 data-testclass="colorby-entire-geneset"
-                data-testid={`${geneset}:colorby-entire-geneset`}
+                data-testid={`${group}-${geneset}:colorby-entire-geneset`}
                 icon={<Icon icon="tint" iconSize={16} />}
               />
             </Tooltip2>

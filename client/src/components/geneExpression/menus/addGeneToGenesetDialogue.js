@@ -24,7 +24,7 @@ class AddGeneToGenesetDialogue extends React.PureComponent {
   };
 
   handleAddGeneToGeneSet = (e) => {
-    const { geneset, dispatch } = this.props;
+    const { group, geneset, dispatch } = this.props;
     const { genesToAdd } = this.state;
 
     const genesTmpHardcodedFormat = [];
@@ -32,12 +32,9 @@ class AddGeneToGenesetDialogue extends React.PureComponent {
     const genesArrayFromString = parseBulkGeneString(genesToAdd);
 
     genesArrayFromString.forEach((_gene) => {
-      genesTmpHardcodedFormat.push({
-        geneSymbol: _gene,
-      });
+      genesTmpHardcodedFormat.push(_gene);
     });
-
-    dispatch(actions.genesetAddGenes(geneset, genesTmpHardcodedFormat));
+    dispatch(actions.genesetAddGenes(group, geneset, genesTmpHardcodedFormat));
     dispatch({
       type: "geneset: disable add new genes mode",
     });

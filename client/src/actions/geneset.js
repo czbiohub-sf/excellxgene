@@ -1,35 +1,15 @@
-/*
-Action creators for gene sets
-
-Primarily used to keep the crossfilter and underlying data in sync with the UI.
-
-The behavior manifest in these action creators:
-
-    Delete a gene set, will
-      * drop index & clear selection state on the gene set summary
-      * drop index & clear selection state of each gene in the geneset
-
-    Delete a gene from a gene set, will:
-      * drop index & clear selection state on the gene set summary
-      * drop index & clear selection state on the gene
-
-    Add a gene to a gene set, will:
-      * drop index & clear selection state on the gene set summary
-      * will NOT touch the selection state for the gene
-  d
-Note that crossfilter indices are lazy created, as needed.
-*/
-export const genesetDelete = (genesetName) => (dispatch, getState) => {
+export const genesetDelete = (genesetDescription, genesetName) => (dispatch, getState) => {
   const state = getState();
   const { genesets } = state;
-  const gs = genesets?.genesets?.get(genesetName) ?? {};
-  const geneSymbols = Array.from(gs.genes.keys());
-  const obsCrossfilter = dropGeneset(dispatch, state, genesetName, geneSymbols);
+  const gs = genesets?.genesets?.[genesetDescription] ?? {};
+  const geneSymbols = gs?.[genesetName] ?? [];
+  const obsCrossfilter = dropGeneset(dispatch, state, genesetDescription, genesetName, geneSymbols);
   dispatch({
     type: "color by nothing"
   });  
   dispatch({
     type: "geneset: delete",
+    genesetDescription,
     genesetName,
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
@@ -37,41 +17,34 @@ export const genesetDelete = (genesetName) => (dispatch, getState) => {
 };
 export const genesetDeleteGroup = (genesetGroup) => (dispatch, getState) => {
   const state = getState();
-  const { genesets } = state;
-  const keys = []
-  const geneSymbolsAll = []
-  for (let [key, value] of (genesets?.genesets ?? new Map())){
-    if (value.genesetDescription === genesetGroup){
-      keys.push(key)
-      geneSymbolsAll.push(Array.from(value.genes.keys()))
-    }
-  }
-  const obsCrossfilter = dropGenesets(dispatch, state, keys, geneSymbolsAll);
+  const obsCrossfilter = dropGenesets(dispatch, state, genesetGroup);
   dispatch({
     type: "color by nothing"
   });  
   dispatch({
-    type: "geneset: batch delete",
-    genesetNames: keys,
+    type: "geneset: group delete",
+    genesetDescription: genesetGroup,
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
 };
-export const genesetAddGenes = (genesetName, genes) => (dispatch, getState) => {
+export const genesetAddGenes = (genesetDescription, genesetName, genes) => (dispatch, getState) => {
   const state = getState();
   const { obsCrossfilter: prevObsCrossfilter } = state;
   const obsCrossfilter = dropGenesetSummaryDimension(
     prevObsCrossfilter,
     state,
+    genesetDescription,
     genesetName
   );
   dispatch({
     type: "continuous metadata histogram cancel",
     continuousNamespace: { isGeneSetSummary: true },
-    selection: genesetName,
+    selection: `${genesetDescription}::${genesetName}`,
   });
   return dispatch({
     type: "geneset: add genes",
+    genesetDescription,
     genesetName,
     genes,
     obsCrossfilter,
@@ -79,14 +52,15 @@ export const genesetAddGenes = (genesetName, genes) => (dispatch, getState) => {
   });
 };
 
-export const genesetDeleteGenes = (genesetName, geneSymbols) => (
+export const genesetDeleteGenes = (genesetDescription, genesetName, geneSymbols) => (
   dispatch,
   getState
 ) => {
   const state = getState();
-  const obsCrossfilter = dropGeneset(dispatch, state, genesetName, geneSymbols);
+  const obsCrossfilter = dropGeneset(dispatch, state, genesetDescription, genesetName, geneSymbols);
   return dispatch({
     type: "geneset: delete genes",
+    genesetDescription,
     genesetName,
     geneSymbols,
     obsCrossfilter,
@@ -98,11 +72,11 @@ export const genesetDeleteGenes = (genesetName, geneSymbols) => (
 Private
 */
 
-function dropGenesetSummaryDimension(obsCrossfilter, state, genesetName) {
+function dropGenesetSummaryDimension(obsCrossfilter, state, genesetDescription, genesetName) {
   const { annoMatrix, genesets } = state;
   const varIndex = annoMatrix.schema.annotations?.var?.index;
-  const gs = genesets?.genesets?.get(genesetName) ?? {};
-  const genes = Array.from(gs.genes.keys());
+  const gs = genesets?.genesets?.[genesetDescription] ?? {};
+  const genes = gs?.[genesetName] ?? [];
   const query = {
     summarize: {
       method: "mean",
@@ -127,16 +101,16 @@ function dropGeneDimension(obsCrossfilter, state, gene) {
   return obsCrossfilter.dropDimension("X", query);
 }
 
-function dropGeneset(dispatch, state, genesetName, geneSymbols) {
+function dropGeneset(dispatch, state, genesetDescription, genesetName, geneSymbols) {
   const { obsCrossfilter: prevObsCrossfilter } = state;
   const obsCrossfilter = geneSymbols.reduce(
     (crossfilter, gene) => dropGeneDimension(crossfilter, state, gene),
-    dropGenesetSummaryDimension(prevObsCrossfilter, state, genesetName)
+    dropGenesetSummaryDimension(prevObsCrossfilter, state, genesetDescription, genesetName)
   );
   dispatch({
     type: "continuous metadata histogram cancel",
     continuousNamespace: { isGeneSetSummary: true },
-    selection: genesetName,
+    selection: `${genesetDescription}::${genesetName}`,
   });
   geneSymbols.forEach((g) =>
     dispatch({
@@ -147,19 +121,19 @@ function dropGeneset(dispatch, state, genesetName, geneSymbols) {
   );
   return obsCrossfilter;
 }
-function dropGenesets(dispatch, state, genesetNames, geneSymbolsAll) {
-  const { obsCrossfilter: prevObsCrossfilter } = state;
+function dropGenesets(dispatch, state, group) {
+  const { obsCrossfilter: prevObsCrossfilter, geneset } = state;
   let obsCrossfilter = prevObsCrossfilter;
-  for (const [i,geneSymbols] of geneSymbolsAll.entries()) {
-    const genesetName = genesetNames[i];
+  const gs = geneset?.[group] ?? {};
+  for (const [genesetName,geneSymbols] of Object.entries(gs)) {    
     obsCrossfilter = geneSymbols.reduce(
       (crossfilter, gene) => dropGeneDimension(crossfilter, state, gene),
-      dropGenesetSummaryDimension(obsCrossfilter, state, genesetName)
+      dropGenesetSummaryDimension(obsCrossfilter, state, group, genesetName)
     );
     dispatch({
       type: "continuous metadata histogram cancel",
       continuousNamespace: { isGeneSetSummary: true },
-      selection: genesetName,
+      selection: `${group}::${genesetName}`,
     });
     geneSymbols.forEach((g) =>
       dispatch({

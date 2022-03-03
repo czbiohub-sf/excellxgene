@@ -62,20 +62,16 @@ class CreateGenesetDialogue extends React.PureComponent {
       );
 
       genesArrayFromString.forEach((_gene) => {
-        genesTmpHardcodedFormat.push({
-          geneSymbol: _gene,
-        });
+        genesTmpHardcodedFormat.push(_gene);
       });
 
-      dispatch(actions.genesetAddGenes(genesetName, genesTmpHardcodedFormat));
+      dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
     } else {
       const genesTmpHardcodedFormat = [];
       geneSelection.forEach((_gene) => {
-        genesTmpHardcodedFormat.push({
-          geneSymbol: _gene,
-        });
+        genesTmpHardcodedFormat.push(_gene);
       });
-      dispatch(actions.genesetAddGenes(genesetName, genesTmpHardcodedFormat));
+      dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
     }
     dispatch({
       type: "geneset: disable create geneset mode",
@@ -92,7 +88,7 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   handleChange = (e) => {
-    this.setState({ genesetName: `${e.split(' : (').at(0)} : (${new Date().toLocaleString()})`});
+    this.setState({ genesetName: e});
   };
 
   handleGenesetInputChange = (e) => {
@@ -103,18 +99,23 @@ class CreateGenesetDialogue extends React.PureComponent {
     this.setState({ genesetDescription: e });
   };
 
-  instruction = (genesetName, genesets) => {
-    return genesets.has(genesetName)
+  instruction = (genesetDescription, genesetName, genesets) => {
+    return this.validate(genesetDescription, genesetName, genesets)
       ? "Gene set name must be unique."
       : "New, unique gene set name";
   };
 
-  validate = (genesetName, genesets) => {
-    return genesets.has(genesetName);
+  validate = (genesetDescription, genesetName, genesets) => {
+    if (genesetDescription in genesets) {
+      if (genesetName in genesets[genesetDescription]) {
+        return true;
+      }
+    }
+    return false;
   };
 
   render() {
-    const { genesetName } = this.state;
+    const { genesetDescription, genesetName } = this.state;
     const { metadataField, genesetsUI, genesets } = this.props;
 
     return (
@@ -132,7 +133,7 @@ class CreateGenesetDialogue extends React.PureComponent {
           >
             <div className={Classes.DIALOG_BODY}>
               <div style={{ marginBottom: 20 }}>
-                <p>{this.instruction(genesetName, genesets)}</p>
+                <p>{this.instruction(genesetDescription, genesetName, genesets)}</p>
                 <LabelInput
                   onChange={this.handleChange}
                   inputProps={{
@@ -146,7 +147,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                 <p
                   style={{
                     marginTop: 7,
-                    visibility: this.validate(genesetName, genesets)
+                    visibility: this.validate(genesetDescription, genesetName, genesets)
                       ? "visible"
                       : "hidden",
                     color: Colors.ORANGE3,
@@ -156,7 +157,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                 </p>
                 <p style={{ marginTop: 20 }}>
                   Optionally add a{" "}
-                  <span style={{ fontWeight: 700 }}>description</span> for this
+                  <span style={{ fontWeight: 700 }}>group name</span> for this
                   gene set
                 </p>
                 <LabelInput
@@ -166,7 +167,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: false,
                   }}
-                  newLabelMessage="Add geneset description"
+                  newLabelMessage="Add geneset group name"
                 />
 
                 <p style={{ marginTop: 20 }}>
@@ -200,7 +201,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                   data-testid={`${metadataField}:submit-geneset`}
                   onClick={this.createGeneset}
                   disabled={
-                    !genesetName || this.validate(genesetName, genesets)
+                    !genesetName || this.validate(genesetDescription, genesetName, genesets)
                   }
                   intent="primary"
                   type="submit"

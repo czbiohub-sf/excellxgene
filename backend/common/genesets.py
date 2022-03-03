@@ -5,15 +5,14 @@ Utility code for gene sets handling
 import re
 import csv
 import hashlib
+import numpy as np
 
 from .errors import AnnotationsError
 
 
 GENESETS_TIDYCSV_HEADER = [
+    "gene_set_description",    
     "gene_set_name",
-    "gene_set_description",
-    "gene_symbol",
-    "gene_description",
 ]
 
 
@@ -50,61 +49,33 @@ def read_gene_sets_tidycsv(gs_locator, context=None):
     class myDialect(csv.excel):
         skipinitialspace = False
 
-    def just(n, seq):
-        it = iter(seq)
-        for _ in range(n - 1):
-            yield next(it, "")
-        yield tuple(it)
-
-    messagefn = context["messagefn"] if context else (lambda x: None)
-
     gene_sets = {}
     with gs_locator.local_handle() as fname:
+        header_read = False
         with open(fname, newline="") as f:
             reader = csv.reader(f, dialect=myDialect())
-            haveReadHeader = False
-            lineno = 0
             for row in reader:
-                lineno += 1
-                # ignore empty rows
-                if len(row) == 0:
-                    continue
-                # if row starts with '#' it is a comment
-                if row[0].startswith("#"):
-                    continue
-                # if this is the first non-comment row, assume it is a header and validate
-                # column names.  OK if the user has extra columns after our initial set.
-                if not haveReadHeader:
-                    if row[0:len(GENESETS_TIDYCSV_HEADER)] != GENESETS_TIDYCSV_HEADER:
-                        raise AnnotationsError("Gene set CSV file missing the required column header.")
-                    haveReadHeader = True
+                if len(row) <= 2 or not header_read:
+                    header_read = True
                     continue
 
-                geneset_name, geneset_description, gene_symbol, gene_description, _ = just(5, row)
-                if not geneset_name:
-                    raise AnnotationsError(f"Gene set CSV missing required gene set name on line {lineno}")
-                if (not gene_symbol) and gene_description:
-                    messagefn(f"Warning: Missing gene name in gene set name {geneset_name} on line {lineno}.")
-
-                if geneset_name in gene_sets:
-                    gs = gene_sets[geneset_name]
+                geneset_description, geneset_name = row[:2]
+                gene_symbols = row[3:]
+                try:
+                    gene_symbols = gene_symbols[:gene_symbols.index("")]
+                except:
+                    pass
+                
+                if geneset_description in gene_sets:
+                    gs = gene_sets[geneset_description]
                 else:
-                    gs = gene_sets[geneset_name] = {
-                        "geneset_name": geneset_name,
-                        "geneset_description": geneset_description,
-                        "genes": [],
-                    }
-                # Use first geneset_description with a value
-                if not gs["geneset_description"] and geneset_description:
-                    gs["geneset_description"] = geneset_description
-                # add the gene if the gene_symbol is defined
-                if gene_symbol:
-                    gs["genes"].append(
-                        {
-                            "gene_symbol": gene_symbol,
-                            "gene_description": gene_description,
-                        }
-                    )
+                    gs = gene_sets[geneset_description] = {}
+                
+                if geneset_name in gs:
+                    gene_symbols = list(set(gene_symbols).union(gs[geneset_name]))
+
+                gs[geneset_name] = gene_symbols
+
 
     return gene_sets
 
@@ -116,23 +87,13 @@ def write_gene_sets_tidycsv(f, genesets):
     """
     writer = csv.writer(f, dialect="excel")
     writer.writerow(GENESETS_TIDYCSV_HEADER)
-    for geneset in genesets:
-        # genes may be empty, in which case we skip the gene set entirely
-        genes = geneset["genes"]
-        if not genes:
-            writer.writerow([geneset["geneset_name"], geneset.get("geneset_description", ""), "", ""])
-        else:
-            writer.writerows(
-                [
-                    [
-                        geneset["geneset_name"],
-                        geneset.get("geneset_description", ""),
-                        gene["gene_symbol"],
-                        gene.get("gene_description", ""),
-                    ]
-                    for gene in genes
-                ]
-            )
+    for k1 in genesets.keys():
+        for k2 in genesets[k1].keys():
+            genes = genesets[k1].get(k2,None)
+            if not genes:
+                writer.writerow([k1, k2])
+            else:
+                writer.writerow([k1, k2]+genes)
 
 
 def summarizeQueryHash(raw_query):
@@ -175,65 +136,53 @@ def validate_gene_sets(genesets, var_names, context=None):
 
     # accept genesets args as either the internal (dict) or REST (list) format,
     # as they are identical except for the dict being keyed by geneset_name.
-    if not isinstance(genesets, dict) and not isinstance(genesets, list):
-        raise ValueError("Gene sets must be either dict or list.")
-    genesets_iterable = genesets if isinstance(genesets, list) else genesets.values()
+    if not isinstance(genesets, dict):
+        raise ValueError("Gene sets must be a dict.")
 
     # 0. check for uniqueness of geneset names
-    geneset_names = [gs["geneset_name"] for gs in genesets_iterable]
-    if len(set(geneset_names)) != len(geneset_names):
-        raise KeyError("All gene set names must be unique.")
-
-    # 1. check gene set character set and format
     illegal_name = re.compile(r"^\s|  |[\u0000-\u001F\u007F-\uFFFF]|\s$")
-    for name in geneset_names:
-        if type(name) != str or len(name) == 0:
-            raise KeyError("Gene set names must be non-null string.")
-        if illegal_name.search(name):
-            messagefn(
-                "Error: "
-                f"Gene set name {name} "
-                "is not valid. Leading, trailing, and multiple spaces within a name are not allowed."
-            )
-            raise KeyError(
-                "Gene set name is not valid. Leading, trailing, and multiple spaces within a name are not allowed."
-            )
-
-    # 2. & 3. check for duplicate gene symbols, and those not present in the dataset. They will
-    # generate a warning and be removed.
-    for geneset in genesets_iterable:
-        if not isinstance(geneset, dict):
-            raise ValueError("Each gene set must be a dict.")
-        geneset_name = geneset["geneset_name"]
-        genes = geneset["genes"]
-        if not isinstance(genes, list):
-            raise ValueError("Gene set genes field must be a list")
-        geneset.setdefault("geneset_description", "")
-        gene_symbol_already_seen = set()
-        new_genes = []
-        for gene in genes:
-            gene_symbol = gene["gene_symbol"]
-            if not isinstance(gene_symbol, str) or len(gene_symbol) == 0:
-                raise ValueError("Gene symbol must be non-null string.")
-            if gene_symbol in gene_symbol_already_seen:
-                # duplicate check
+    for k1 in genesets.keys():
+        for name in genesets[k1].keys():
+            if type(name) != str or len(name) == 0:
+                raise KeyError("Gene set names must be non-null string.")            
+            if illegal_name.search(name):
                 messagefn(
-                    f"Warning: a duplicate of gene {gene_symbol} was found in gene set {geneset_name}, "
-                    "and will be ignored."
+                    "Error: "
+                    f"Gene set name {name} "
+                    "is not valid. Leading, trailing, and multiple spaces within a name are not allowed."
                 )
-                continue
+                raise KeyError(
+                    "Gene set name is not valid. Leading, trailing, and multiple spaces within a name are not allowed."
+                )            
 
-            if gene_symbol not in var_names:
-                messagefn(
-                    f"Warning: {gene_symbol}, used in gene set {geneset_name}, "
-                    "was not found in the dataset and will be ignored."
-                )
-                continue
+    for k1 in genesets.keys():
+        for k2 in genesets[k1].keys():
+            genes = genesets[k1][k2]
+            if not isinstance(genes, list):
+                raise ValueError("Gene set genes field must be a list")
+            gene_symbol_already_seen = set()
+            new_genes = []
+            for gene_symbol in genes:
+                if not isinstance(gene_symbol, str) or len(gene_symbol) == 0:
+                    raise ValueError("Gene symbol must be non-null string.")
+                if gene_symbol in gene_symbol_already_seen:
+                    # duplicate check
+                    messagefn(
+                        f"Warning: a duplicate of gene {gene_symbol} was found in gene set {k1}:{k2}, "
+                        "and will be ignored."
+                    )
+                    continue
 
-            gene_symbol_already_seen.add(gene_symbol)
-            gene.setdefault("gene_description", "")
-            new_genes.append(gene)
+                if gene_symbol not in var_names:
+                    messagefn(
+                        f"Warning: {gene_symbol}, used in gene set {k1}:{k2}, "
+                        "was not found in the dataset and will be ignored."
+                    )
+                    continue
 
-        geneset["genes"] = new_genes
+                gene_symbol_already_seen.add(gene_symbol)
+                new_genes.append(gene_symbol)
+
+            genesets[k1][k2] = new_genes
 
     return genesets

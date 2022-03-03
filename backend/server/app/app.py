@@ -231,6 +231,13 @@ class AnnotationsVarAPI(Resource):
     def get(self, data_adaptor):
         return common_rest.annotations_var_get(request, data_adaptor)
 
+    @requires_authentication
+    @cache_control(no_store=True)
+    @auth0_token_required
+    @rest_get_data_adaptor
+    def put(self, data_adaptor):
+        return common_rest.annotations_var_put(request, data_adaptor)
+
 
 class DataVarAPI(Resource):
     @cache_control(no_store=True)
@@ -439,7 +446,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(AnnotationsVarAPI, "/annotations/var")
     add_resource(DataVarAPI, "/data/var")
     add_resource(GenesetsAPI, "/genesets")
-    add_resource(GenesetsRenameAPI, "/genesets/rename")
+    #add_resource(GenesetsRenameAPI, "/genesets/rename")
     
     add_resource(ReembedParametersAPI, "/reembed-parameters")
     add_resource(ReembedParametersObsmAPI, "/reembed-parameters-obsm")

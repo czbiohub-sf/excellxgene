@@ -17,8 +17,6 @@ const skipOnActions = new Set([
   "window resize",
   "reset colorscale",
   "reset centroid labels",
-  "geneset: initial load",
-  "geneset: set tid",
 
   "graph brush change",
   "continuous metadata histogram brush",
@@ -108,11 +106,10 @@ const saveOnActions = new Set([
   /* geneset component action */
   "geneset: create",
   "geneset: delete",
-  "geneset: batch delete",
+  "geneset: group delete",
   "geneset: update",
   "geneset: add genes",
   "geneset: delete genes",
-  "geneset: set gene description",
 ]);
 
 /**

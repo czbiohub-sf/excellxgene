@@ -69,6 +69,7 @@ class HistogramBrush extends React.PureComponent {
       const {
         dispatch,
         field,
+        group,
         isObs,
         isUserDefined,
         isGeneSetSummary,
@@ -84,7 +85,7 @@ class HistogramBrush extends React.PureComponent {
         ? [x(d3.event.selection[0]), x(d3.event.selection[1])]
         : null;
       const otherProps = {
-        selection: field,
+        selection: isGeneSetSummary ? `${group}::${field}` : field,
         continuousNamespace: {
           isObs,
           isUserDefined,
@@ -102,6 +103,7 @@ class HistogramBrush extends React.PureComponent {
       const {
         dispatch,
         field,
+        group,
         isObs,
         isUserDefined,
         isGeneSetSummary,
@@ -140,7 +142,7 @@ class HistogramBrush extends React.PureComponent {
 
       const query = this.createQuery();
       const otherProps = {
-        selection: field,
+        selection: isGeneSetSummary ? `${group}::${field}` : field,
         continuousNamespace: {
           isObs,
           isUserDefined,

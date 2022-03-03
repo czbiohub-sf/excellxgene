@@ -4,8 +4,10 @@ Reducers for geneset UI-state.
 const GeneSetsUI = (
   state = {
     createGenesetModeActive: false,
+    isEditingGenesetGroup: false,
     isEditingGenesetName: false,
     isAddingGenesToGeneset: false,
+    isAddingGenesToGenesetGroup: false,
   },
   action
 ) => {
@@ -41,6 +43,7 @@ const GeneSetsUI = (
     case "geneset: activate add new genes mode": {
       return {
         ...state,
+        isAddingGenesToGenesetGroup: action.group,
         isAddingGenesToGeneset: action.geneset,
       };
     }
@@ -52,6 +55,7 @@ const GeneSetsUI = (
     case "geneset: disable add new genes mode": {
       return {
         ...state,
+        isAddingGenesToGenesetGroup: false,
         isAddingGenesToGeneset: false,
       };
     }
@@ -65,7 +69,8 @@ const GeneSetsUI = (
     case "geneset: activate rename geneset mode": {
       return {
         ...state,
-        isEditingGenesetName: action.data,
+        isEditingGenesetGroup: action.group,
+        isEditingGenesetName: action.name,
       };
     }
     /**
@@ -76,6 +81,7 @@ const GeneSetsUI = (
     case "geneset: disable rename geneset mode": {
       return {
         ...state,
+        isEditingGenesetGroup: false,
         isEditingGenesetName: false,
       };
     }

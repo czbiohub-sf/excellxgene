@@ -22,6 +22,7 @@ import signal
 from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 from functools import wraps
+import yaml
 from dotenv import load_dotenv
 load_dotenv()
 
