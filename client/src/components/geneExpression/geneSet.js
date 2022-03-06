@@ -18,7 +18,8 @@ import HistogramBrush from "../brushableHistogram";
     userDefinedGenes: state.controls.userDefinedGenes,
     userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
     userLoggedIn: state.controls.userInfo ? true : false,
-    layoutChoice: state.layoutChoice
+    layoutChoice: state.layoutChoice,
+    varRefresher: state.controls.varRefresher
   };
 })
 class GeneSet extends React.Component {
@@ -63,7 +64,7 @@ class GeneSet extends React.Component {
     }
   }
   componentDidUpdate = (prevProps) => {
-    const { setGenes, varMetadata, layoutChoice } = this.props;
+    const { setGenes, varMetadata, layoutChoice, varRefresher } = this.props;
     const { setGenes: setGenesPrev, varMetadata: varMetadataPrev } = prevProps;
     if (setGenes !== setGenesPrev) {
       this.setState({
@@ -71,7 +72,9 @@ class GeneSet extends React.Component {
         maxGenePage: Math.ceil((setGenes.length-0.1) / 10) - 1,
       })
       this.updateGeneMetadatas();
-    } else if (varMetadata !== varMetadataPrev || layoutChoice.current !== prevProps.layoutChoice.current) {
+    } else if (varMetadata !== varMetadataPrev ||
+               layoutChoice.current !== prevProps.layoutChoice.current ||
+               varRefresher !== prevProps.varRefresher) {
       this.updateGeneMetadatas();
     }
     
@@ -136,7 +139,9 @@ class GeneSet extends React.Component {
     const isString = typeof geneMetadatas[0] === "string";
     if (!isString) {
       setGenesSorted = dsu(setGenes, geneMetadatas);
-      geneMetadatasSorted = geneMetadatas.slice().sort().reverse();  
+      geneMetadatasSorted = geneMetadatas.slice().sort(function(a, b) {
+        return Number(a) - Number(b);
+      }).reverse();  
     } else {
       const map = Object.fromEntries(geneMetadatas.map((k, i) => [k, setGenes[i]]));
       geneMetadatasSorted = geneMetadatas.slice().sort().reverse();  
@@ -168,7 +173,9 @@ class GeneSet extends React.Component {
     const isString = typeof geneMetadatas[0] === "string";
     if (!isString) {
       setGenesSorted = dsu(setGenes, geneMetadatas).reverse();
-      geneMetadatasSorted = geneMetadatas.slice().sort();  
+      geneMetadatasSorted = geneMetadatas.slice(function(a, b) {
+        return Number(a) - Number(b);
+      }).sort();  
     } else {
       const map = Object.fromEntries(geneMetadatas.map((k, i) => [k, setGenes[i]]));
       geneMetadatasSorted = geneMetadatas.slice().sort();  
@@ -251,7 +258,7 @@ class GeneSet extends React.Component {
           geneInfo={geneInfo}
           rightWidth={rightWidth}
           group={genesetDescription}
-          allGenes
+          allGenes={allGenes}
         />
       );
     });

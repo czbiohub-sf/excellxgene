@@ -472,7 +472,7 @@ class Categories extends React.Component {
                 display: "flex"
               }}>
                 <Tooltip
-                content="Save selected metadata categories to a `.csv` file."
+                content="Save selected metadata categories to a tab-delimited .txt file."
                 position="bottom"
                 hoverOpenDelay={globals.tooltipHoverOpenDelay}
               >                                              

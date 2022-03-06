@@ -8,7 +8,7 @@ with open("backend/server/requirements.txt") as fh:
 
 setup(
     name="excellxgene",
-    version="2.3.9",
+    version="2.4.0",
     packages=find_packages(),
     url="https://github.com/czbiohub/excellxgene",
     license="MIT",

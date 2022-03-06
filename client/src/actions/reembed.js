@@ -80,7 +80,7 @@ export function requestReembed(reembedParams,parentName,embName) {
     try {
       await dispatch(subsetAction());
       const state = getState();
-      const { controls } = state;
+      const { controls, layoutChoice } = state;
       const { wsReembedding } = controls;
 
       let cells = state.annoMatrix.rowIndex.labels();
@@ -90,7 +90,7 @@ export function requestReembed(reembedParams,parentName,embName) {
         method: "umap",
         filter: { obs: { index: cells } },
         params: reembedParams,
-        parentName: parentName,
+        parentName: (parentName === "") ? layoutChoice.current : parentName,
         embName: embName,
       }))
       dispatch({

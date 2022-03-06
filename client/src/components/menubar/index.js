@@ -36,11 +36,18 @@ function HotkeysDialog(props) {
   const subsetResetPossible = !embSubsetView
     ? annoMatrix.nObs !== annoMatrix.schema.dataframe.nObs
     : annoMatrix.nObs !== embSubsetView.nObs;
-
+  let var_keys = state.annoMatrix?.schema?.annotations?.varByName ?? {};
+  var_keys = Object.keys(var_keys);
+  const vk = [];
+  var_keys.forEach((item)=>{
+    if (item !== "name_0"){
+      vk.push(item.split(';;').at(0))
+    }
+  })
   return {
     subsetPossible,
     subsetResetPossible,
-    var_keys: state.annoMatrix.schema.var_keys,
+    var_keys: [... new Set(vk)],
     geneSelection: Object.keys(state.geneSelection),
     tooManyCells: numberCells > 50000,
     graphInteractionMode: state.controls.graphInteractionMode,
@@ -585,14 +592,14 @@ class MenuBar extends React.PureComponent {
                   <StateParameterInput 
                     label={<b>Sort by metadata?</b>}
                     value={samHVG}
-                    tooltipContent={"Check to use SAM weights for feature selection."}
+                    tooltipContent={"Check to use existing gene metadata for feature selection."}
                     setter={()=>this.setState({samHVG: !samHVG})}
                   />   
                   <StateParameterInput
                     label="Metadata"
                     value={geneMetadata}
                     options={var_keys}
-                    tooltipContent={"Expression layer on which correlations will be computed."}
+                    tooltipContent={"The metadata to use for feature selection."}
                     left
                     setter={(d)=>{this.setState({geneMetadata: d})}}
                   />                     

@@ -106,7 +106,7 @@ def _query_parameter_to_filter(args):
 
     return result
 
-def schema_get_helper(data_adaptor):
+def schema_get_helper(data_adaptor):   
     if data_adaptor.data.raw is not None:
         layers = [".raw"]+list(data_adaptor.data.layers.keys())
     else:
@@ -122,10 +122,6 @@ def schema_get_helper(data_adaptor):
             latent_spaces.append(k)
         initial_embeddings.append(k if k[:2]!="X_" else k[2:])
     
-    var_keys = []
-    for v in list(data_adaptor.data.var.keys()):
-        if ';;tMean' not in v and v != 'name_0':
-            var_keys.append(v)
 
     schema = {
         "dataframe": {"nObs": data_adaptor.cell_count, "nVar": data_adaptor.gene_count, "type": str(data_adaptor.data.X.dtype)},
@@ -135,7 +131,6 @@ def schema_get_helper(data_adaptor):
         },
         "layout": {"obs": []},
         "layers": layers,
-        "var_keys": var_keys,
         "latent_spaces": latent_spaces,
         "initial_embeddings": initial_embeddings,
         "rootName": data_adaptor.rootName
@@ -147,10 +142,11 @@ def schema_get_helper(data_adaptor):
             fns = glob(f"{userID}/var/*.p")
             for ann in fns:
                 ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
-                x = pickle_loader(f"{userID}/var/{ann}.p")
-                ann_schema = {"name": ann, "writable": True}
-                ann_schema.update(get_schema_type_hint_of_array(x))
-                schema["annotations"]["var"]["columns"].append(ann_schema)
+                if ann != "name_0":
+                    x = pickle_loader(f"{userID}/var/{ann}.p")
+                    ann_schema = {"name": ann, "writable": True}
+                    ann_schema.update(get_schema_type_hint_of_array(x))
+                    schema["annotations"]["var"]["columns"].append(ann_schema)
             
             ann = "name_0"
             curr_axis = data_adaptor.data.var
@@ -159,14 +155,16 @@ def schema_get_helper(data_adaptor):
             if ann_schema['type']!='categorical':
                 ann_schema['writable']=False
             schema["annotations"][ax]["columns"].append(ann_schema)
+            
         elif str(ax) == "obs":
             fns = glob(f"{userID}/obs/*.p")
             for ann in fns:
                 ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
-                x = pickle_loader(f"{userID}/obs/{ann}.p")
-                ann_schema = {"name": ann, "writable": True}
-                ann_schema.update(get_schema_type_hint_of_array(x))
-                schema["annotations"][ax]["columns"].append(ann_schema)
+                if ann != "name_0":
+                    x = pickle_loader(f"{userID}/obs/{ann}.p")
+                    ann_schema = {"name": ann, "writable": True}
+                    ann_schema.update(get_schema_type_hint_of_array(x))
+                    schema["annotations"][ax]["columns"].append(ann_schema)
             
             ann = "name_0"
             curr_axis = data_adaptor.data.obs
@@ -176,7 +174,7 @@ def schema_get_helper(data_adaptor):
                 ann_schema['writable']=False
             schema["annotations"][ax]["columns"].append(ann_schema)
 
-    
+
     for layout in [x.split('/')[-1].split('\\')[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
         layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
         schema["layout"]["obs"].append(layout_schema)
@@ -202,6 +200,11 @@ def gene_info_get(request,data_adaptor):
         return make_response(jsonify({"response": X[n==gene]}), HTTPStatus.OK)
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
+
+def admin_restart_get(request,data_adaptor):
+    assert(session['excxg_profile']['email']=='alexander.tarashansky@czbiohub.org')
+    data_adaptor._reset_pool()
+    return make_response(jsonify({"reset": True}), HTTPStatus.OK)
 
 def gene_info_bulk_put(request,data_adaptor):
     args = request.get_json()
@@ -532,6 +535,92 @@ def sankey_data_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
+
+def upload_var_metadata_post(request, data_adaptor):
+    file = request.files['file']
+    direc = pathlib.Path().absolute()
+    userID = _get_user_id(data_adaptor)         
+    filename = file.filename.split('/')[-1].split('\\')[-1]
+    file.save(f"{direc}/{userID}/{filename}")
+    A = pd.read_csv(f"{direc}/{userID}/{filename}",sep='\t',index_col=0)
+    v1 = np.array(list(A.index))    
+    v2 = np.array(list(pickle_loader(f"{direc}/{userID}/var/name_0.p")))
+    filt = np.in1d(v1,v2)
+    v1 = v1[filt]    
+    assert v1.size > 0
+
+    v2rev = v2[np.in1d(v2,v1,invert=True)]
+    for k in A.columns:
+        vals = np.array(list(A[k]))[filt].astype('object')
+        if isinstance(vals[0],str):
+            filler = "nan"
+        else:
+            filler = 0
+        valsrev = np.zeros(v2rev.size,dtype='object')
+        valsrev[:] = filler
+        vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
+        pickle_dumper(vals,f"{direc}/{userID}/var/{k}.p")
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(f"{direc}/{userID}/{filename}")
+        except Exception as error:
+            print(error)
+        return response    
+    schema = schema_get_helper(data_adaptor)
+    return make_response(jsonify({"schema": schema}), HTTPStatus.OK)
+
+def save_var_metadata_put(request, data_adaptor):
+    args = request.get_json()
+    embName = args['embName']
+
+    direc = pathlib.Path().absolute()
+    userID = _get_user_id(data_adaptor)        
+
+    fnames = glob(f"{direc}/{userID}/var/*.p")
+    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+    var=pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
+    for f in fnames:
+        n = f.split('/')[-1].split('\\')[-1][:-2]
+        if ';;' in n:
+            tlay = n.split(';;')[-1]
+        else:
+            tlay = ""
+        if embName == tlay:
+            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+            if n != "name_0":
+                var[n.split(';;')[0]] = pd.Series(data=l,index=v)  
+
+    vkeys = list(var.keys())
+    for f in fnames:
+        n = f.split('/')[-1].split('\\')[-1][:-2]
+        if ';;' not in n:
+            if n not in vkeys:
+                l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                if n != "name_0":
+                    var[n] = pd.Series(data=l,index=v)                   
+    del var['name_0']    
+    var.to_csv(f"{userID}/{userID}_var.txt",sep='\t')
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(f"{userID}/{userID}_var.txt")
+        except Exception as error:
+            print(error)
+        return response
+
+    try:
+        direc = pathlib.Path().absolute()
+        return send_file(f"{direc}/{userID}/{userID}_var.txt",as_attachment=True)
+
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+
+
 def save_metadata_put(request, data_adaptor):
     args = request.get_json()
     labelNames = args.get("labelNames",None)
@@ -650,6 +739,9 @@ def initialize_user(data_adaptor):
         os.system(f"mkdir {userID}")
         os.system(f"cp -r {data_adaptor.guest_idhash}/* {userID}/")
     #data_adaptor._initialize_user_folders(userID)           
+
+    if not current_app.hosted_mode:
+        session.clear()        
 
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})

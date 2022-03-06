@@ -8,6 +8,7 @@ import {
   _getColumnSchema,
   _schemaColumns,
   _getWritableColumns,
+  _normalizeCategoricalSchema
 } from "./schema";
 import { indexEntireSchema } from "../util/stateManager/schemaHelpers";
 import { _whereCacheGet, _whereCacheMerge } from "./whereCache";
@@ -51,7 +52,7 @@ export default class AnnoMatrix {
     /*
     return the fields present in the AnnoMatrix instance.
     */
-    return ["obs", "var", "emb", "X", "layers", "var_keys", "latent_spaces", "initial_embeddings"];
+    return ["obs", "var", "emb", "X", "layers", "latent_spaces", "initial_embeddings"];
   }
 
   constructor(schema, nObs, nVar, rowIndex = null) {
@@ -108,6 +109,20 @@ export default class AnnoMatrix {
     this.logscale = false;
     
   }
+
+  updateSchema(schema) {
+    this.schema = indexEntireSchema(schema);
+    Object.keys(this.schema.annotations.obsByName).forEach((item)=>{
+      this.fetch("obs",item).then((res)=>{
+        console.log(item)
+        _normalizeCategoricalSchema(
+          this.schema.annotations.obsByName[item],
+          res.col(item)
+        )
+      })
+    })
+  }
+
   setLayer(layer) {
     if (layer !== this.layer){
       this.layer = layer;

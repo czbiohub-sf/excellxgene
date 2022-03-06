@@ -2,7 +2,7 @@ import React from "react";
 import { connect } from "react-redux";
 import { Button, Icon, Collapse, H4, AnchorButton, Tooltip, Position, MenuItem, Dialog } from "@blueprintjs/core";
 import { Select } from "@blueprintjs/select";
-
+import { AnnoMatrixObsCrossfilter } from "../../annoMatrix";
 import { IconNames } from "@blueprintjs/icons";
 import ParameterInput from "../menubar/parameterinput";
 import GeneSet from "./geneSet";
@@ -15,14 +15,23 @@ import AnnoDialog from "../annoDialog";
 import LabelInput from "../labelInput";
 
 @connect((state) => {
+  let var_keys = state.annoMatrix?.schema?.annotations?.varByName ?? {};
+  var_keys = Object.keys(var_keys);
+  const vk = [];
+  var_keys.forEach((item)=>{
+    if (item !== "name_0"){
+      vk.push(item.split(';;').at(0))
+    }   
+  })  
   return {
-    var_keys: state.annoMatrix.schema.var_keys,
+    var_keys: [... new Set(vk)],
     allGenes: state.controls.allGenes.__columns[0],
     colorAccessor: state.colors.colorAccessor,
     genesets: state.genesets.genesets,
     annoMatrix: state.annoMatrix,
     reembedParams: state.reembedParameters,
-    userLoggedIn: state.controls.userInfo ? true : false
+    userLoggedIn: state.controls.userInfo ? true : false,
+    outputController: state.outputController
   };
 })
 class GeneExpression extends React.Component {
@@ -35,7 +44,9 @@ class GeneExpression extends React.Component {
       nameBeingEdited: "",
       varMetadata: "",
       fileName: "Choose file...",
-      uploadMetadataOpen: false
+      fileName2: "Choose file...",
+      uploadMetadataOpen: false,
+      uploadMetadataOpen2: false
     };
   }
 
@@ -74,7 +85,7 @@ class GeneExpression extends React.Component {
   }
   setupFileInput = () => {
     const context = this;
-    const { dispatch, schema } = this.props;
+    const { dispatch } = this.props;
 
     function uploadDealcsv () {};
     uploadDealcsv.prototype.getCsv = function(e) {
@@ -146,6 +157,41 @@ class GeneExpression extends React.Component {
     this.setState({...this.state, 
       fileName: "Choose file...", 
       uploadMetadataOpen: false,
+    })
+  }
+
+  setupFileInput2 = () => {
+    const { dispatch, annoMatrix } = this.props;
+    const context = this;
+    function uploadDealcsv () {};
+    uploadDealcsv.prototype.getCsv = function(e) {
+      let input = document.getElementById('dealCsv3');
+      input.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+
+            var myFile = this.files[0];
+            const formData = new FormData();
+            formData.append("file",myFile);
+            fetch(`${globals.API.prefix}${globals.API.version}uploadVarMetadata`, {method: "POST", body: formData}).then((res)=>{
+              res.json().then((schema)=>{
+                annoMatrix.updateSchema(schema.schema)
+                dispatch({type: "refresh var metadata"})
+                context.resetFileState2();
+              })
+
+              
+            });            
+        }
+      });
+    }
+    var parseCsv = new uploadDealcsv();
+    parseCsv.getCsv();
+  }
+
+  resetFileState2 = () => {
+    this.setState({...this.state, 
+      fileName2: "Choose file...", 
+      uploadMetadataOpen2: false,
     })
   }
 
@@ -289,9 +335,10 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys } = this.props;
-    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata, uploadMetadataOpen, fileName } = this.state;
+    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, outputController } = this.props;
+    const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata, uploadMetadataOpen, fileName, uploadMetadataOpen2, fileName2 } = this.state;
     const [nogroupElements,genesetElements]=this.renderGeneSets();
+    const saveLoading = !!outputController?.pendingFetch;
     return (
       <div>
        {userLoggedIn ?  <GenesetHotkeys
@@ -328,8 +375,60 @@ class GeneExpression extends React.Component {
           textAlign: "right",
           justifyContent: "right",
           paddingBottom: "10px"
-        }}>           
-          <Tooltip
+        }}>         
+            <Tooltip
+            content="Save gene metadata to a `.txt` file."
+            position="bottom"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+          >                                              
+            <AnchorButton
+                type="button"
+                loading={saveLoading}
+                icon="floppy-disk"
+                onClick={() => {
+                  dispatch(actions.downloadVarMetadata())
+                }}
+              /> 
+            </Tooltip>           
+            <Tooltip
+            content="Upload gene metadata from a tab-delimited .txt file."
+            position="bottom"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+          >                                              
+            <AnchorButton
+                type="button"
+                icon="upload"
+                disabled={!userLoggedIn}
+                onClick={() => {
+                  this.setState({...this.state,uploadMetadataOpen2: true})
+                }}
+              /> 
+            </Tooltip>                 
+              <Dialog
+                title="Upload gene metadata file (tab-delimited, .txt)."
+                isOpen={uploadMetadataOpen2}
+                onOpened={()=>this.setupFileInput2()}
+                onClose={()=>{
+                  this.resetFileState2();
+                  }
+                }
+              >
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  paddingLeft: "10px",
+                  paddingTop: "10px",
+                  width: "90%",
+                  margin: "0 auto"
+                }}>
+                  <label className="bp3-file-input">
+                    <input type="file" id="dealCsv3"/>
+                    <span className="bp3-file-upload-input">{fileName2}</span>
+                  </label>           
+                </div>                                
+              </Dialog> 
+                      
+          {var_keys.length > 0 && <Tooltip
                 content={"The gene metadata to display."}
                 position={Position.RIGHT}
                 hoverOpenDelay={globals.tooltipHoverOpenDelay}
@@ -365,7 +464,7 @@ class GeneExpression extends React.Component {
                   rightIcon="double-caret-vertical"
                 />
               </Select>
-            </Tooltip>
+            </Tooltip>}
             </div>                                   
         <div style={{
           paddingTop: "10px",
@@ -416,7 +515,7 @@ class GeneExpression extends React.Component {
                       /> 
                     </Tooltip> }
                 <Tooltip
-                content="Upload gene metadata from a `.csv`, comma-delimited file."
+                content="Upload genesets from a `.csv`, comma-delimited file."
                 position="bottom"
                 hoverOpenDelay={globals.tooltipHoverOpenDelay}
               >                                              
@@ -430,7 +529,7 @@ class GeneExpression extends React.Component {
                   /> 
                 </Tooltip>                 
                   <Dialog
-                    title="Upload gene metadata file (comma-delimited .csv)"
+                    title="Upload genesets file (comma-delimited .csv)"
                     isOpen={uploadMetadataOpen}
                     onOpened={()=>this.setupFileInput()}
                     onClose={()=>{

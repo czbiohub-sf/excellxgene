@@ -306,6 +306,12 @@ class DownloadMetadataAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.save_metadata_put(request, data_adaptor)
 
+class DownloadVarMetadataAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    def put(self, data_adaptor):
+        return common_rest.save_var_metadata_put(request, data_adaptor)
+
 class DownloadGenedataAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
@@ -333,6 +339,13 @@ class DeleteObsmAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.delete_obsm_put(request, data_adaptor)
 
+class UploadVarMetadata(Resource):
+    @rest_get_data_adaptor
+    @cache_control(no_store=True)
+    @auth0_token_required
+    def post(self, data_adaptor):
+        return common_rest.upload_var_metadata_post(request, data_adaptor)
+   
 class RenameObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
@@ -358,6 +371,14 @@ class GeneInfoAPI(Resource):
     @rest_get_data_adaptor
     def get(self, data_adaptor):
         return common_rest.gene_info_get(request, data_adaptor)
+
+class AdminRestartMP(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    @requires_authentication
+    def get(self, data_adaptor):
+        return common_rest.admin_restart_get(request, data_adaptor)
+
 
 class GeneInfoBulkAPI(Resource):
     @requires_authentication
@@ -441,6 +462,8 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(HostedModeAPI, "/hostedMode")
     add_resource(GeneInfoAPI, "/geneInfo")
     add_resource(GeneInfoBulkAPI, "/geneInfoBulk")
+    add_resource(AdminRestartMP, "/adminRestart")
+    add_resource(UploadVarMetadata, "/uploadVarMetadata")    
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")
     add_resource(AnnotationsVarAPI, "/annotations/var")
@@ -455,6 +478,7 @@ def get_api_dataroot_resources(bp_dataroot):
     #add_resource(OutputAPI, "/output")
     #add_resource(DownloadAnndataAPI, "/downloadAnndata")
     add_resource(DownloadMetadataAPI, "/downloadMetadata")
+    add_resource(DownloadVarMetadataAPI, "/downloadVarMetadata")
     add_resource(DownloadGenedataAPI, "/downloadGenedata")
     #add_resource(LeidenClusterAPI, "/leiden")
     add_resource(DeleteObsmAPI, "/layout/obsm")

@@ -6,6 +6,7 @@ import DynamicScatterplot from "../scatterplot/scatterplot";
 import TopLeftLogoAndTitle from "./topLeftLogoAndTitle";
 import Continuous from "../continuous/continuous";
 import { Button } from "@blueprintjs/core";
+import actions from "../../actions";
 
 const UserButton = (props) => {
   const { userInfo } = props;
@@ -29,8 +30,16 @@ const LogoutButton = () => {
   );
 };
 
+const ResetPoolButton = (props) => { 
+  return (
+    <Button style={{height: "50%", textAlign: "left", float: "left"}} onClick={() => props.dispatch(actions.resetPools())}>
+      Reset Pools
+    </Button>
+  );
+};
+
 const Profile = (props) => {
-  const { userInfo } = props;
+  const { dispatch, userInfo } = props;
   return (
     (userInfo ?? false) && (
       <div style={{
@@ -38,6 +47,7 @@ const Profile = (props) => {
       }}>
         <h2>{userInfo.name}</h2>
         <p>{userInfo.email}</p>
+        {(userInfo.email ==="alexander.tarashansky@czbiohub.org") && <ResetPoolButton dispatch={dispatch}/>}
       </div>
     )
   );
@@ -50,7 +60,7 @@ const Profile = (props) => {
 }))
 class LeftSideBar extends React.Component {
   render() {
-    const { scatterplotXXaccessor, scatterplotYYaccessor, userInfo, hostedMode, leftWidth } = this.props;
+    const { dispatch, scatterplotXXaccessor, scatterplotYYaccessor, userInfo, hostedMode, leftWidth } = this.props;
     const width = leftWidth < globals.leftSidebarWidth ? globals.leftSidebarWidth : "inherit";
     return (
       <div
@@ -70,7 +80,7 @@ class LeftSideBar extends React.Component {
           padding: globals.leftSidebarSectionPadding
 
         }}>
-          <Profile userInfo={userInfo}/>
+          <Profile userInfo={userInfo} dispatch={dispatch}/>
           <UserButton userInfo={userInfo}/>
         </div> : null}
         <div

@@ -24,7 +24,8 @@ const Controls = (
     modifyingLayouts: false,
     screenCap: false,
     annoTracker: [],
-    varMetadata: ""
+    varMetadata: "",
+    varRefresher: false
   },
   action
 ) => {
@@ -41,13 +42,14 @@ const Controls = (
     }
     case "initial data load complete": {
       /* now fully loaded */
+      const defaultValue = (state?.allGenes ?? null);
       return {
         ...state,
         loading: false,
         error: null,
         resettingInterface: false,
         isSubsetted: false,
-        allGenes: action.allGenes ?? null
+        allGenes: action.allGenes ?? defaultValue
       };
     }
     case "init: set up websockets": {
@@ -144,6 +146,12 @@ const Controls = (
         userDefinedGenesLoading: false,
       };
     }
+    case "refresh var metadata": {
+      return {
+        ...state,
+        varRefresher: !state.varRefresher
+      }
+    }        
     case "clear user defined gene": {
       const { userDefinedGenes } = state;
       const newUserDefinedGenes = filter(

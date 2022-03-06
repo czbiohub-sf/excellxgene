@@ -28,8 +28,7 @@ class App extends React.Component {
     /* listen for url changes, fire one when we start the app up */
     window.addEventListener("popstate", this._onURLChanged);
     this._onURLChanged();
-
-    dispatch(actions.doInitialDataLoad(window.location.search));
+    dispatch(actions.doInitialDataLoad(window.location.search))
     this.forceUpdate();
   }
   componentDidUpdate(prevProps) {

@@ -67,7 +67,6 @@ class Category extends React.PureComponent {
       removeHistZeros: false,
       indexOfSankeyCategory: -1,
       filterValue: "",
-      ctPage: 0
     }
   }
   static getSelectionState(
@@ -280,11 +279,11 @@ class Category extends React.PureComponent {
       );
       if (query) colorDataPromise = annoMatrix.fetch(...query);
     }
+    
     const [categoryData, colorData] = await Promise.all([
       annoMatrix.fetch("obs", metadataField),
       colorDataPromise,
     ]);
-
     // our data
     const column = categoryData.icol(0);
     const colSchema = schema.annotations.obsByName[metadataField];
@@ -397,61 +396,7 @@ class Category extends React.PureComponent {
               const isTruncated = !!categorySummary?.isTruncated;
               const categorySummary = this.state?.categorySummary ?? categorySummaryOrig
               const selectionState = this.getSelectionState(categorySummary);              
-              
-              let maxCtPage;
-              let numCats = 0;
-              categorySummary.allCategoryValues.forEach((value)=>{
-                if (value.toString().includes(filterValue)){
-                  numCats = numCats + 1;
-                }
-              })
-              maxCtPage = Math.ceil((numCats-0.1) / 10)-1;
-              maxCtPage = Math.max(0,maxCtPage);
-
-              const pager = (
-                <div style={{
-                  textAlign: "right"
-                }}>
-                  {`Showing labels ${this.state.ctPage*10+1}-${Math.min((this.state.ctPage+1)*10,numCats)} / ${numCats}`}
-                  <AnchorButton
-                    type="button"
-                    icon="double-chevron-left"
-                    onClick={()=>{this.setState({...this.state,ctPage: 0})}}
-                    minimal
-                    disabled={this.state.ctPage === 0}
-                  />          
-                  <AnchorButton
-                    type="button"
-                    icon="chevron-left"
-                    onClick={()=>{
-                      this.setState({
-                        ctPage: this.state.ctPage-1
-                      })                      
-                    }}
-                    minimal
-                    disabled={this.state.ctPage  === 0}
-                  />
-                  <AnchorButton
-                    type="button"
-                    icon="chevron-right"
-                    onClick={()=>{
-                      this.setState({
-                        ctPage: this.state.ctPage+1
-                      })                      
-                    }}
-                    minimal
-                    disabled={this.state.ctPage === maxCtPage}
-                  />  
-                  <AnchorButton
-                    type="button"
-                    icon="double-chevron-right"
-                    onClick={()=>{this.setState({ctPage: maxCtPage})}}
-                    minimal
-                    disabled={this.state.ctPage === maxCtPage}
-                  />                            
-                </div>
-          
-              );              
+                      
               return (
                 <CategoryRender
                   metadataField={metadataField}
@@ -489,11 +434,9 @@ class Category extends React.PureComponent {
                   sankeyLoading={sankeyLoading}    
                   filterValue={filterValue}
                   filterValueSetter={(e)=>{
-                    this.setState({...this.state,filterValue: e, ctPage: 0})
+                    this.setState({...this.state,filterValue: e})
                   }}
                   userLoggedIn={userLoggedIn}
-                  pager={pager}
-                  ctPage={this.state.ctPage}
                   leftSidebarWidth={leftSidebarWidth}
                 />
               );
@@ -794,8 +737,6 @@ const CategoryRender = React.memo(
     filterValue,
     filterValueSetter,
     userLoggedIn,
-    pager,
-    ctPage,
     leftSidebarWidth
   }) => {
     /*
@@ -872,24 +813,26 @@ const CategoryRender = React.memo(
                   
                 />
               </div>
-              <div style={{paddingBottom: "5px"}}>
-                {pager}
+              <div style={{
+                maxHeight: "400px",
+                overflowY: "auto",
+                border: "1px solid black"
+              }}>
+                <CategoryValueList
+                  isUserAnno={isUserAnno}
+                  metadataField={metadataField}
+                  categoryData={categoryData}
+                  categorySummary={categorySummary}
+                  colorAccessor={colorAccessor}
+                  colorData={colorData}
+                  colorTable={colorTable}
+                  sortDirection={sortDirection}
+                  continuousAverages={continuousAverages}
+                  removeHistZeros={removeHistZeros}
+                  filterValue={filterValue}
+                  leftSidebarWidth={leftSidebarWidth}
+                />
               </div>
-              <CategoryValueList
-                isUserAnno={isUserAnno}
-                metadataField={metadataField}
-                categoryData={categoryData}
-                categorySummary={categorySummary}
-                colorAccessor={colorAccessor}
-                colorData={colorData}
-                colorTable={colorTable}
-                sortDirection={sortDirection}
-                continuousAverages={continuousAverages}
-                removeHistZeros={removeHistZeros}
-                filterValue={filterValue}
-                ctPage={ctPage}
-                leftSidebarWidth={leftSidebarWidth}
-              />
               </>
             ) : null
           }
@@ -917,7 +860,6 @@ const CategoryValueList = React.memo(
     continuousAverages,
     removeHistZeros,
     filterValue,
-    ctPage,
     leftSidebarWidth
   }) => {
     const categoryValueCountsObj = {}
@@ -1019,7 +961,7 @@ const CategoryValueList = React.memo(
     if (!isUserAnno) {
       return (
         <>
-          {newTuplesFiltered.slice(ctPage*10,(ctPage+1)*10).map(([value, index]) => (
+          {newTuplesFiltered.map(([value, index]) => (
             (value.toString().includes(filterValue) || value === "unassigned") ?
             <Value
               key={value}
@@ -1044,7 +986,7 @@ const CategoryValueList = React.memo(
     const flipKey = [...categorySummary.categoryValueIndices].map((t) => t[0]).join("");
     return (
       <Flipper flipKey={flipKey}>
-        {newTuplesFiltered.slice(ctPage*10,(ctPage+1)*10).map(([value, index]) => {
+        {newTuplesFiltered.map(([value, index]) => {
         return ((value.toString().includes(filterValue) || value === "unassigned") ?
           <Flipped key={value} flipId={value}>
             <Value

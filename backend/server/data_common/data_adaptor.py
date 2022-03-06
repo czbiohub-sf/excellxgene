@@ -140,12 +140,6 @@ class DataAdaptor(metaclass=ABCMeta):
     def get_corpora_props(self):
         return None
 
-    @abstractmethod
-    def get_schema(self):
-        """
-        Return current schema
-        """
-        pass
 
     @abstractmethod
     def annotation_to_fbs_matrix(self, axis, field=None, uid=None):

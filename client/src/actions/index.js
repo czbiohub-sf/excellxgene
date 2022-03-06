@@ -267,6 +267,49 @@ export const downloadMetadata = () => async (
     window.URL.revokeObjectURL(url);
 }
 
+export const downloadVarMetadata = () => async (
+  dispatch,
+  getState
+) => {
+    const state = getState();
+    const { layoutChoice } = state;
+
+    dispatch({
+      type: "output data: request start"
+    });
+    
+    const res = await fetch(
+      `${API.prefix}${API.version}downloadVarMetadata`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          embName: layoutChoice.current
+        }),
+        credentials: "include",
+        }
+    );
+
+    const blob = await res.blob()
+    
+    dispatch({
+      type: "output data: request completed"
+    });
+
+    var a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    var url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = `${layoutChoice.current}_var.txt`.split(";").join("_");
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
 export const downloadGenedata = () => async (
   _dispatch,
   _getState
@@ -677,6 +720,7 @@ const doInitialDataLoad = () =>
       ]);
       genesetsFetch(dispatch, config);
       reembedParamsFetch(dispatch);
+
       const { response: userInfo } = res;
       const { response: hostedMode } = res2;
       if ( hostedMode ) {
@@ -684,12 +728,13 @@ const doInitialDataLoad = () =>
       } else {
         dispatch({type: "set user info", userInfo: {desktopMode: true}})
       }
-      
       dispatch({type: "set hosted mode", hostedMode})
-      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;   
-      
+      const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;  
+
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
+      
       const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
+
       prefetchEmbeddings(annoMatrix);
       const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
@@ -726,9 +771,8 @@ const doInitialDataLoad = () =>
           obsCrossfilter
         });
       }
-
+      
       dispatch({ type: "initial data load complete", allGenes});
-
       setupWebSockets(dispatch,getState,userInfo ? true : false, hostedMode)      
 
     } catch (error) {
@@ -759,6 +803,22 @@ export function fetchGeneInfo(gene,varMetadata) {
     return r.response;  
   }
 }
+
+export function resetPools() {
+  return (_dispatch, _getState) => {
+    fetch(
+      `${API.prefix}${API.version}adminRestart`,
+      {
+         headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        credentials: "include",
+      },
+    );   
+  }
+}
+
 export function fetchGeneInfoBulk(geneSet,varMetadata) {
   return async (_dispatch, getState) => {
     if (varMetadata !== ""){
@@ -936,8 +996,10 @@ function fetchJson(pathAndQuery) {
 }
 
 export default {
+  schemaFetch,
   fetchGeneInfo,
   fetchGeneInfoBulk,
+  resetPools,
   prefetchEmbeddings,
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,
@@ -954,6 +1016,7 @@ export default {
   downloadMetadata,
   downloadGenedata,
   requestSaveAnndataToFile,
+  downloadVarMetadata,
   setCellsFromSelectionAndInverseAction:
     selnActions.setCellsFromSelectionAndInverseAction,
   selectContinuousMetadataAction: selnActions.selectContinuousMetadataAction,

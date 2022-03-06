@@ -24,7 +24,7 @@ const GeneSelection = (state={}, action) => {
         delete s[item]
       })
       return s;
-    }    
+    }        
     default: {
       return state;
     }

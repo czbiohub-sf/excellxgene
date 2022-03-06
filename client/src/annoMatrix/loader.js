@@ -45,7 +45,6 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
     this.baseURL = baseURL;
     Object.seal(this);
   }
-
   /**
    ** Public.  API described in base class.
    **/

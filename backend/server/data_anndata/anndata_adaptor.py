@@ -215,7 +215,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     pcas = {}
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
-        if name == n.split(';')[-1]:
+        if name == n.split(';')[-1] or (';;' not in currentLayout and ';;' not in n):
             if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p") and exists(f"{direc}/{userID}/pca/{n}.p"):
                 embs[n] = pickle_loader(f)
                 nnms[n] = pickle_loader(f"{direc}/{userID}/nnm/{n}.p")
@@ -234,7 +234,9 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
 
     X = _create_data_from_shm(*shm["X"])
 
+    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
     adata = AnnData(X = X[filt])
+    adata.var_names = pd.Index(v)
     adata.obs_names = pd.Index(cids[filt])
 
     for k in AnnDataDict['varm'].keys():
@@ -253,36 +255,39 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
         if ';;' in n:
             tlay = n.split(';;')[-1]
         else:
-            tlay = name
+            tlay = ""
 
         if name == tlay:
             l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
             if n != "name_0":
-                adata.var[n] = pd.Series(l)              
+                adata.var[n.split(';;')[0]] = pd.Series(data=l,index=v)              
+    
+    vkeys = list(adata.var.keys())
+    for f in fnames:
+        n = f.split('/')[-1].split('\\')[-1][:-2]
+        if ';;' not in n:
+            if n not in vkeys:
+                l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                if n != "name_0":
+                    adata.var[n] = pd.Series(data=l,index=v)  
 
     temp = {}
     for key in nnms.keys():
         temp[key] = nnms[key][filt][:,filt]
     for key in temp.keys():
-        adata.obsp["N_"+key] = temp[key]
+        adata.obsp["N_"+key.split(';;')[-1]] = temp[key]
     for key in params.keys():
-        adata.uns["N_"+key+"_params"]=params[key]
+        adata.uns["N_"+key.split(';;')[-1]+"_params"]=params[key]
     for key in embs.keys():
-        adata.obsm["X_"+key] = embs[key][filt] 
+        adata.obsm["X_"+key.split(';;')[-1]] = embs[key][filt] 
     for key in pcas.keys():
-        adata.obsm["X_"+key+"_pca"] = pcas[key][filt]         
+        adata.obsm["X_"+key.split(';;')[-1]+"_pca"] = pcas[key][filt]         
 
     keys = list(adata.var.keys())
     for k in keys:
         if ";;tMean" in k:
             del adata.var[k]
                 
-    try:
-        adata.var_names = pd.Index(adata.var["name_0"].astype('str'))
-        del adata.var["name_0"]
-    except:
-        pass        
-
     for k in AnnDataDict["Xs"]:
         if k != "X":
             X = _create_data_from_shm(*shm[k])
@@ -448,10 +453,11 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
     if embName == "":
         embName = f"umap_{str(hex(int(time.time())))[2:]}"
 
-    if parentName != "":
-        parentName+=";;"
+    if not np.all(obs_mask):
+        name = f"{parentName};;{embName}"
+    else:
+        name = embName    
     
-    name = f"{parentName}{embName}"
     if exists(f"{userID}/emb/{name}.p"):
         name = f"{name}_{str(hex(int(time.time())))[2:]}"
         
@@ -1048,7 +1054,8 @@ def initialize_socket(da):
                     obs.index = pd.Index(np.arange(obs.shape[0]))
                     
                     fnames = glob(f"{direc}/{userID}/var/*.p")
-                    var = pd.DataFrame()
+                    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+                    var = pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
                     for f in fnames:
                         n = f.split('/')[-1].split('\\')[-1][:-2]
                         if ';;' in n:
@@ -1060,6 +1067,7 @@ def initialize_socket(da):
                             l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
                             if n != "name_0":
                                 var[n] = pd.Series(l)
+                    del var['name_0']
                     
                     AnnDataDict = {
                         "Xs": layers,
@@ -1070,8 +1078,8 @@ def initialize_socket(da):
                     }
 
                     def post_processing(res):
-                        da.schema["layout"]["obs"].append(res)
                         return res
+
                     _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
     
     @sock.route("/sankey")
@@ -1089,8 +1097,8 @@ def initialize_socket(da):
                
                 direc = pathlib.Path().absolute()   
                 fnames = glob(f"{direc}/{userID}/var/*.p")
-                
-                var = pd.DataFrame()
+                v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+                var = pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
                 for f in fnames:
                     n = f.split('/')[-1].split('\\')[-1][:-2]
                     if ';;' in n:
@@ -1102,6 +1110,7 @@ def initialize_socket(da):
                         l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
                         if n != "name_0":
                             var[n] = pd.Series(l)
+                del var['name_0']
                                                               
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
                 if params["sankeyMethod"] == "Graph alignment":
@@ -1308,8 +1317,6 @@ class AnndataAdaptor(DataAdaptor):
         self.data = None
 
         self._load_data(data_locator, root_embedding=app_config.root_embedding)    
-
-        #if app_config.hosted_mode:
         self._create_pool()
 
         print("Validating and initializing...")
@@ -1317,7 +1324,12 @@ class AnndataAdaptor(DataAdaptor):
 
     def _create_pool(self):
         self.pool = Pool(os.cpu_count(), initializer=_initializer, initargs=(self.shm_layers_csr,self.shm_layers_csc), maxtasksperchild=None)
-
+    def _reset_pool(self):
+        self.pool.close()
+        self.pool.terminate()
+        self.pool.join()
+        self._create_pool()
+    
     def cleanup(self):
         pass
 
@@ -1417,36 +1429,6 @@ class AnndataAdaptor(DataAdaptor):
             else:
                 # user specified a non-existent column name
                 raise KeyError(f"Annotation name {name}, specified in --{ax_name}-name does not exist.")
-
-    def _create_schema(self):
-        layers = list(self.data.layers.keys())
-        
-        if "X" not in layers:
-            layers = ["X"] + layers
-        
-        self.schema = {
-            "dataframe": {"nObs": self.cell_count, "nVar": self.gene_count, "type": str(self.data.X.dtype)},
-            "annotations": {
-                "obs": {"index": self.parameters.get("obs_names"), "columns": []},
-                "var": {"index": self.parameters.get("var_names"), "columns": []},
-            },
-            "layout": {"obs": []},
-            "layers": layers
-        }
-        for ax in Axis:
-            curr_axis = getattr(self.data, str(ax))
-            for ann in curr_axis:
-                ann_schema = {"name": ann, "writable": True}
-                ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-                if ann_schema['type']!='categorical':
-                    ann_schema['writable']=False
-                self.schema["annotations"][ax]["columns"].append(ann_schema)
-        for layout in self.get_embedding_names():
-            layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
-            self.schema["layout"]["obs"].append(layout_schema)
-
-    def get_schema(self):
-        return self.schema
 
     def _load_data(self, data_locator, root_embedding = None):
         with data_locator.local_handle() as lh:
@@ -1638,7 +1620,6 @@ class AnndataAdaptor(DataAdaptor):
         self._validate_data_types()
         self.cell_count = self.data.shape[0]
         self.gene_count = self.data.shape[1]
-        self._create_schema()
 
         for k in self.data.obs.columns:
             x = np.array(list(self.data.obs[k]))
@@ -1724,6 +1705,7 @@ class AnndataAdaptor(DataAdaptor):
                     "uint64": "int32",
                     "float64": "float32",
                 }
+                """                
                 if datatype in downcast_map:
                     warnings.warn(
                         f"Anndata annotation {ax}:{ann} is in unsupported format: {datatype}. "
@@ -1737,7 +1719,7 @@ class AnndataAdaptor(DataAdaptor):
                             f"cumbersome or slow to display. We recommend setting the "
                             f"--max-category-items option to 500, this will hide categorical "
                             f"annotations with more than 500 categories in the UI"
-                        )
+                        )"""
 
     def annotation_to_fbs_matrix(self, axis, fields=None, labels=None):
         if axis == Axis.OBS:

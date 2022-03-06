@@ -200,6 +200,8 @@ class Embedding extends React.Component {
                 flexDirection: "column",
                 padding: 10,
                 width: 400,
+                maxHeight: "375px",
+                overflowY: "auto"                
               }}
             >
               <H4>Embedding Choice</H4>

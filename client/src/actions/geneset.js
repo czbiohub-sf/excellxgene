@@ -30,7 +30,8 @@ export const genesetDeleteGroup = (genesetGroup) => (dispatch, getState) => {
 };
 export const genesetAddGenes = (genesetDescription, genesetName, genes) => (dispatch, getState) => {
   const state = getState();
-  const { obsCrossfilter: prevObsCrossfilter } = state;
+  const { obsCrossfilter: prevObsCrossfilter, controls } = state;
+  const { allGenes } = controls;
   const obsCrossfilter = dropGenesetSummaryDimension(
     prevObsCrossfilter,
     state,
@@ -41,12 +42,12 @@ export const genesetAddGenes = (genesetDescription, genesetName, genes) => (disp
     type: "continuous metadata histogram cancel",
     continuousNamespace: { isGeneSetSummary: true },
     selection: `${genesetDescription}::${genesetName}`,
-  });
+  });  
   return dispatch({
     type: "geneset: add genes",
     genesetDescription,
     genesetName,
-    genes,
+    genes: genes.filter((item)=>allGenes.includes(item)),
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
