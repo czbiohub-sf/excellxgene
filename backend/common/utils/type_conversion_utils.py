@@ -71,7 +71,7 @@ def get_schema_type_hint_from_dtype(dtype, array_values=None):
         return {"type": dtype_name}
     if dtype_name == "bool":
         return {"type": "boolean"}
-    if dtype_name == "object" and dtype_kind == "O":
+    if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:
         return {"type": "string"}
     if dtype_name == "category":
         return {"type": "categorical", "categories": dtype.categories.tolist()}

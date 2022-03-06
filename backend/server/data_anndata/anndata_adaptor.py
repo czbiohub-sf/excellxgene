@@ -1570,11 +1570,11 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/var/")
 
             for k in self._obs_init.keys():
-                pickle_dumper(np.array(list(self._obs_init[k]),dtype='object'),f"{userID}/obs/{k}.p")
-            pickle_dumper(np.array(list(self._obs_init.index),dtype='object'),f"{userID}/obs/name_0.p")                                
+                pickle_dumper(np.array(list(self._obs_init[k])),f"{userID}/obs/{k}.p")
+            pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")                                
             for k in self._var_init.keys():
-                pickle_dumper(np.array(list(self._var_init[k]),dtype='object'),f"{userID}/var/{k}.p")
-            pickle_dumper(np.array(list(self._var_init.index),dtype='object'),f"{userID}/var/name_0.p")                
+                pickle_dumper(np.array(list(self._var_init[k])),f"{userID}/var/{k}.p")
+            pickle_dumper(np.array(list(self._var_init.index)),f"{userID}/var/name_0.p")                
 
             for k in self._obsm_init.keys():
                 k2 = "X_".join(k.split("X_")[1:])
@@ -1584,26 +1584,7 @@ class AnndataAdaptor(DataAdaptor):
                 if r is not None:
                     pickle_dumper(r,f"{userID}/nnm/{k2}.p")
                     pickle_dumper(p,f"{userID}/params/{k2}.p")
-        else:
-            obs = glob(f"{userID}/obs/*.p")
-            for ann in obs:
-                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
-                x = pickle_loader(f"{userID}/obs/{ann}.p")
-                dtype = x.dtype
-                if hasattr(dtype,'numpy_dtype'):
-                    dtype = dtype.numpy_dtype
-                x = x.astype(dtype)  
-                pickle_dumper(x,f"{userID}/obs/{ann}.p")
-
-            var = glob(f"{userID}/var/*.p")
-            for ann in var:
-                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
-                x = pickle_loader(f"{userID}/var/{ann}.p")
-                dtype = x.dtype
-                if hasattr(dtype,'numpy_dtype'):
-                    dtype = dtype.numpy_dtype
-                x = x.astype(dtype)  
-                pickle_dumper(x,f"{userID}/var/{ann}.p")                
+             
 
     def _validate_and_initialize(self):
         if anndata_version_is_pre_070():

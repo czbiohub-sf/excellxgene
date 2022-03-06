@@ -47,7 +47,7 @@ export const genesetAddGenes = (genesetDescription, genesetName, genes) => (disp
     type: "geneset: add genes",
     genesetDescription,
     genesetName,
-    genes: genes.filter((item)=>allGenes.includes(item)),
+    genes: genes.filter((item)=>allGenes.__columns[0].includes(item)),
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
