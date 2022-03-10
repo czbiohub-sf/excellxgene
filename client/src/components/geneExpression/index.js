@@ -125,7 +125,7 @@ class GeneExpression extends React.Component {
             x.push(item.split("\r").at(0))
           }
         })
-        if (x[0] === "gene_set_description" && x[1] === "gene_set_name" && x.length === 2){
+        if (x[0] === "gene_set_description" && x[1] === "gene_set_name"){
           continue;
         }
 

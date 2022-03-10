@@ -69,14 +69,6 @@ class BatchPanel extends React.PureComponent {
         );
         break;
       } case "Harmony": {
-        panel = (
-          <div style={{"paddingLeft":"10px"}}>
-            <ControlGroup fill={true} vertical={false}>
-
-            </ControlGroup>
-          </div>
-        );
-        break;
       } default: {
         panel = null;
       }

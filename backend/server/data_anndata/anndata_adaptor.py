@@ -350,7 +350,8 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
                 sam=SAM(counts = adata, inplace=True)
                 X = sam.adata.X
                 preprocessing = "StandardScaler" if scaleData else "Normalizer"
-                sam.run(n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM)
+                bk=batchKey if batchMethod == "Harmony" else None
+                sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM)
                 sam.adata.X = X        
                 adata=sam.adata
 
@@ -360,7 +361,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
                 else:
                     adata_batch = adata
                 
-                if batchMethod == "Harmony":
+                if batchMethod == "Harmony" and not doSAM:
                     sce.pp.harmony_integrate(adata_batch,batchKey,adjusted_basis="X_pca")
                 elif batchMethod == "BBKNN":
                     sce.pp.bbknn(adata_batch, batch_key=batchKey, metric=distanceMetric, n_pcs=numPCs, neighbors_within_batch=bbknnNeighborsWithinBatch)
@@ -1118,7 +1119,7 @@ def initialize_socket(da):
                 elif params["sankeyMethod"] == "Correlation":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df_corr, "sankey",data,None,labels, obs_mask, params, var)
                 elif params["sankeyMethod"] == "Correlation (selected genes)":
-                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr_sg, "sankey",data,None,labels, obs_mask, params,pd.Series(index=var['name_0'].values,data=np.arange(var.shape[0])))
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr_sg, "sankey",data,None,labels, obs_mask, params,pd.Series(index=v,data=np.arange(var.shape[0])))
                 elif params["sankeyMethod"] == "Co-labeling":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df_coclustering, "sankey",data,None,labels, obs_mask, params['numEdges'])                                        
 
@@ -1535,7 +1536,6 @@ class AnndataAdaptor(DataAdaptor):
 
                 adata.layers[k] = sp.sparse.csc_matrix(adata.shape).astype('float32')
                 gc.collect()
-
             adata.X = sp.sparse.csc_matrix(adata.shape).astype('float32')
             gc.collect()
             
