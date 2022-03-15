@@ -303,6 +303,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
     if embeddingMode == "Preprocess and run":
         with ServerTiming.time("layout.compute"):        
             adata = compute_preprocess(AnnDataDict, reembedParams, userID, ihm)
+            X_full = adata.X
             if adata.isbacked:
                 raise NotImplementedError("Backed mode is incompatible with re-embedding")
 
@@ -490,13 +491,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
     if (parentParams is not None):
         reembedParams[f"parentParams"]=parentParams
 
-    dataLayer = reembedParams.get("dataLayer","X")
-    obs_mask = AnnDataDict['obs_mask']
-    X = _create_data_from_shm(*shm[dataLayer])[obs_mask]
-
-    var = dispersion_ranking_NN(X,nnm_sub)
+    var = dispersion_ranking_NN(X_full,nnm_sub)
     for k in var.keys():
-        pickle_dumper(np.array(list(var[k])).astype('float'),f"{direc}/{userID}/var/{k};;{name}.p")
+        fn = "{}/{}/var/{};;{}.p".format(direc,userID,k.replace('/',':'),name)
+        if not os.path.exists(fn.split(';;')[0]+'.p'):
+            pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
+        pickle_dumper(np.array(list(var[k])).astype('float'),fn)
 
     pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
     pickle_dumper(X_umap, f"{direc}/{userID}/emb/{name}.p")
@@ -1005,7 +1005,19 @@ def initialize_socket(da):
                 obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])      
 
                 tMean = da.data.var[f'{layer};;tMean'].values
-                tMeanSq = da.data.var[f'{layer};;tMeanSq'].values                      
+                tMeanSq = da.data.var[f'{layer};;tMeanSq'].values     
+                annotations = da.dataset_config.user_annotations        
+                direc = pathlib.Path().absolute()                       
+                userID = f"{annotations._get_userdata_idhash(da)}"  
+                fnn=data['groupName'].replace('/',':')
+                if not os.path.exists(f"{direc}/{userID}/diff/{fnn}"):
+                    os.makedirs(f"{direc}/{userID}/diff/{fnn}")
+                if not data.get('multiplex',None):
+                    pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/Pop1 high.p")
+                    pickle_dumper(np.where(obs_mask_B)[0],f"{direc}/{userID}/diff/{fnn}/Pop2 high.p")
+                else:
+                    fnn2=data['category'].replace('/',':')                                    
+                    pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/{fnn2}.p")
 
                 _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)
     
@@ -1317,7 +1329,7 @@ class AnndataAdaptor(DataAdaptor):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
 
-        self._load_data(data_locator, root_embedding=app_config.root_embedding)    
+        self._load_data(data_locator, root_embedding=app_config.root_embedding, preprocess=app_config.preprocess)    
         self._create_pool()
 
         print("Validating and initializing...")
@@ -1431,7 +1443,7 @@ class AnndataAdaptor(DataAdaptor):
                 # user specified a non-existent column name
                 raise KeyError(f"Annotation name {name}, specified in --{ax_name}-name does not exist.")
 
-    def _load_data(self, data_locator, root_embedding = None):
+    def _load_data(self, data_locator, preprocess=False, root_embedding = None):
         with data_locator.local_handle() as lh:
             backed = "r" if self.server_config.adaptor__anndata_adaptor__backed else None
 
@@ -1478,6 +1490,13 @@ class AnndataAdaptor(DataAdaptor):
                 if not sparse.issparse(adata.layers[k]):
                     adata.layers[k] = sparse.csr_matrix(adata.layers[k])
 
+            if preprocess:
+                target_sum = np.median(np.array(adata.X.sum(1)).flatten())
+                adata.layers['raw_counts'] = adata.X.copy()
+                sc.pp.normalize_total(adata,target_sum=target_sum)                
+                sc.pp.log1p(adata)
+                adata.layers['X'] = adata.X
+                
             self.rootName = self.find_valid_root_embedding(adata.obsm)
             if root_embedding is not None:
                 if root_embedding in adata.obsm.keys():
@@ -1568,12 +1587,17 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/pca/")
             os.makedirs(f"{userID}/obs/")
             os.makedirs(f"{userID}/var/")
+            os.makedirs(f"{userID}/diff/")
 
             for k in self._obs_init.keys():
-                pickle_dumper(np.array(list(self._obs_init[k])),f"{userID}/obs/{k}.p")
+                vals = np.array(list(self._obs_init[k]))
+                if isinstance(vals[0],np.integer):
+                    vals = vals.astype('str')
+                    
+                pickle_dumper(vals,"{}/obs/{}.p".format(userID,k.replace('/',':')))
             pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")                                
             for k in self._var_init.keys():
-                pickle_dumper(np.array(list(self._var_init[k])),f"{userID}/var/{k}.p")
+                pickle_dumper(np.array(list(self._var_init[k])),"{}/var/{}.p".format(userID,k.replace('/',':')))
             pickle_dumper(np.array(list(self._var_init.index)),f"{userID}/var/name_0.p")                
 
             for k in self._obsm_init.keys():

@@ -332,6 +332,20 @@ class RenameObsAPI(Resource):
     def put(self, data_adaptor):
         return common_rest.rename_obs_put(request, data_adaptor)
 
+class RenameDiffAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.rename_diff_put(request, data_adaptor)
+
+class DeleteDiffAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.delete_diff_put(request, data_adaptor)
+
 class DeleteObsmAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
@@ -371,6 +385,12 @@ class GeneInfoAPI(Resource):
     @rest_get_data_adaptor
     def get(self, data_adaptor):
         return common_rest.gene_info_get(request, data_adaptor)
+
+class DiffGroupInfo(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.diff_group_get(request, data_adaptor)
 
 class AdminRestartMP(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -485,7 +505,10 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(RenameObsmAPI, "/layout/rename")
     
     add_resource(DeleteObsAPI, "/annotations/delete")
-    add_resource(RenameObsAPI, "/annotations/rename")    
+    add_resource(RenameObsAPI, "/annotations/rename")
+    add_resource(RenameDiffAPI, "/renameDiffExp")  
+    add_resource(DeleteDiffAPI, "/deleteDiffExp") 
+    add_resource(DiffGroupInfo, "/diffExpPops")   
     #add_resource(PreprocessAPI, "/preprocess")
     add_resource(SummarizeVarAPI, "/summarize/var")
     # Display routes

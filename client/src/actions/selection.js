@@ -1,6 +1,4 @@
-/*
-Action creators for selection 
-*/
+import { resetSubsetAction } from "./viewStack";
 export const selectContinuousMetadataAction = (
   type,
   query,
@@ -222,7 +220,6 @@ export const graphLassoEndAction = (embName, polygon, multiselect) => async (
     const nameDf = await annoMatrix.fetch("obs", "name_0");
     const rowNames = nameDf.__columns[0];
     const values = union.map((index) => rowNames[index]);
-
     selection = {
       mode: "exact",
       values,
@@ -239,6 +236,26 @@ export const graphLassoEndAction = (embName, polygon, multiselect) => async (
     polygon,
   });
 };
+
+export const selectCellsFromArray = (array, name) => async (
+  dispatch,
+  getState
+) => {
+
+  let { annoMatrix, obsCrossfilter} = getState();
+  [annoMatrix, obsCrossfilter] = dispatch(resetSubsetAction({annoMatrix}))
+  
+  const nameDf = await annoMatrix.fetch("obs", "name_0");
+  const rowNames = nameDf.__columns[0];
+  const values = array.map((index) => rowNames[index]);
+
+  const selection = {
+    mode: "exact",
+    values,
+  };  
+  obsCrossfilter = await obsCrossfilter.select("obs", "name_0", selection);
+  dispatch({type: "set current selection DEG", name: name, annoMatrix, obsCrossfilter})
+}
 
 export const setCellsFromSelectionAndInverseAction = () => async (
   dispatch,

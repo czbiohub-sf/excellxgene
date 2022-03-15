@@ -163,9 +163,10 @@ const GeneSets = (
           
           for (const key2 in genesets[key]) {
             if (key === genesetDescription && key2 === genesetName) {
-              newGenesets[update.genesetDescription][update.genesetName] = genesets[key][key2]
+              const x =  key.includes('//;;//') ? '//;;//' : '';
+              newGenesets[`${update.genesetDescription}${x}`][`${update.genesetName}`] = genesets[key][key2]
             } else {
-              newGenesets[key][key2] = genesets[key][key2]
+              newGenesets[key][`${key2}`] = genesets[key][key2]
             }
           }
           if (Object.keys(newGenesets[key]).length === 0) {
@@ -287,7 +288,7 @@ const GeneSets = (
     case "request differential expression all success": {
       const { dataList, nameList, dateString, grouping } = action;
       const genesets = {...state.genesets};
-      genesets[`${grouping} (${dateString})`] = {};
+      genesets[`${grouping} (${dateString})//;;//`] = {};
 
       for (const [i, data] of dataList.entries()) {
         const name = nameList[i];
@@ -295,7 +296,7 @@ const GeneSets = (
         const polarity = `${name}`;
         const genes = data['positive'].map((diffExpGene) =>
             diffExpGene[0])
-        genesets[`${grouping} (${dateString})`][polarity] = genes;
+        genesets[`${grouping} (${dateString})//;;//`][`${polarity}`] = genes;
 
       }
       return {
@@ -316,9 +317,7 @@ const GeneSets = (
       }
     }
     case "request differential expression success": {
-      const { data } = action;
-
-      const dateString = new Date().toLocaleString();
+      const { data, dateString } = action;
 
       const genesetNames = {
         positive: `Pop1 high`,
@@ -326,12 +325,13 @@ const GeneSets = (
       };
       
       const genesets = {...state.genesets};
-      genesets[`${dateString}`] = {};
+      genesets[`${dateString}//;;//`] = {};
 
       for (const polarity of Object.keys(genesetNames)) {
+        const num = polarity === 'positive' ? "1" : "2";
         const genes = data[polarity].map((diffExpGene) =>
             diffExpGene[0])
-        genesets[`${dateString}`][genesetNames[polarity]] = genes;
+        genesets[`${dateString}//;;//`][`${genesetNames[polarity]}`] = genes;
       }
       return {
         ...state,

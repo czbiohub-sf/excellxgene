@@ -13,6 +13,7 @@ from .errors import AnnotationsError
 GENESETS_TIDYCSV_HEADER = [
     "gene_set_description",    
     "gene_set_name",
+    "differential_expression"
 ]
 
 
@@ -55,12 +56,14 @@ def read_gene_sets_tidycsv(gs_locator, context=None):
         with open(fname, newline="") as f:
             reader = csv.reader(f, dialect=myDialect())
             for row in reader:
-                if len(row) <= 2 or not header_read:
+                if len(row) <= 3 or not header_read:
                     header_read = True
                     continue
 
-                geneset_description, geneset_name = row[:2]
-                gene_symbols = row[3:]
+                geneset_description, geneset_name, diffExp = row[:3]
+                x = "//;;//" if diffExp else ""
+                geneset_description+=x
+                gene_symbols = row[4:]
                 try:
                     gene_symbols = gene_symbols[:gene_symbols.index("")]
                 except:
@@ -90,10 +93,12 @@ def write_gene_sets_tidycsv(f, genesets):
     for k1 in genesets.keys():
         for k2 in genesets[k1].keys():
             genes = genesets[k1].get(k2,None)
+            k3 ='//;;//' in k1
+            knew = k1.split('//;;//')[0]
             if not genes:
-                writer.writerow([k1, k2])
+                writer.writerow([knew, k2, k3])
             else:
-                writer.writerow([k1, k2]+genes)
+                writer.writerow([knew, k2, k3]+genes)
 
 
 def summarizeQueryHash(raw_query):

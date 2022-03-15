@@ -328,7 +328,7 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
-            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),f"{userID}/obs/{col}.p")
+            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/obs/{}.p".format(userID,col.replace('/',':')))
 
 def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     """helper function to write annotations from fbs"""
@@ -342,7 +342,7 @@ def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
-            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),f"{userID}/var/{col};;{name}.p")
+            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/var/{};;{}.p".format(userID,col.replace('/',':'),name))
 
 def check_new_labels_var(self, labels_df):
     """Check the new annotations labels, then set the labels_df index"""
@@ -559,7 +559,7 @@ def upload_var_metadata_post(request, data_adaptor):
         valsrev = np.zeros(v2rev.size,dtype='object')
         valsrev[:] = filler
         vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
-        pickle_dumper(vals,f"{direc}/{userID}/var/{k}.p")
+        pickle_dumper(vals,"{}/{}/var/{}.p".format(direc,userID,k.replace('/',':')))
 
     @after_this_request
     def remove_file(response):
@@ -731,6 +731,56 @@ def rename_obs_put(request, data_adaptor):
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def rename_diff_put(request, data_adaptor):
+    args = request.get_json()
+    oldName = args.get("oldName",None)
+    newName = args.get("newName",None)
+    userID = _get_user_id(data_adaptor)
+    
+    if os.path.exists(f"{userID}/diff/{oldName.replace('/',':')}"):
+        os.rename(f"{userID}/diff/{oldName.replace('/',':')}",f"{userID}/diff/{newName.replace('/',':')}")
+    
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def delete_diff_put(request, data_adaptor):
+    args = request.get_json()
+    name = args.get("name",None)
+    userID = _get_user_id(data_adaptor)
+    
+    try:
+        if os.path.exists(f"{userID}/diff/{name.replace('/',':')}"):
+            fs = glob(f"{userID}/diff/{name.replace('/',':')}/*")
+            for f in fs:
+                os.remove(f)
+            os.rmdir(f"{userID}/diff/{name.replace('/',':')}")
+    except: 
+        pass
+    
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def diff_group_get(request,data_adaptor):
+    name = request.args.get("name",None)
+    pop = request.args.get("pop",None)
+    userID = _get_user_id(data_adaptor)
+    try:
+        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}.p")
+        return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
 
 
 def initialize_user(data_adaptor):            

@@ -293,7 +293,14 @@ def launch_args(func):
         default=None,
         show_default=True,
         help="Provide URL to use for authorization redirects.",
-    )                  
+    )  
+    @click.option(
+        "--preprocess",
+        default=False,
+        is_flag=True,
+        show_default=True,
+        help="Preprocesses the input data (library size normalization and log transformation). Assumes raw input data.",
+    )                                      
     @click.help_option("--help", "-h", help="Show this message and exit.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -377,7 +384,8 @@ def launch(
     dump_default_config,
     hosted,
     root_embedding,
-    auth_url
+    auth_url,
+    preprocess
 ):
     """Launch the cellxgene data viewer.
     This web app lets you explore single-cell expression data.
@@ -403,6 +411,7 @@ def launch(
     # app config
     app_config = AppConfig()
     app_config.root_embedding = root_embedding
+    app_config.preprocess = preprocess
     app_config.hosted_mode = hosted
     server_config = app_config.server_config
 

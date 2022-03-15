@@ -75,6 +75,8 @@ export const resetSubsetAction = (props) => (dispatch, getState) => {
     annoMatrix,
     obsCrossfilter,
   });  
+  dispatch({type: "set current selection DEG", name: null})
+
   if (props?.annoMatrix) {
     return [annoMatrix, obsCrossfilter]
   }

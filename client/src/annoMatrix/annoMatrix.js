@@ -110,16 +110,14 @@ export default class AnnoMatrix {
     
   }
 
-  updateSchema(schema) {
+  async updateSchema(schema) {
     this.schema = indexEntireSchema(schema);
-    Object.keys(this.schema.annotations.obsByName).forEach((item)=>{
-      this.fetch("obs",item).then((res)=>{
-        console.log(item)
-        _normalizeCategoricalSchema(
-          this.schema.annotations.obsByName[item],
-          res.col(item)
-        )
-      })
+    Object.keys(this.schema.annotations.obsByName).forEach(async (item)=>{
+      const res = await this.fetch("obs",item)
+      _normalizeCategoricalSchema(
+        this.schema.annotations.obsByName[item],
+        res.col(item)
+      )
     })
   }
 

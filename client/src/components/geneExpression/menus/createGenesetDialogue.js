@@ -79,6 +79,7 @@ class CreateGenesetDialogue extends React.PureComponent {
     this.setState({
       genesetName: "",
       genesToPopulateGeneset: "",
+      genesetDescription: ""
     });
     e.preventDefault();
   };

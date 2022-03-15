@@ -460,6 +460,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
           dispatch({
             type: "request differential expression success",
             data: diffexpLists,
+            dateString: data.groupName
           });      
         } else if (data?.multiplex && data.num===differential.num) {
           diffExpListsLists.push(diffexpLists)
@@ -480,7 +481,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
             type: "request differential expression all success",
             dataList,
             nameList,
-            dateString: new Date().toLocaleString(),
+            dateString: data.dateString,
             grouping: data.grouping,
           });    
           dispatch({type: "request differential expression all completed"})      
@@ -518,7 +519,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         annoMatrix,
         obsCrossfilter,
       });
-
+      dispatch(embActions.layoutChoiceAction(schema.name))
       postAsyncSuccessToast("Re-embedding has completed.");
 
     } else if (data.cfn === "sankey"){
@@ -803,6 +804,64 @@ export function fetchGeneInfo(gene,varMetadata) {
     return r.response;  
   }
 }
+export function requestDiffRename(oldName,newName) {
+  return async (_dispatch, _getState) => {    
+    const res = await fetch(
+      `${API.prefix}${API.version}renameDiffExp`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          oldName: oldName,
+          newName: newName
+        }),
+        credentials: "include",
+      }
+    );
+
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return res;
+    }
+  }
+}
+
+export function requestDiffDelete(name) {
+  return async (_dispatch, _getState) => {    
+    const res = await fetch(
+      `${API.prefix}${API.version}deleteDiffExp`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          name: name.split('//;;//').at(0)
+        }),
+        credentials: "include",
+      }
+    );
+
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return res;
+    }
+  }
+}
+
+export function requestDiffExpPops(name,pop) {
+  return async (_dispatch, _getState) => {  
+    const res = await fetch(
+      `${API.prefix}${API.version}diffExpPops?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`
+    );
+    const result = await res.json()
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return result;
+    }
+  }
+}
 
 export function resetPools() {
   return (_dispatch, _getState) => {
@@ -895,7 +954,9 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
       set1: { filter: { obs: { index: set1 } } },
       set2: { filter: { obs: { index: set2 } } },
       multiplex: false,
-      layer: annoMatrix.layer
+      layer: annoMatrix.layer,
+      groupName: new Date().toLocaleString()
+
     }))
   } catch (error) {
     return dispatch({
@@ -933,6 +994,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     let z = 0;
+    const dateString = new Date().toLocaleString();
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
         let set1 = []
@@ -955,10 +1017,12 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
             set2: { filter: { obs: { index: set2 } } },
             multiplex: true,
             grouping: categoryName,
+            dateString: dateString,
             nameList: allCategories,
             layer: annoMatrix.layer,
             category: cat,
-            num: z
+            num: z,
+            groupName: `${categoryName} (${dateString})`
           }))
         }
       } 
@@ -997,9 +1061,12 @@ function fetchJson(pathAndQuery) {
 
 export default {
   schemaFetch,
+  requestDiffRename,
+  requestDiffDelete,
   fetchGeneInfo,
   fetchGeneInfoBulk,
   resetPools,
+  requestDiffExpPops,
   prefetchEmbeddings,
   reembedParamsObsmFetch,
   requestDifferentialExpressionAll,
@@ -1017,6 +1084,7 @@ export default {
   downloadGenedata,
   requestSaveAnndataToFile,
   downloadVarMetadata,
+  selectCellsFromArray: selnActions.selectCellsFromArray,
   setCellsFromSelectionAndInverseAction:
     selnActions.setCellsFromSelectionAndInverseAction,
   selectContinuousMetadataAction: selnActions.selectContinuousMetadataAction,

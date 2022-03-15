@@ -66,7 +66,6 @@ class GenesetMenus extends React.PureComponent {
   render() {
     const { group, geneset, genesetsEditable, createText, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros } = this.props;
     const isColorBy = `${group}::${geneset}` === colorAccessor;
-
     return (
       <>
         {genesetsEditable && (
@@ -93,13 +92,13 @@ class GenesetMenus extends React.PureComponent {
               position={Position.BOTTOM}
               content={
                 <Menu>
-                  <MenuItem
+                  {!group.includes('//;;//') && <MenuItem
                     icon="edit"
                     data-testclass="activateEditGenesetNameMode"
                     data-testid={`${group}-${geneset}:edit-genesetName-mode`}
                     onClick={this.activateEditGenesetNameMode}
-                    text="Edit gene set name and grouping"
-                  />
+                    text={"Edit gene set name and grouping"}
+                  />}
                   <MenuItem
                     icon={"vertical-bar-chart-desc"}
                     data-testclass="handleToggleHistZeros"
@@ -109,14 +108,14 @@ class GenesetMenus extends React.PureComponent {
                     disabled={disableToggle}
                     active={removeHistZeros}
                   />                                   
-                  <MenuItem
+                  {!group.includes('//;;//') && <MenuItem
                     icon="trash"
                     intent="danger"
                     data-testclass="handleDeleteCategory"
                     data-testid={`${group}-${geneset}:delete-category`}
                     onClick={this.handleDeleteCategory}
                     text="Delete this gene set (destructive, will remove set and collection of genes)"
-                  />
+                  />}
                 </Menu>
               }
             >

@@ -25,7 +25,8 @@ const Controls = (
     screenCap: false,
     annoTracker: [],
     varMetadata: "",
-    varRefresher: false
+    varRefresher: false,
+    currentSelectionDEG: null
   },
   action
 ) => {
@@ -58,6 +59,12 @@ const Controls = (
         [action.name]: action.ws
       };
     }   
+    case "set current selection DEG": {
+      return {
+        ...state,
+        currentSelectionDEG: action.name
+      };
+    }       
     case "track anno": {
       const { annoTracker } = state;
       annoTracker.push(action.anno);

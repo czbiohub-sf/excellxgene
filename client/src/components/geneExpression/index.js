@@ -52,7 +52,7 @@ class GeneExpression extends React.Component {
 
   handleChangeOrSelect = (name) => {
     this.setState({
-      newNameText: name,
+      newNameText: `${name}//;;//`,
     });
   };
 
@@ -81,6 +81,7 @@ class GeneExpression extends React.Component {
     if (oldName !== newName) {
       dispatch({type: "geneset: update",genesetDescription: oldName, update: {genesetDescription: newName}})
     }
+    dispatch(actions.requestDiffRename(oldName.split('//;;//').at(0),newName.split('//;;//').at(0)))    
     this.disableEditNameMode()
   }
   setupFileInput = () => {
@@ -128,12 +129,12 @@ class GeneExpression extends React.Component {
         if (x[0] === "gene_set_description" && x[1] === "gene_set_name"){
           continue;
         }
-
-        if (x[0] in genesets) {
-          genesets[x[0]][x[1]] = x.slice(2)
+        const suffix = x[2]==="True" ? "//;;//" : "";
+        if (`${x[0]}//;;//` in genesets) {
+          genesets[`${x[0]}${suffix}`][x[1]] = x.slice(3)
         } else {
-          genesets[x[0]]={}
-          genesets[x[0]][x[1]] = x.slice(2)
+          genesets[`${x[0]}${suffix}`]={}
+          genesets[`${x[0]}${suffix}`][x[1]] = x.slice(3)
         }
       }
       for (const key1 in genesets) {
@@ -218,7 +219,7 @@ class GeneExpression extends React.Component {
           <GeneSet
             key={name}
             setGenes={genesets[""][name]}
-            displayLabel={name.split(' : (').at(0)}
+            displayLabel={name}
             setName={name}
             genesetDescription={""}
             rightWidth={rightWidth}
@@ -228,7 +229,7 @@ class GeneExpression extends React.Component {
     }
 
     const sets = {};
-    
+    const sets2 = {};
     for (const group in genesets) {
       if (group !== "") {
         for (const name in genesets[group]) {
@@ -236,17 +237,26 @@ class GeneExpression extends React.Component {
             <GeneSet
               key={name}
               setGenes={genesets[group][name]}
-              displayLabel={name.split(' : (').at(0)}
+              displayLabel={name}
               setName={name}
               genesetDescription={group}
               rightWidth={rightWidth}
             />
           );
-          if ( group in sets ){
-            sets[group].push(set)
+
+          if (!group.includes("//;;//")){
+            if ( group in sets ){
+              sets[group].push(set)
+            } else {
+              sets[group] = [set]
+            } 
           } else {
-            sets[group] = [set]
-          }     
+            if ( group in sets2 ){
+              sets2[group].push(set)
+            } else {
+              sets2[group] = [set]
+            }             
+          }
         }
       }
     }
@@ -254,7 +264,7 @@ class GeneExpression extends React.Component {
     const els = [];
     let count = 0;
     for ( const key in sets ){
-      const groupName = key.split(';;').at(-1);
+      const groupName = key;
       count += 1;
       
       const style = count > 1 ? {borderLeft: "1px solid black",
@@ -303,7 +313,9 @@ class GeneExpression extends React.Component {
               style={{
                 cursor: "pointer",
               }}
-              onClick={() => dispatch(actions.genesetDeleteGroup(key))}
+              onClick={() => {
+                dispatch(actions.genesetDeleteGroup(key))
+              }}
             />    
             </Tooltip>                        
           </div>         
@@ -313,7 +325,73 @@ class GeneExpression extends React.Component {
         </div>
       )
     }
-    return [nogroups, els];      
+
+    const els2 = [];
+    count = 0;
+    for ( const key in sets2 ){
+      const groupName = key;
+      count += 1;
+      
+      const style = count > 1 ? {borderLeft: "1px solid black",
+                                 borderRight: "1px solid black",
+                                 borderBottom: "1px solid black"} : {border: "1px solid black"}
+      els2.push(
+        <div key={key} style={style}>
+            <div style={{
+              display: "flex",
+              backgroundColor: "#F0F0F0",
+            }}>
+            <AnchorButton
+              onClick={() => {
+                this.setState({ 
+                  [groupName]: !(this.state[groupName]??false)
+                });
+              }}
+              text={<Truncate><span>{groupName.split('//;;//').at(0)}</span></Truncate>}
+              fill
+              minimal
+              rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
+            />  
+            <Tooltip
+            content="Edit geneset group name"
+            position="top"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+            >             
+            <AnchorButton
+              icon={<Icon icon="edit" iconSize={10} />}     
+              minimal
+              style={{
+                cursor: "pointer",
+              }}
+              onClick={(e) => this.activateEditNameMode(e,groupName)}
+              />  
+            </Tooltip>                 
+            <Tooltip
+            content="Delete geneset group"
+            position="top"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}            
+            >
+            <AnchorButton
+              icon={<Icon icon="trash" iconSize={10} />}     
+              minimal
+              intent="danger"
+              style={{
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                dispatch(actions.genesetDeleteGroup(key))
+                dispatch(actions.requestDiffDelete(key))
+              }}
+            />    
+            </Tooltip>                        
+          </div>         
+          <Collapse isOpen={this.state[groupName]??false}>
+            {sets2[key]}
+          </Collapse>
+        </div>
+      )
+    }    
+    return [nogroups, els, els2];      
   };
   
   handleSaveGenedata = () => {
@@ -337,7 +415,7 @@ class GeneExpression extends React.Component {
   render() {
     const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, outputController } = this.props;
     const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata, uploadMetadataOpen, fileName, uploadMetadataOpen2, fileName2 } = this.state;
-    const [nogroupElements,genesetElements]=this.renderGeneSets();
+    const [nogroupElements,genesetElements,diffExpElements]=this.renderGeneSets();
     const saveLoading = !!outputController?.pendingFetch;
     return (
       <div>
@@ -574,7 +652,12 @@ class GeneExpression extends React.Component {
                 <b>Grouped genesets</b>
               </div> }                         
               {genesetElements}
+              {(diffExpElements.length > 0) && <div style={{paddingBottom: "5px",paddingTop: "5px"}}>
+                <b>Differential expression genesets</b>
+              </div> }                         
+              {diffExpElements}              
               </div>
+              
           }
         </div>}
         {userLoggedIn && <AnnoDialog
@@ -598,7 +681,7 @@ class GeneExpression extends React.Component {
           allowEmpty
           annoInput={
             <LabelInput
-              label={newNameText}
+              label={newNameText.split('//;;//').at(0)}
               inputProps={{
                 "data-testid": `edit-set-name-text`,
                 leftIcon: "tag",

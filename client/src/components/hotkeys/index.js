@@ -125,7 +125,7 @@ export const GenesetHotkeys = (props) => {
   const inputRef = createRef();
   const hotkeys = useMemo(
     () => [
-      {
+      /*{
         combo: "SHIFT+Q",
         global: true,
         label: "Delete the most recent geneset group.",
@@ -138,9 +138,9 @@ export const GenesetHotkeys = (props) => {
             dispatch(actions.genesetDeleteGroup(group));
           }
         },
-      },
+      },*/
       {
-        combo: "SHIFT+G",
+        combo: "SHIFT+Q",
         global: true,
         label: "Delete the most recent ungrouped geneset.",
         onKeyDown: async () => {

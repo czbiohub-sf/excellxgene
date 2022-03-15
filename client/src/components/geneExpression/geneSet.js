@@ -10,6 +10,7 @@ import * as globals from "../../globals";
 import GenesetMenus from "./menus/genesetMenus";
 import EditGenesetNameDialogue from "./menus/editGenesetNameDialogue";
 import HistogramBrush from "../brushableHistogram";
+import { resetSubsetAction } from "../../actions/viewStack";
 
 @connect((state) => {
   return {
@@ -19,7 +20,8 @@ import HistogramBrush from "../brushableHistogram";
     userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
     userLoggedIn: state.controls.userInfo ? true : false,
     layoutChoice: state.layoutChoice,
-    varRefresher: state.controls.varRefresher
+    varRefresher: state.controls.varRefresher,
+    currentSelectionDEG: state.controls.currentSelectionDEG
   };
 })
 class GeneSet extends React.Component {
@@ -34,7 +36,7 @@ class GeneSet extends React.Component {
       queryGene: "",
       sortDirection: null,
       geneMetadatas: null,
-      isSelected: false,
+      isSelected: false
     };
   }
 
@@ -224,6 +226,22 @@ class GeneSet extends React.Component {
       isSelected: true
     }) 
   }  
+  
+  selectCellsFromGroup = () => {
+    const { dispatch, genesetDescription, setName, currentSelectionDEG } = this.props;
+    const name = `${genesetDescription?.split('//;;//').at(0)}::${setName}`
+
+    const activeSelection = currentSelectionDEG === name;
+    if (!activeSelection) {
+      dispatch(actions.requestDiffExpPops(genesetDescription?.split('//;;//').at(0),setName)).then((x)=>{
+        dispatch(actions.selectCellsFromArray(x.pop, name))
+      })
+    } else {
+      dispatch(resetSubsetAction())    
+    }
+
+  }
+
   renderGenes() {
     const { setName, allGenes, genesetDescription, setGenes, setGenesWithDescriptions, rightWidth } = this.props;
     const { genePage, removeHistZeros, geneMetadatas, setGenesSorted, geneMetadatasSorted } = this.state;
@@ -265,7 +283,11 @@ class GeneSet extends React.Component {
   }
 
   render() {
-    const { setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn } = this.props;
+    const { setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn, currentSelectionDEG } = this.props;
+    const diffExp = genesetDescription?.includes("//;;//")
+
+    const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
+
     const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene, sortDirection, isSelected } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes.length === 0;
@@ -343,6 +365,24 @@ class GeneSet extends React.Component {
             )}
           </span>
           <div style={{display: "flex", textAlign: "right"}}>
+          {diffExp && <Tooltip
+          content={
+            "Click to select the cells associated with this DEG group."
+          }
+          position={Position.RIGHT}
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
+          modifiers={{
+            preventOverflow: { enabled: false },
+            hide: { enabled: false },
+          }}          
+        >
+        <AnchorButton
+          onClick={(e) => {this.selectCellsFromGroup()}}
+          minimal
+          active={activeSelection}
+          icon={"polygon-filter"}
+        />
+        </Tooltip>}              
           <Tooltip
             content={
               "Click to sort genes by the chosen var metadata."
