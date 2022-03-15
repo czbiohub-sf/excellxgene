@@ -649,7 +649,16 @@ class MenuBar extends React.PureComponent {
                   dispatch({
                     type: "change graph interaction mode",
                     data: "select",
-                  });                 
+                  });  
+                  //TODO: unclear why above by itself breaks sometimes or if below fixes.
+                  dispatch({
+                    type: "change graph interaction mode",
+                    data: "lidar",
+                  });           
+                  dispatch({
+                    type: "change graph interaction mode",
+                    data: "select",
+                  });                                                     
                 }}
               > Create sankey </AnchorButton>  
             </div>                     

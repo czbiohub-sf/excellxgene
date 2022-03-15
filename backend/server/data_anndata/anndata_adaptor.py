@@ -299,7 +299,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
 def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, ihm):    
     obs_mask = AnnDataDict['obs_mask']    
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
-    
+    X_full = None
     if embeddingMode == "Preprocess and run":
         with ServerTiming.time("layout.compute"):        
             adata = compute_preprocess(AnnDataDict, reembedParams, userID, ihm)
@@ -490,6 +490,11 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
             
     if (parentParams is not None):
         reembedParams[f"parentParams"]=parentParams
+    
+    if X_full is None:
+        dataLayer = reembedParams.get("dataLayer","X")
+        obs_mask = AnnDataDict['obs_mask']
+        X_full = _create_data_from_shm(*shm[dataLayer])[obs_mask]
 
     var = dispersion_ranking_NN(X_full,nnm_sub)
     for k in var.keys():
@@ -1447,6 +1452,7 @@ class AnndataAdaptor(DataAdaptor):
         with data_locator.local_handle() as lh:
             backed = "r" if self.server_config.adaptor__anndata_adaptor__backed else None
 
+            # load data from variety of formats
             if os.path.isdir(lh) and len(glob(lh+'/*.gz'))==0:
                 filenames = glob(lh+'/*')
                 adatas = []
@@ -1593,7 +1599,7 @@ class AnndataAdaptor(DataAdaptor):
                 vals = np.array(list(self._obs_init[k]))
                 if isinstance(vals[0],np.integer):
                     vals = vals.astype('str')
-                    
+
                 pickle_dumper(vals,"{}/obs/{}.p".format(userID,k.replace('/',':')))
             pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")                                
             for k in self._var_init.keys():

@@ -459,6 +459,7 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   dispatch({
     type: "writable obs annotations - save started",
   });
+
   const df = await annoMatrix.fetch("obs", annos);
   const matrix = MatrixFBS.encodeMatrixFBS(df);
   const compressedMatrix = pako.deflate(matrix);

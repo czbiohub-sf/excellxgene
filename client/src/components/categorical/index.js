@@ -153,6 +153,8 @@ class Categories extends React.Component {
         annoMatrix,
         obsCrossfilter: crossfilter,
       });          
+      dispatch({type: "track anno", anno: item})    
+
     })              
     this.resetFileState()
   }
