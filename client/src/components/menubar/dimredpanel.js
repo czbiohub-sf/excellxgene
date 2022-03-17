@@ -17,7 +17,9 @@ import BatchPanel from "./batchpanel";
 
 @connect((state) => ({
   reembedParams: state.reembedParameters,
-  annoMatrix: state.annoMatrix
+  annoMatrix: state.annoMatrix,
+  currentLayout: state.layoutChoice.current,
+  varRefresher: state.controls.varRefresher
 }))
 class DimredPanel extends React.PureComponent {
   constructor(props) {
@@ -33,9 +35,29 @@ class DimredPanel extends React.PureComponent {
     };
   }
   
+  componentDidMount = () => {
+    const { dispatch, annoMatrix, currentLayout, reembedParams } = this.props;
+    const { embeddingMode } = reembedParams;
+
+    const lS = annoMatrix.schema.latent_spaces;
+    const latentSpaces = [];
+    lS.forEach((item)=>{
+      if (item.includes(`;;${currentLayout}`) && !item.includes(`;;${currentLayout};;`)){
+        const n = item.split(';;').at(0);
+        if (!latentSpaces.includes(n)){
+          latentSpaces.push(n)
+        }
+      }
+    })
+    if (latentSpaces.length === 0 && embeddingMode === "Run UMAP") {
+      dispatch({type: "reembed: set parameter", key: "embeddingMode", value: "Preprocess and run"})
+    }       
+  }
   componentDidUpdate = (prevProps) => {
     const { reembedParams } = this.props;
     const { embeddingMode } = reembedParams;
+     
+
     if (embeddingMode !== prevProps.reembedParams.embeddingMode) {
       if (embeddingMode === "Run UMAP") {
         this.setState({
@@ -75,8 +97,18 @@ class DimredPanel extends React.PureComponent {
     const {
       cfshown, gfshown, hvgshown, samshown, trshown, aboDisabled, allDisabled
     } = this.state;
-    const { reembedParams, annoMatrix, dispatch, embName, onChange } = this.props;
-    const latentSpaces = annoMatrix.schema.latent_spaces;
+    const { reembedParams, annoMatrix, dispatch, embName, onChange, currentLayout } = this.props;
+    const lS = annoMatrix.schema.latent_spaces;
+    const latentSpaces = [];
+    lS.forEach((item)=>{
+      if (item.includes(`;;${currentLayout}`) && !item.includes(`;;${currentLayout};;`)){
+        const n = item.split(';;').at(0);
+        if (!latentSpaces.includes(n)){
+          latentSpaces.push(n)
+        }
+      }
+    })
+
     const disabled = allDisabled || aboDisabled;
     const advancedShown = this.state?.advancedShown ?? false;
     let tem;

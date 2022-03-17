@@ -106,7 +106,10 @@ def _query_parameter_to_filter(args):
 
     return result
 
-def schema_get_helper(data_adaptor):   
+def schema_get_helper(data_adaptor, userID = None):   
+    if userID is None:
+        userID = _get_user_id(data_adaptor)   
+        
     if data_adaptor.data.raw is not None:
         layers = [".raw"]+list(data_adaptor.data.layers.keys())
     else:
@@ -115,13 +118,15 @@ def schema_get_helper(data_adaptor):
     if "X" not in layers:
         layers = ["X"] + layers
     
-    latent_spaces = []
+    
     initial_embeddings = []
     for k in data_adaptor._obsm_init.keys():
-        if data_adaptor._obsm_init[k].shape[1] > 2:
-            latent_spaces.append(k)
         initial_embeddings.append(k if k[:2]!="X_" else k[2:])
     
+    latent_spaces = []
+    fns = glob(f"{userID}/pca/*.p")
+    for f in fns:
+        latent_spaces.append(f.split('/')[-1].split('\\')[-1][:-2])
 
     schema = {
         "dataframe": {"nObs": data_adaptor.cell_count, "nVar": data_adaptor.gene_count, "type": str(data_adaptor.data.X.dtype)},
@@ -135,7 +140,6 @@ def schema_get_helper(data_adaptor):
         "initial_embeddings": initial_embeddings,
         "rootName": data_adaptor.rootName
     }
-    userID = _get_user_id(data_adaptor)   
     
     for ax in Axis:
         if str(ax) == "var":
@@ -687,8 +691,11 @@ def delete_obsm_put(request, data_adaptor):
                 os.remove(f"{userID}/nnm/{embName}.p")
             if os.path.exists(f"{userID}/params/{embName}.p"):
                 os.remove(f"{userID}/params/{embName}.p")                
-            if os.path.exists(f"{userID}/pca/{embName}.p"):
-                os.remove(f"{userID}/pca/{embName}.p")           
+
+            fns = glob(f"{userID}/pca/*.p")
+            for f in fns:
+                if ";;"+embName in f:
+                    os.remove(f)
 
             fns = glob(f"{userID}/var/*.p")
             for f in fns:
@@ -829,8 +836,11 @@ def rename_obsm_put(request, data_adaptor):
                 os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{newItem}.p")
             if os.path.exists(f"{userID}/params/{embName}.p"):
                 os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{newItem}.p")
-            if os.path.exists(f"{userID}/pca/{embName}.p"):
-                os.rename(f"{userID}/pca/{embName}.p",f"{userID}/pca/{newItem}.p")
+
+            fns = glob(f"{userID}/pca/*.p")
+            for f in fns:
+                if ";;"+embName in f:
+                    os.rename(f,f.replace(embName,newItem))
             
             fns = glob(f"{userID}/var/*.p")
             for f in fns:
@@ -873,7 +883,7 @@ def layout_obs_put(request, data_adaptor):
     try:
         userID = _get_user_id(data_adaptor)                 
         schema = data_adaptor.compute_embedding(method, filter, reembedParams, parentName, embName, userID, hosted = current_app.hosted_mode)
-        return make_response(jsonify(schema), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(jsonify({"layoutSchema": schema, "schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:

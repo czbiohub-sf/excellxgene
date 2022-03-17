@@ -948,6 +948,7 @@ class Graph extends React.Component {
   renderMetadata() {
     const { annoMatrix, colors } = this.props;
     const { colorState, lidarCrossfilter, numCellsInLidar } = this.state;
+    
     if (colors.colorMode && colorState.colorDf) {
       const { colorDf: colorData, colorTable } = colorState;
       const { colorAccessor, colorMode } = colors;

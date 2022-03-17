@@ -89,8 +89,7 @@ const res = await fetch(
   }
 );
 
-const schema = await res.json();
-let { annoMatrix, layoutChoice } = getState();
+let { layoutChoice } = getState();
 const newNames = [];
 toRename.forEach((item)=>{
   let newItem;
@@ -104,7 +103,6 @@ toRename.forEach((item)=>{
     newItem = newName;
   }
   newNames.push(newItem);
-  annoMatrix = annoMatrix.renameObsmLayout(item,newItem,{"name": newItem, "type": "float32", "dims": [`${newItem}_0`, `${newItem}_1`]})
 })    
 const item = layoutChoice.current;
 let newCurrent;
@@ -120,22 +118,15 @@ if (item.includes(`;;${oldName};;`)) { // middle
   newCurrent = item;
 }
 
-
-let obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
-obsCrossfilter = await obsCrossfilter.select("emb", newCurrent, {
-  mode: "all",
-});
-dispatch({type: "", annoMatrix, obsCrossfilter})
-
-
 toRename.forEach((item,index)=>{
   dispatch({type: "reembed: rename reembedding", embName: item, newName: newNames[index]});
 })
 
+await dispatch(layoutChoiceAction(newCurrent)); 
 dispatch({type: "modifying layouts", modifyingLayouts: false})
 
 if (res.ok && res.headers.get("Content-Type").includes("application/json")) {      
-  return schema;
+  return true;
 }
 
 // else an error
@@ -163,20 +154,21 @@ export const layoutChoiceAction = (newLayoutChoice) => async (
     layoutChoice,
   } = getState();
   
-  await prevAnnoMatrix.updateSchema(schema.schema)
+  const base = prevAnnoMatrix.base();
+  
+  await base.updateSchema(schema.schema)
+  
   dispatch({
     type: "reset subset"
   })  
   let [annoMatrix, obsCrossfilter] = await _switchEmbedding(
-    prevAnnoMatrix,
+    base,
     prevCrossfilter,
     layoutChoice.current,
     newLayoutChoice
   );
   
   [annoMatrix, obsCrossfilter] = dispatch(resetSubsetAction({annoMatrix}))
-  
-  
   
   dispatch({
     type: "set layout choice",

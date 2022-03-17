@@ -91,6 +91,7 @@ export function requestReembed(reembedParams,parentName,embName) {
         filter: { obs: { index: cells } },
         params: reembedParams,
         parentName: (parentName === "") ? layoutChoice.current : parentName,
+        currentLayout: layoutChoice.current,
         embName: embName,
       }))
       dispatch({

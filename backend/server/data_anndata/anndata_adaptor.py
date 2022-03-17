@@ -296,7 +296,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     adata.write_h5ad(f"{direc}/output/{userID}_{currentLayout.replace(';','_')}.h5ad")
     return f"{direc}/output/{userID}_{currentLayout.replace(';','_')}.h5ad"
 
-def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, ihm):    
+def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):    
     obs_mask = AnnDataDict['obs_mask']    
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
     X_full = None
@@ -395,18 +395,28 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
                     
     elif embeddingMode == "Create embedding from subset":
         direc = pathlib.Path().absolute()    
-        umap = pickle_loader(f"{direc}/{userID}/emb/{parentName}.p")                     
+        umap = pickle_loader(f"{direc}/{userID}/emb/{currentLayout}.p")                     
         result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
         result[obs_mask] = umap[obs_mask] 
         X_umap = result  
-        nnm = pickle_loader(f"{direc}/{userID}/nnm/{parentName}.p")[obs_mask][:,obs_mask]
 
         try:
-            obsm = pickle_loader(f"{direc}/{userID}/pca/{parentName}.p")
+            nnm = pickle_loader(f"{direc}/{userID}/nnm/{currentLayout}.p")[obs_mask][:,obs_mask]
         except:
-            obsm = np.zeros(X_umap.shape)
-        pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
-        pca[obs_mask] = obsm[obs_mask]       
+            nnm = None
+
+        try:
+            obsm = pickle_loader(f"{direc}/{userID}/pca/pca;;{currentLayout}.p")
+        except:
+            try:
+                obsm = pickle_loader(f"{direc}/{userID}/pca/pca.p")
+            except:
+                obsm = None
+        if obsm is None:
+            pca = obsm
+        else:
+            pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
+            pca[obs_mask] = obsm[obs_mask]       
 
     elif embeddingMode == "Run UMAP":
         doBatch = reembedParams.get("doBatch",False)
@@ -422,11 +432,14 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
         distanceMetric = reembedParams.get("distanceMetric","cosine")
         umapMinDist = reembedParams.get("umapMinDist",0.1)
         latentSpace = reembedParams.get("latentSpace","")
+            
+        direc = pathlib.Path().absolute() 
 
+        try:
+            obsm = pickle_loader(f"{direc}/{userID}/pca/{latentSpace};;{currentLayout}.p")   
+        except:
+            obsm = pickle_loader(f"{direc}/{userID}/pca/{latentSpace}.p")   
 
-        direc = pathlib.Path().absolute()    
-        n = latentSpace.split("X_")[-1]
-        obsm = pickle_loader(f"{direc}/{userID}/emb/{n}.p")   
         adata = AnnData(X=np.zeros(obsm.shape)[obs_mask],obsm={"X_pca":obsm[obs_mask]})    
 
         if doBatch:
@@ -466,12 +479,13 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
 
     dims = [f"{name}_0", f"{name}_1"]
     layout_schema = {"name": name, "type": "float32", "dims": dims}
-    nnm_sub = nnm.copy()
+    if nnm is not None:
+        nnm_sub = nnm.copy()
 
-    IXer = pd.Series(index =np.arange(nnm.shape[0]), data = np.where(obs_mask.flatten())[0])
-    x,y = nnm.nonzero()
-    d = nnm.data
-    nnm = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(obs_mask.size,)*2).tocsr()
+        IXer = pd.Series(index =np.arange(nnm.shape[0]), data = np.where(obs_mask.flatten())[0])
+        x,y = nnm.nonzero()
+        d = nnm.data
+        nnm = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(obs_mask.size,)*2).tocsr()
 
     direc = pathlib.Path().absolute()        
     if exists(f"{direc}/{userID}/params/latest.p"):
@@ -495,18 +509,20 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, userID, i
         dataLayer = reembedParams.get("dataLayer","X")
         obs_mask = AnnDataDict['obs_mask']
         X_full = _create_data_from_shm(*shm[dataLayer])[obs_mask]
-
-    var = dispersion_ranking_NN(X_full,nnm_sub)
-    for k in var.keys():
-        fn = "{}/{}/var/{};;{}.p".format(direc,userID,k.replace('/',':'),name)
-        if not os.path.exists(fn.split(';;')[0]+'.p'):
-            pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
-        pickle_dumper(np.array(list(var[k])).astype('float'),fn)
-
-    pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
+    
+    if nnm is not None:
+        var = dispersion_ranking_NN(X_full,nnm_sub)
+        for k in var.keys():
+            fn = "{}/{}/var/{};;{}.p".format(direc,userID,k.replace('/',':'),name)
+            if not os.path.exists(fn.split(';;')[0]+'.p'):
+                pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
+            pickle_dumper(np.array(list(var[k])).astype('float'),fn)
+        pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
+    
     pickle_dumper(X_umap, f"{direc}/{userID}/emb/{name}.p")
     pickle_dumper(reembedParams, f"{direc}/{userID}/params/{name}.p")
-    pickle_dumper(pca, f"{direc}/{userID}/pca/{name}.p")
+    if pca is not None:
+        pickle_dumper(pca, f"{direc}/{userID}/pca/pca;;{name}.p")
 
     return layout_schema
 
@@ -1039,6 +1055,7 @@ def initialize_socket(da):
                     reembedParams = data["params"] if data else {}
                     parentName = data["parentName"] if data else ""
                     embName = data["embName"] if data else None
+                    currentLayout = data["currentLayout"]
         
                     annotations = da.dataset_config.user_annotations        
                     userID = f"{annotations._get_userdata_idhash(da)}"  
@@ -1096,9 +1113,9 @@ def initialize_socket(da):
                     }
 
                     def post_processing(res):
-                        return res
+                        return {"layoutSchema": res, "schema": common_rest.schema_get_helper(da, userID = userID)}                        
 
-                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, userID, current_app.hosted_mode)
+                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, current_app.hosted_mode)
     
     @sock.route("/sankey")
     def sankey(ws):
@@ -1609,6 +1626,9 @@ class AnndataAdaptor(DataAdaptor):
             for k in self._obsm_init.keys():
                 k2 = "X_".join(k.split("X_")[1:])
                 pickle_dumper(self._obsm_init[k],f"{userID}/emb/{k2}.p")
+                if self._obsm_init[k].shape[1] > 2:
+                    pickle_dumper(self._obsm_init[k],f"{userID}/pca/{k2}.p")
+
                 r = self._obsp_init.get("N_"+k2,self._obsp_init.get("connectivities",None))
                 p = self._uns_init.get("N_"+k2+"_params",{})
                 if r is not None:

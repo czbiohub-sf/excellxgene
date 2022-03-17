@@ -494,7 +494,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         }
       });  
     } else if (data.cfn === "reembedding"){
-      const schema = data.response;
+      const { layoutSchema: schema, schema: fullSchema } = data.response;
       dispatch({
         type: "reembed: request completed",
       });
@@ -504,22 +504,28 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         layoutChoice,
       } = getState();
       const base = prevAnnoMatrix.base().addEmbedding(schema);
+
+      await base.updateSchema(fullSchema)  
+      
       dispatch({
         type: "reset subset"
       })
-      const [annoMatrix, obsCrossfilter] = await _switchEmbedding(
+      let [annoMatrix, obsCrossfilter] = await _switchEmbedding(
         base,
         prevCrossfilter,
         layoutChoice.current,
         schema.name
       );
+      
+      [annoMatrix, obsCrossfilter] = dispatch(viewActions.resetSubsetAction({annoMatrix}))      
       dispatch({
         type: "reembed: add reembedding",
         schema,
         annoMatrix,
         obsCrossfilter,
       });
-      dispatch(embActions.layoutChoiceAction(schema.name))
+      dispatch({type: "refresh var metadata"})      
+      
       postAsyncSuccessToast("Re-embedding has completed.");
 
     } else if (data.cfn === "sankey"){
