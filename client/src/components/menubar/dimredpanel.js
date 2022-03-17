@@ -47,6 +47,10 @@ class DimredPanel extends React.PureComponent {
         if (!latentSpaces.includes(n)){
           latentSpaces.push(n)
         }
+      } else if(!item.includes(';;')) {
+        if (!latentSpaces.includes(item)){
+          latentSpaces.push(item)
+        }        
       }
     })
     if (latentSpaces.length === 0 && embeddingMode === "Run UMAP") {
@@ -106,6 +110,10 @@ class DimredPanel extends React.PureComponent {
         if (!latentSpaces.includes(n)){
           latentSpaces.push(n)
         }
+      } else if(!item.includes(';;')) {
+        if (!latentSpaces.includes(item)){
+          latentSpaces.push(item)
+        }        
       }
     })
 
