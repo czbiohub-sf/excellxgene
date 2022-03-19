@@ -61,7 +61,7 @@ def read_gene_sets_tidycsv(gs_locator, context=None):
                     continue
 
                 geneset_description, geneset_name, diffExp = row[:3]
-                x = "//;;//" if diffExp=="TRUE" else ""
+                x = "//;;//" if (diffExp=="TRUE" or diffExp == "True" or diffExp == "true") else ""
                 geneset_description+=x
                 gene_symbols = row[4:]
                 try:

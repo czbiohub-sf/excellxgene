@@ -232,7 +232,7 @@ class DimredPanel extends React.PureComponent {
         <ParameterInput 
           label="Use SAM?"
           param="doSAM"
-          tooltipContent={"Check to use the SAM algorithm for dimensionality reduction."}
+          tooltipContent={"Check to use the SAM algorithm for dimensionality reduction. SAM weights will be added to gene metadata."}
           disabled={disabled}
         />                     
         <ParameterInput
@@ -241,6 +241,12 @@ class DimredPanel extends React.PureComponent {
           tooltipContent={"Scale the data such that genes have zero mean and unit variance prior to PCA."}
           disabled={disabled}
         />
+        <ParameterInput 
+          label="Calculate SAM weights?"
+          param="calculateSamWeights"
+          tooltipContent={"Check to calculate SAM weights and add them to the gene metadata."}
+          disabled={disabled}
+        />              
       </ControlGroup>}
       {disabled ? null : <AnchorButton
         onClick={() => {

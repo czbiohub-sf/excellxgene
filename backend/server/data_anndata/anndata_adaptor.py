@@ -9,12 +9,15 @@ import traceback
 from pandas.core.dtypes.dtypes import CategoricalDtype
 from scipy import sparse
 from server_timing import Timing as ServerTiming
+import igraph as ig
+import leidenalg
 import time
 import os
 import gc
 from glob import glob
 import scanpy as sc
 import scanpy.external as sce
+import samalg.utilities as ut
 import scipy as sp
 from samalg import SAM
 import backend.common.compute.diffexp_generic as diffexp_generic
@@ -27,7 +30,7 @@ from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_a
 from anndata import AnnData
 from backend.server.data_common.data_adaptor import DataAdaptor
 from backend.common.fbs.matrix import encode_matrix_fbs
-from multiprocessing import Pool, RawArray
+from multiprocessing import Pool, RawArray, TimeoutError
 from functools import partial
 import backend.server.common.rest as common_rest
 import json
@@ -47,10 +50,15 @@ from numba.core import types
 from numba.typed import Dict
 
 
+"""
 if current_process().name == 'MainProcess':
     print("Configuring multiprocessing spawner...")
     if sys.platform.startswith('linux'):
         set_start_method("spawn")
+"""
+
+global active_processes
+active_processes = {}
 
 global process_count
 process_count = 0
@@ -84,31 +92,53 @@ def anndata_version_is_pre_070():
     minor = anndata_version[1] if len(anndata_version) > 1 else 0
     return major == 0 and minor < 7
 
-def _callback_fn(res,ws,cfn,data,post_processing,tstart):
+def _callback_fn(res,ws,cfn,data,post_processing,tstart,pid):
     if post_processing is not None:
         res = post_processing(res)
     d = {"response": res,"cfn": cfn, "fail": False}
     d.update(data)
     ws.send(jsonify_numpy(d))
-    global process_count
-    process_count = process_count + 1
-    print("Process count:",process_count,"Time elsapsed:",time.time()-tstart,"seconds")
 
+    global active_processes
+    try:
+        del active_processes[pid]
+    except:
+        pass
+
+    print("Process count:",pid,"Time elsapsed:",time.time()-tstart,"seconds")
+
+def _dummy():
+    return True
 
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
-    _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing,tstart=time.time())
-    _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn)
-    da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
-    #if current_app.hosted_mode:
-    #else:
-    #    try:
-    #        res = fn(*args)
-    #        _new_callback_fn(res)
-    #    except Exception as e:
-    #        _error_callback(e,ws,cfn)
+    global process_count
+    process_count = process_count + 1    
 
-def _error_callback(e, ws, cfn):
+    _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing,tstart=time.time(),pid=process_count)
+    _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn, pid=process_count)
+    
+    global active_processes
+    active_processes[process_count] = (fn,args,_new_callback_fn,_new_error_fn)
+
+    try:
+        da.pool.apply_async(_dummy).get(timeout=0.1)
+        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
+    except TimeoutError:
+        print("Resetting pool...")
+        da._reset_pool()
+        for a in range(1,process_count+1):
+            if a in active_processes:
+                fn,args,_new_callback_fn,_new_error_fn = active_processes[a]
+                da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)            
+
+def _error_callback(e, ws, cfn, pid):
     ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
+
+    global active_processes
+    try:
+        del active_processes[pid]
+    except:
+        pass
     traceback.print_exception(type(e), e, e.__traceback__)
 
     
@@ -212,16 +242,10 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     embs = {}
     nnms = {}
     params={}
-    pcas = {}
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if name == n.split(';')[-1] or (';;' not in currentLayout and ';;' not in n):
-            if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p") and exists(f"{direc}/{userID}/pca/{n}.p"):
-                embs[n] = pickle_loader(f)
-                nnms[n] = pickle_loader(f"{direc}/{userID}/nnm/{n}.p")
-                params[n] = pickle_loader(f"{direc}/{userID}/params/{n}.p")
-                pcas[n] = pickle_loader(f"{direc}/{userID}/pca/{n}.p")
-            elif exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p"):
+            if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p"):
                 embs[n] = pickle_loader(f)
                 nnms[n] = pickle_loader(f"{direc}/{userID}/nnm/{n}.p")
                 params[n] = pickle_loader(f"{direc}/{userID}/params/{n}.p")
@@ -262,6 +286,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             if n != "name_0":
                 adata.var[n.split(';;')[0]] = pd.Series(data=l,index=v)              
     
+    
     vkeys = list(adata.var.keys())
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
@@ -270,6 +295,28 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
                 l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
                 if n != "name_0":
                     adata.var[n] = pd.Series(data=l,index=v)  
+
+
+    fnames = glob(f"{direc}/{userID}/pca/*.p")
+    for f in fnames:
+        n = f.split('/')[-1].split('\\')[-1][:-2]
+        if ';;' in n:
+            tlay = n.split(';;')[-1]
+        else:
+            tlay = ""
+
+        if name == tlay:
+            l = pickle_loader(f"{direc}/{userID}/pca/{n}.p")[filt]
+            adata.obsm[f"X_latent_{n.split(';;')[0]}"] = l
+    
+    
+    vkeys = list(adata.obsm.keys())
+    for f in fnames:
+        n = f.split('/')[-1].split('\\')[-1][:-2]
+        if ';;' not in n:
+            if n not in vkeys:
+                l = pickle_loader(f"{direc}/{userID}/pca/{n}.p")[filt]
+                adata.obsm[f"X_latent_{n}"] = l
 
     temp = {}
     for key in nnms.keys():
@@ -280,8 +327,6 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
         adata.uns["N_"+key.split(';;')[-1]+"_params"]=params[key]
     for key in embs.keys():
         adata.obsm["X_"+key.split(';;')[-1]] = embs[key][filt] 
-    for key in pcas.keys():
-        adata.obsm["X_"+key.split(';;')[-1]+"_pca"] = pcas[key][filt]         
 
     keys = list(adata.var.keys())
     for k in keys:
@@ -511,12 +556,20 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         X_full = _create_data_from_shm(*shm[dataLayer])[obs_mask]
     
     if nnm is not None:
-        var = dispersion_ranking_NN(X_full,nnm_sub)
-        for k in var.keys():
-            fn = "{}/{}/var/{};;{}.p".format(direc,userID,k.replace('/',':'),name)
-            if not os.path.exists(fn.split(';;')[0]+'.p'):
-                pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
-            pickle_dumper(np.array(list(var[k])).astype('float'),fn)
+        if reembedParams.get("calculateSamWeights",False) and not reembedParams.get("doSAM",False):
+            var = dispersion_ranking_NN(X_full,nnm_sub)
+            for k in var.keys():
+                fn = "{}/{}/var/{};;{}.p".format(direc,userID,k.replace('/',':'),name)
+                if not os.path.exists(fn.split(';;')[0]+'.p'):
+                    pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
+                pickle_dumper(np.array(list(var[k])).astype('float'),fn)
+        elif reembedParams.get("doSAM",False):
+            keys = ['weights','spatial_dispersions']
+            for k in keys:
+                fn = "{}/{}/var/{};;{}.p".format(direc,userID,"sam_"+k.replace('/',':'),name)
+                if not os.path.exists(fn.split(';;')[0]+'.p'):
+                    pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn.split(';;')[0]+'.p')
+                pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn)            
         pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
     
     pickle_dumper(X_umap, f"{direc}/{userID}/emb/{name}.p")
@@ -532,13 +585,15 @@ def pickle_dumper(x,fn):
 
 def compute_leiden(obs_mask,name,resolution,userID):
     direc = pathlib.Path().absolute() 
-    nnm = pickle_loader(f"{direc}/{userID}/nnm/{name}.p")            
-    nnm = nnm[obs_mask][:,obs_mask]
+    try:
+        nnm = pickle_loader(f"{direc}/{userID}/nnm/{name}.p")   
+        nnm = nnm[obs_mask][:,obs_mask]         
+    except:
+        emb = pickle_loader(f"{direc}/{userID}/emb/{name}.p")            
+        emb = emb[obs_mask]
+        nnm = ut.calc_nnm(emb,20,'euclidean')
 
     X = nnm
-
-    import igraph as ig
-    import leidenalg
 
     adjacency = X
     sources, targets = adjacency.nonzero()
@@ -1037,7 +1092,7 @@ def initialize_socket(da):
                     pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/Pop1 high.p")
                     pickle_dumper(np.where(obs_mask_B)[0],f"{direc}/{userID}/diff/{fnn}/Pop2 high.p")
                 else:
-                    fnn2=data['category'].replace('/',':')                                    
+                    fnn2=str(data['category']).replace('/',':')                                    
                     pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/{fnn2}.p")
 
                 _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)

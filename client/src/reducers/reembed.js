@@ -96,7 +96,8 @@ const defaultDimredParams = {
   dataLayerExpr: "X",
   logScaleExpr: false,
   embeddingMode: "Preprocess and run",
-  latentSpace: ""
+  latentSpace: "",
+  calculateSamWeights: false
 };
 export const defaultReembedParams = {
   ...defaultPrepParams,
