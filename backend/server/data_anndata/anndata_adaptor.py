@@ -121,7 +121,8 @@ def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     active_processes[process_count] = (fn,args,_new_callback_fn,_new_error_fn)
 
     try:
-        da.pool.apply_async(_dummy).get(timeout=0.1)
+        if da._hosted_mode:
+            da.pool.apply_async(_dummy).get(timeout=0.1)
         da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
     except TimeoutError:
         print("Resetting pool...")
@@ -1405,6 +1406,7 @@ class AnndataAdaptor(DataAdaptor):
     def __init__(self, data_locator, app_config=None, dataset_config=None):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
+        self._hosted_mode = app_config.hosted_mode
 
         self._load_data(data_locator, root_embedding=app_config.root_embedding, preprocess=app_config.preprocess)    
         self._create_pool()
