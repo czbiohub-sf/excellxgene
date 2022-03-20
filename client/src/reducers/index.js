@@ -11,6 +11,7 @@ import categoricalSelection from "./categoricalSelection";
 import geneSelection from "./geneSelection";
 import continuousSelection from "./continuousSelection";
 import graphSelection from "./graphSelection";
+import volcanoSelection from "./volcanoSelection";
 import colors from "./colors";
 import differential from "./differential";
 import layoutChoice from "./layoutChoice";
@@ -46,6 +47,7 @@ const Reducer = undoable(
     ["sankeySelection", sankeySelection],
     ["Leiden", Leiden],
     ["graphSelection", graphSelection],
+    ["volcanoSelection", volcanoSelection],
     ["colors", colors],
     ["controls", controls],
     ["differential", differential],
@@ -69,6 +71,7 @@ const Reducer = undoable(
     "sankeySelection",
     "Leiden",
     "graphSelection",
+    "volcanoSelection",
     "colors",
     "controls",
     "differential",

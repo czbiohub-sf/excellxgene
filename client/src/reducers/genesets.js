@@ -253,9 +253,9 @@ const GeneSets = (
     case "geneset: delete genes": {
       const { genesetDescription, genesetName, geneSymbols } = action;
       if (!(genesetDescription in state.genesets))
-        throw new Error("geneset: add genes -- geneset group does not exist.");
+        throw new Error("geneset: delete genes -- geneset group does not exist.");
       if (!(genesetName in state.genesets[genesetDescription]))
-        throw new Error("geneset: add genes -- geneset name does not exist.");        
+        throw new Error("geneset: delete genes -- geneset name does not exist.");        
 
       const genesets = {...state.genesets};
       const gs = {...state.genesets[genesetDescription]}

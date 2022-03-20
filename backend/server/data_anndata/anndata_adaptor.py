@@ -143,7 +143,7 @@ def _error_callback(e, ws, cfn, pid):
     traceback.print_exception(type(e), e, e.__traceback__)
 
     
-def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname):
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
@@ -223,9 +223,18 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname):
             meanBsq/=nB
             vB = meanBsq - meanB**2
             vB[vB<0]=0            
-
+    
     res = diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB)
-    pickle_dumper(res['positive'],fname)
+    fname2 = fname.split("_output.p")[0]+"_sg.p"
+    if multiplex:
+        pickle_dumper(res['positive'],fname)
+        pickle_dumper(list(np.arange(150)),fname2)
+    else:
+        pickle_dumper(res['positive'],fname)
+        pickle_dumper(res['negative'],fname.replace('Pop1 high','Pop2 high'))
+        pickle_dumper(list(np.arange(150)),fname2)
+        pickle_dumper(list(np.arange(150)),fname2.replace('Pop1 high','Pop2 high'))
+
     m = {}
     for k in res.keys():
         m[k] = res[k][:150]    
@@ -1102,7 +1111,7 @@ def initialize_socket(da):
                 if fnn2 is None:
                     fnn2 = "Pop1 high"                
                 fname = f"{direc}/{userID}/diff/{fnn}/{fnn2}_output.p"
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname)
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None))
     
     @sock.route("/reembedding")
     @auth0_token_required

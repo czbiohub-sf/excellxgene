@@ -805,6 +805,32 @@ def diff_stats_get(request,data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
 
+def diff_genes_get(request,data_adaptor):
+    name = request.args.get("name",None)
+    pop = request.args.get("pop",None)
+    userID = _get_user_id(data_adaptor)
+    try:
+        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_sg.p")
+        return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def diff_genes_put(request,data_adaptor):
+    args = request.get_json()
+    name = args['name']
+    pop = args['pop']
+    sg = args['selectedGenes']
+    userID = _get_user_id(data_adaptor)
+    try:
+        pickle_dumper(sg,f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_sg.p")
+        return make_response(jsonify({"ok": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
 
 def initialize_user(data_adaptor):            
     userID = _get_user_id(data_adaptor)

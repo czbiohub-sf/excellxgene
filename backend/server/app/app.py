@@ -398,6 +398,19 @@ class DiffStatsInfo(Resource):
     def get(self, data_adaptor):
         return common_rest.diff_stats_get(request, data_adaptor)        
 
+class DiffGenesInfo(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.diff_genes_get(request, data_adaptor)    
+    
+    @requires_authentication
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.diff_genes_put(request, data_adaptor)            
+
 class AdminRestartMP(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
@@ -516,6 +529,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(DeleteDiffAPI, "/deleteDiffExp") 
     add_resource(DiffGroupInfo, "/diffExpPops") 
     add_resource(DiffStatsInfo, "/diffExpStats")   
+    add_resource(DiffGenesInfo, "/diffExpGenes")  
     #add_resource(PreprocessAPI, "/preprocess")
     add_resource(SummarizeVarAPI, "/summarize/var")
     # Display routes
