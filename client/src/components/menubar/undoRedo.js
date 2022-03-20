@@ -19,6 +19,7 @@ const UndoRedo = React.memo((props) => {
           disabled={undoDisabled}
           onClick={() => {
             dispatch({ type: "@@undoable/undo" });
+            dispatch({type: "set undo flag"})
           }}
           style={{
             cursor: "pointer",

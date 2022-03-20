@@ -269,7 +269,10 @@ export const annotationDeleteCategoryAction = (categoryName) => (
     obsCrossfilter,
     metadataField: categoryName
   });
-
+  dispatch({
+    type: "writable obs annotations - save complete",
+    lastSavedAnnoMatrix: obsCrossfilter.annoMatrix,
+  });
   fetch(
     `${API.prefix}${API.version}annotations/delete`,
     {
@@ -437,14 +440,14 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
   */
   const state = getState();
   const { annotations, autosave, controls } = state;
-  const { annoTracker: annos } = controls;
+  const { annoTracker: annos, undoed } = controls;
   const { dataCollectionNameIsReadOnly, dataCollectionName } = annotations;
   const { lastSavedAnnoMatrix, saveInProgress } = autosave;
-
   const annoMatrix = state.annoMatrix.base();
 
-  if (saveInProgress || annoMatrix === lastSavedAnnoMatrix) return;
-  if (annos.length === 0) {
+  if ((saveInProgress || annoMatrix === lastSavedAnnoMatrix) && !undoed) return;
+  
+  if (annos.length === 0 && !undoed) {
     dispatch({
       type: "writable obs annotations - save complete",
       lastSavedAnnoMatrix: annoMatrix,
@@ -452,15 +455,18 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
     return;
   }
 
-  /*
-  Else, we really do need to save
-  */
+  let df;
+  if (needToSaveObsAnnotations(annoMatrix, lastSavedAnnoMatrix) && undoed) {
+    df = await annoMatrix.fetch("obs", writableAnnotations(annoMatrix));
+    dispatch({type: "reset undo flag"})
+  } else {
+    df = await annoMatrix.fetch("obs", annos);
+  }
 
   dispatch({
     type: "writable obs annotations - save started",
   });
 
-  const df = await annoMatrix.fetch("obs", annos);
   const matrix = MatrixFBS.encodeMatrixFBS(df);
   const compressedMatrix = pako.deflate(matrix);
   try {
@@ -501,6 +507,34 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
     });
   }
 };
+
+export const needToSaveObsAnnotations = (annoMatrix, lastSavedAnnoMatrix) => {
+  /*
+  Return true if there are LIKELY user-defined annotation modifications between the two
+  annoMatrices.  Technically not an action creator, but intimately intertwined
+  with the save process.
+  Two conditions will trigger a need to save:
+    * the collection of user-defined columns have changed
+    * the contents of the user-defined columns have change
+  */
+
+  annoMatrix = annoMatrix.base();
+
+  // if the annoMatrix hasn't changed, we are guaranteed no changes to the matrix schema or contents.
+  if (annoMatrix === lastSavedAnnoMatrix) return false;
+
+  // if the schema has changed, we need to save
+  const currentWritable = writableAnnotations(annoMatrix);
+  if (difference(currentWritable, writableAnnotations(lastSavedAnnoMatrix))) {
+    return true;
+  }
+
+  // no schema changes; check for change in contents
+  return currentWritable.some(
+    (col) => annoMatrix.col(col) !== lastSavedAnnoMatrix.col(col)
+  );
+};
+
 
 export const saveGenesetsAction = () => async (dispatch, getState) => {
   const state = getState();

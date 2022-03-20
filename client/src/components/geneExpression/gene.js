@@ -31,8 +31,15 @@ class Gene extends React.Component {
   }
 
   onColorChangeClick = () => {
-    const { dispatch, gene } = this.props;
-    dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(gene));
+    const { dispatch, gene, isObs } = this.props;
+    if (isObs) {
+      dispatch({
+        type: "color by continuous metadata",
+        colorAccessor: gene,
+      });      
+    } else {
+      dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(gene));
+    }
   };
 
   handleGeneExpandClick = () => {
@@ -41,18 +48,20 @@ class Gene extends React.Component {
   };
 
   handleSetGeneAsScatterplotX = () => {
-    const { dispatch, gene } = this.props;
+    const { dispatch, gene, isObs } = this.props;
     dispatch({
       type: "set scatterplot x",
       data: gene,
+      isObs: isObs
     });
   };
 
   handleSetGeneAsScatterplotY = () => {
-    const { dispatch, gene } = this.props;
+    const { dispatch, gene, isObs } = this.props;
     dispatch({
       type: "set scatterplot y",
       data: gene,
+      isObs: isObs
     });
   };
 
@@ -83,10 +92,25 @@ class Gene extends React.Component {
       userLoggedIn,
       isSelected,
       rightWidth,
-      allGenes
+      allGenes,
+      leftWidth,
+      onRemoveClick,
+      isObs
     } = this.props;
     const { geneIsExpanded } = this.state;
-    const geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0) + Math.max(0,(rightWidth - globals.rightSidebarWidth));
+    let geneSymbolWidth;
+    if (isObs) {
+      geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 40) + Math.max(0,(leftWidth - globals.leftSidebarWidth));
+    } else {
+      geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 0) + Math.max(0,(rightWidth - globals.rightSidebarWidth));
+    }
+    let trashHandler;
+    if (isObs) {
+      trashHandler = ()=>{onRemoveClick(gene)};
+    } else {
+      trashHandler = removeGene ? removeGene(gene,isColorAccessor,dispatch) : this.handleDeleteGeneFromSet;
+    }
+    
     return (
       <div>
         <div
@@ -114,7 +138,7 @@ class Gene extends React.Component {
             }}
           >
             <div style={{display: "flex", marginTop: "2px"}}>           
-            {userLoggedIn && 
+            {userLoggedIn && !isObs && 
               <input
                 id={`${gene}-checkbox-selection`}
                 className={`${Classes.CONTROL} ${Classes.CHECKBOX}`}
@@ -132,7 +156,7 @@ class Gene extends React.Component {
               />
             }   
             <Truncate
-              tooltipAddendum={geneDescription && `: ${geneDescription}`}
+              tooltipAddendum={geneDescription && !isObs && `: ${geneDescription}`}
             >
               <span
                 style={{
@@ -150,8 +174,9 @@ class Gene extends React.Component {
                 isUserDefined
                 field={gene}
                 mini
-                width={MINI_HISTOGRAM_WIDTH}
+                width={MINI_HISTOGRAM_WIDTH - (isObs ? 40 : 0)}
                 removeHistZeros={removeHistZeros}
+                isObs={isObs}
               />
             ) : null}            
             </div>
@@ -161,7 +186,7 @@ class Gene extends React.Component {
               minimal
               small
               data-testid={`delete-from-geneset-${gene}`}
-              onClick={removeGene ? removeGene(gene,isColorAccessor,dispatch) : this.handleDeleteGeneFromSet}
+              onClick={trashHandler}
               intent="none"
               style={{ fontWeight: 700, marginRight: 2 }}
               icon={<Icon icon="trash" iconSize={10} />}
@@ -211,7 +236,7 @@ class Gene extends React.Component {
             />
           </div>
         </div>
-        {geneIsExpanded && 
+        {geneIsExpanded && !isObs && 
           <div style={{
               display: "flex",
               justifyContent: "space-between",
@@ -225,7 +250,7 @@ class Gene extends React.Component {
             
           </div>}          
  
-        {geneIsExpanded && <HistogramBrush isUserDefined field={gene} removeHistZeros={removeHistZeros} />}
+        {geneIsExpanded && <HistogramBrush isUserDefined field={gene} removeHistZeros={removeHistZeros} onRemoveClick={null} isObs={isObs}/>}
       </div>
     );
   }

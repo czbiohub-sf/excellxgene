@@ -8,7 +8,7 @@ import memoize from "memoize-one";
 import Async from "react-async";
 
 import * as globals from "../../globals";
-import styles from "./scatterplot.css";
+import styles from "./volcanoplot.css";
 import _drawPoints from "./drawPointsRegl";
 import { margin, width, height } from "./util";
 import {
@@ -32,7 +32,8 @@ function createProjectionTF(viewportWidth, viewportHeight) {
 
 function getScale(col, rangeMin, rangeMax) {
   if (!col) return null;
-  const { min, max } = col.summarize();
+  const min = Math.min(...col);
+  const max = Math.max(...col);
   return d3.scaleLinear().domain([min, max]).range([rangeMin, rangeMax]);
 }
 const getXScale = memoize(getScale);
@@ -40,25 +41,19 @@ const getYScale = memoize(getScale);
 
 @connect((state) => {
   const { obsCrossfilter: crossfilter } = state;
-  const { scatterplotXXaccessor, scatterplotYYaccessor, scatterplotXXisObs, scatterplotYYisObs } = state.controls;
 
   return {
     annoMatrix: state.annoMatrix,
     colors: state.colors,
     pointDilation: state.pointDilation,
-
-    // Accessors are var/gene names (strings)
-    scatterplotXXaccessor,
-    scatterplotYYaccessor,
-    scatterplotXXisObs,
-    scatterplotYYisObs,
+    volcanoAccessor: state.controls.volcanoAccessor,
     crossfilter,
     genesets: state.genesets.genesets,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr
   };
 })
-class Scatterplot extends React.PureComponent {
+class Volcanoplot extends React.PureComponent {
   static createReglState(canvas) {
     /*
     Must be created for each canvas
@@ -99,31 +94,30 @@ class Scatterplot extends React.PureComponent {
     return positions;
   });
 
-  computePointColors = memoize((rgb) => {
+  computePointColors = memoize((nVar) => {
     /*
     compute webgl colors for each point
     */
-    const colors = new Float32Array(3 * rgb.length);
-    for (let i = 0, len = rgb.length; i < len; i += 1) {
-      colors.set(rgb[i], 3 * i);
+    const colors = new Float32Array(3 * nVar);
+    for (let i = 0, len = nVar; i < len; i += 1) {
+      colors.set([0,0,0], 3 * i);
     }
     return colors;
   });
 
   computeSelectedFlags = memoize(
-    (crossfilter, _flagSelected, _flagUnselected) => {
-      const x = crossfilter.fillByIsSelected(
-        new Float32Array(crossfilter.size()),
-        _flagSelected,
-        _flagUnselected
-      );
+    (_nVar,_flagSelected) => {
+      const x = new Float32Array(_nVar)
+      for (let i = 0; i < x.length; i+=1){
+        x[i] = _flagSelected
+      }
       return x;
     }
   );
 
   computeHighlightFlags = memoize(
-    (nObs, pointDilationData, pointDilationLabel) => {
-      const flags = new Float32Array(nObs);
+    (nVar, pointDilationData, pointDilationLabel) => {
+      const flags = new Float32Array(nVar);
       if (pointDilationData) {
         for (let i = 0, len = flags.length; i < len; i += 1) {
           if (pointDilationData[i] === pointDilationLabel) {
@@ -135,8 +129,8 @@ class Scatterplot extends React.PureComponent {
     }
   );
 
-  computeColorByFlags = memoize((nObs, colorByData) => {
-    const flags = new Float32Array(nObs);
+  computeColorByFlags = memoize((nVar, colorByData) => {
+    const flags = new Float32Array(nVar);
     if (colorByData) {
       for (let i = 0, len = flags.length; i < len; i += 1) {
         const val = colorByData[i];
@@ -149,40 +143,13 @@ class Scatterplot extends React.PureComponent {
   });
 
   computePointFlags = memoize(
-    (crossfilter, colorByData, pointDilationData, pointDilationLabel) => {
-      /*
-      We communicate with the shader using three flags:
-      - isNaN -- the value is a NaN. Only makes sense when we have a colorAccessor
-      - isSelected -- the value is selected
-      - isHightlighted -- the value is highlighted in the UI (orthogonal from selection highlighting)
-
-      Due to constraints in webgl vertex shader attributes, these are encoded in a float, "kinda"
-      like bitmasks.
-
-      We also have separate code paths for generating flags for categorical and
-      continuous metadata, as they rely on different tests, and some of the flags
-      (eg, isNaN) are meaningless in the face of categorical metadata.
-      */
-      const nObs = crossfilter.size();
+    (nVar) => {
 
       const selectedFlags = this.computeSelectedFlags(
-        crossfilter,
-        flagSelected,
-        0
+        nVar,
+        flagSelected
       );
-      const highlightFlags = this.computeHighlightFlags(
-        nObs,
-        pointDilationData,
-        pointDilationLabel
-      );
-      const colorByFlags = this.computeColorByFlags(nObs, colorByData);
-
-      const flags = new Float32Array(nObs);
-      for (let i = 0; i < nObs; i += 1) {
-        flags[i] = selectedFlags[i] + highlightFlags[i] + colorByFlags[i];
-      }
-
-      return flags;
+      return selectedFlags;
     }
   );
 
@@ -202,7 +169,7 @@ class Scatterplot extends React.PureComponent {
   }
 
   componentDidMount() {
-    // this affect point render size for the scatterplot
+    // this affect point render size for the volcanoplot
     window.addEventListener("resize", this.handleResize);
   }
 
@@ -215,7 +182,7 @@ class Scatterplot extends React.PureComponent {
     if (canvas) {
       // no need to update this state if we are detaching.
       this.setState({
-        ...Scatterplot.createReglState(canvas),
+        ...Volcanoplot.createReglState(canvas),
       });
     }
   };
@@ -238,58 +205,30 @@ class Scatterplot extends React.PureComponent {
 
   fetchAsyncProps = async (props) => {
     const {
-      scatterplotXXaccessor,
-      scatterplotYYaccessor,
-      scatterplotXXisObs,
-      scatterplotYYisObs,
-      colors: colorsProp,
-      crossfilter,
-      pointDilation,
+      nVar,
+      volcanoAccessor,
     } = props.watchProps;
 
-    const [
-      expressionXDf,
-      expressionYDf,
-      colorDf,
-      pointDilationDf,
-    ] = await this.fetchData(
-      scatterplotXXaccessor,
-      scatterplotYYaccessor,
-      scatterplotXXisObs,
-      scatterplotYYisObs,
-      colorsProp,
-      pointDilation
-    );
-    const colorTable = this.updateColorTable(colorsProp, colorDf);
-
-    const xCol = expressionXDf.icol(0);
-    const yCol = expressionYDf.icol(0);
+    const result = await this.fetchData(volcanoAccessor);
+    const { pop } = result;
+    const xCol = [];
+    const yCol = [];
+    pop.forEach((item)=>{
+      xCol.push(item[1])
+      yCol.push(Math.min(200,-Math.log10(item[3])))
+    })
+    console.log(Math.max(...yCol))
     const xScale = getXScale(xCol, 0, width);
     const yScale = getYScale(yCol, height, 0);
     const positions = this.computePointPositions(
-      xCol.asArray(),
-      yCol.asArray(),
+      xCol,
+      yCol,
       xScale,
       yScale
     );
 
-    const colors = this.computePointColors(colorTable.rgb);
-
-    const { colorAccessor } = colorsProp;
-    const colorByData = colorDf?.col(colorAccessor)?.asArray();
-    const {
-      metadataField: pointDilationCategory,
-      categoryField: pointDilationLabel,
-    } = pointDilation;
-    const pointDilationData = pointDilationDf
-      ?.col(pointDilationCategory)
-      ?.asArray();
-    const flags = this.computePointFlags(
-      crossfilter,
-      colorByData,
-      pointDilationData,
-      pointDilationLabel
-    );
+    const colors = this.computePointColors(nVar);
+    const flags = this.computePointFlags(nVar);
 
     return {
       positions,
@@ -302,99 +241,19 @@ class Scatterplot extends React.PureComponent {
     };
   };
 
-  createXQuery(geneName) {
-    const { annoMatrix } = this.props;
-    const { schema } = annoMatrix;
-    const varIndex = schema?.annotations?.var?.index;
-    if (!varIndex) return null;
-    return [
-      "X",
-      {
-        where: {
-          field: "var",
-          column: varIndex,
-          value: geneName,
-        },
-      },
-    ];
-  }
-
-  createObsQuery(geneName) {
-    return [
-      "obs",
-      geneName
-    ];
-  }  
-
-  createColorByQuery(colors) {
-    const { annoMatrix, genesets } = this.props;
-    const { schema } = annoMatrix;
-    const { colorMode, colorAccessor } = colors;
-    return createColorQuery(colorMode, colorAccessor, schema, genesets);
-  }
-
-  updateColorTable(colors, colorDf) {
-    /* update color table state */
-    const { annoMatrix } = this.props;
-    const { schema } = annoMatrix;
-    const { colorAccessor, userColors, colorMode } = colors;
-    return createColorTable(
-      colorMode,
-      colorAccessor,
-      colorDf,
-      schema,
-      userColors
-    );
-  }
-
   async fetchData(
-    scatterplotXXaccessor,
-    scatterplotYYaccessor,
-    scatterplotXXisObs,
-    scatterplotYYisObs,
-    colors,
-    pointDilation
+    volcanoAccessor
   ) {
-    const { annoMatrix } = this.props;
-    const { metadataField: pointDilationAccessor } = pointDilation;
-
-    const promises = [];
-    // X and Y dimensions
-    if (scatterplotXXisObs) {
-      promises.push(
-        annoMatrix.fetch(...this.createObsQuery(scatterplotXXaccessor))
-      );
-    } else {
-      promises.push(
-        annoMatrix.fetch(...this.createXQuery(scatterplotXXaccessor))
-      );
+    const name = volcanoAccessor.split('//;;//;;').at(0)
+    let pop = volcanoAccessor.split('//;;//;;').at(1)
+    if (pop === "Pop2 high") {
+      pop = "Pop1 high";
     }
-    if (scatterplotYYisObs) {
-      promises.push(
-        annoMatrix.fetch(...this.createObsQuery(scatterplotYYaccessor))
-      ); 
-    } else {
-      promises.push(
-        annoMatrix.fetch(...this.createXQuery(scatterplotYYaccessor))
-      );     
-    }
-
-    // color
-    const query = this.createColorByQuery(colors);
-    if (query) {
-      promises.push(annoMatrix.fetch(...query));
-    } else {
-      promises.push(Promise.resolve(null));
-    }
-
-    // point highlighting
-    if (pointDilationAccessor) {
-      promises.push(annoMatrix.fetch("obs", pointDilationAccessor));
-    } else {
-      promises.push(Promise.resolve(null));
-    }
-
-    return Promise.all(promises);
+    const res = await fetch(
+      `${globals.API.prefix}${globals.API.version}diffExpStats?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`
+    );
+    const result = await res.json();
+    return result;
   }
 
   renderCanvas = renderThrottle(() => {
@@ -449,8 +308,8 @@ class Scatterplot extends React.PureComponent {
       color: colorBuffer,
       position: pointBuffer,
       projection: projectionTF,
-      count: annoMatrix.nObs,
-      nPoints: schema.dataframe.nObs,
+      count: annoMatrix.nVar,
+      nPoints: schema.dataframe.nVar,
       minViewportDimension: Math.min(
         viewport.width - globals.leftSidebarWidth || width,
         viewport.height || height
@@ -463,33 +322,25 @@ class Scatterplot extends React.PureComponent {
     const {
       dispatch,
       annoMatrix,
-      scatterplotXXaccessor,
-      scatterplotYYaccessor,
-      scatterplotXXisObs,
-      scatterplotYYisObs,
-      colors,
-      crossfilter,
-      pointDilation,
-      dataLayerExpr,
-      logScaleExpr
+      volcanoAccessor,
+      rightWidth
     } = this.props;
     const { minimized, regl, viewport } = this.state;
     const bottomToolbarGutter = 48; // gutter for bottom tool bar
-
     return (
       <div
         style={{
           position: "fixed",
           bottom: bottomToolbarGutter,
           borderRadius: "3px 3px 0px 0px",
-          left: globals.leftSidebarWidth + globals.scatterplotMarginLeft,
+          right: rightWidth + globals.scatterplotMarginLeft,
           padding: "0px 20px 20px 0px",
           background: "white",
           /* x y blur spread color */
           boxShadow: "0px 0px 3px 2px rgba(153,153,153,0.2)",
           zIndex: 2,
         }}
-        id="scatterplot_wrapper"
+        id="volcanoplot_wrapper"
       >
         <ButtonGroup
           style={{
@@ -505,15 +356,15 @@ class Scatterplot extends React.PureComponent {
               this.setState({ minimized: !minimized });
             }}
           >
-            {minimized ? "show scatterplot" : "hide"}
+            {minimized ? "show volcanoplot" : "hide"}
           </Button>
           <Button
             type="button"
             minimal
-            data-testid="clear-scatterplot"
+            data-testid="clear-volcanoplot"
             onClick={() =>
               dispatch({
-                type: "clear scatterplot",
+                type: "clear volcano plot",
               })
             }
           >
@@ -521,19 +372,19 @@ class Scatterplot extends React.PureComponent {
           </Button>
         </ButtonGroup>
         <div
-          className={styles.scatterplot}
-          id="scatterplot"
+          className={styles.volcanoplot}
+          id="volcanoplot"
           style={{
             width: `${width + margin.left + margin.right}px`,
             height: `${
-              (minimized ? 0 : height + margin.top) + margin.bottom
+              (minimized ? 0 : height + margin.top) + margin.bottom+10
             }px`,
           }}
         >
           <canvas
             width={width}
             height={height}
-            data-testid="scatterplot"
+            data-testid="volcanoplot"
             style={{
               marginLeft: margin.left,
               marginTop: margin.top,
@@ -542,20 +393,12 @@ class Scatterplot extends React.PureComponent {
             ref={this.setReglCanvas}
           />
           <Async
-            watchFn={Scatterplot.watchAsync}
+            watchFn={Volcanoplot.watchAsync}
             promiseFn={this.fetchAsyncProps}
             watchProps={{
-              annoMatrix,
-              scatterplotXXaccessor,
-              scatterplotYYaccessor,
-              scatterplotXXisObs,              
-              scatterplotYYisObs,
-              colors,
-              crossfilter,
-              pointDilation,
+              nVar: annoMatrix.schema.dataframe.nVar,
+              volcanoAccessor,
               viewport,
-              dataLayerExpr,
-              logScaleExpr
             }}
           >
             <Async.Pending initial>Loading...</Async.Pending>
@@ -566,10 +409,9 @@ class Scatterplot extends React.PureComponent {
                   this.updateReglAndRender(asyncProps);
                 }
                 return (
-                  <ScatterplotAxis
+                  <VolcanoplotAxis
                     minimized={minimized}
-                    scatterplotYYaccessor={scatterplotYYaccessor}
-                    scatterplotXXaccessor={scatterplotXXaccessor}
+                    volcanoAccessor={volcanoAccessor}
                     xScale={asyncProps.xScale}
                     yScale={asyncProps.yScale}
                   />
@@ -583,20 +425,19 @@ class Scatterplot extends React.PureComponent {
   }
 }
 
-export default Scatterplot;
+export default Volcanoplot;
 
-const ScatterplotAxis = React.memo(
+const VolcanoplotAxis = React.memo(
   ({
     minimized,
-    scatterplotYYaccessor,
-    scatterplotXXaccessor,
+    volcanoAccessor,
     xScale,
     yScale,
   }) => {
     /*
-    Axis for the scatterplot, rendered with SVG/D3.  Props:
-      * scatterplotXXaccessor - name of X axis
-      * scatterplotXXaccessor - name of Y axis
+    Axis for the volcanoplot, rendered with SVG/D3.  Props:
+      * volcanoplotXXaccessor - name of X axis
+      * volcanoplotXXaccessor - name of Y axis
       * xScale - D3 scale for X axis (domain to range)
       * yScale - D3 scale for Y axis (domain to range)
 
@@ -635,27 +476,31 @@ const ScatterplotAxis = React.memo(
       // adding label. For x-axis, it's at (10, 10), and for y-axis at (width, height-10).
       svg
         .append("text")
-        .attr("x", 10)
-        .attr("y", 10)
         .attr("class", "label")
+        .attr("text-anchor", "end")
+        .attr("y", 6)
+        .attr("dy", "-3.3em")        
+        .attr("transform", "rotate(-90)")        
+        .attr("x",-60)
         .style("font-style", "italic")
-        .text(scatterplotYYaccessor);
+        .text("Statistical significance (p-value)");
 
       svg
         .append("text")
-        .attr("x", width)
+        .attr("x", width/1.4)
         .attr("y", height - 10)
+        .attr("dy", "3.3em")        
         .attr("text-anchor", "end")
         .attr("class", "label")
         .style("font-style", "italic")
-        .text(scatterplotXXaccessor);
-    }, [scatterplotXXaccessor, scatterplotYYaccessor, xScale, yScale]);
+        .text("Effect size (Fold change)");
+    }, [xScale, yScale]);
 
     return (
       <svg
         width={width + margin.left + margin.right}
-        height={height + margin.top + margin.bottom}
-        data-testid="scatterplot-svg"
+        height={height + margin.top + margin.bottom+20}
+        data-testid="volcanoplot-svg"
         style={{
           display: minimized ? "none" : null,
         }}

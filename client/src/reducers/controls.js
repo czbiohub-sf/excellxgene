@@ -26,7 +26,11 @@ const Controls = (
     annoTracker: [],
     varMetadata: "",
     varRefresher: false,
-    currentSelectionDEG: null
+    currentSelectionDEG: null,
+    scatterplotXXisObs: false,
+    scatterplotYYisObs: false,
+    undoed: false,
+    volcanoAccessor: null
   },
   action
 ) => {
@@ -36,7 +40,6 @@ const Controls = (
   if (action.error || /error/i.test(action.type)) {
     console.error(action?.error ?? "Error.");
   }
-
   switch (action.type) {
     case "initial data load start": {
       return { ...state, loading: true, isSubsetted: false, };
@@ -96,7 +99,19 @@ const Controls = (
         ...state,
         screenCap: false
       }
-    }    
+    } 
+    case "set undo flag": {
+      return {
+        ...state,
+        undoed: true
+      }
+    } 
+    case "reset undo flag": {
+      return {
+        ...state,
+        undoed: false
+      }
+    }         
     case "modifying layouts": {
       return {
         ...state,
@@ -213,19 +228,35 @@ const Controls = (
       return {
         ...state,
         scatterplotXXaccessor: action.data,
+        scatterplotXXisObs: action?.isObs ?? false
       };
     case "set scatterplot y":
       return {
         ...state,
         scatterplotYYaccessor: action.data,
+        scatterplotYYisObs: action?.isObs ?? false
       };
     case "clear scatterplot":
       return {
         ...state,
         scatterplotXXaccessor: null,
         scatterplotYYaccessor: null,
+        scatterplotYYisObs: false,
+        scatterplotYYisObs: false
       };
-
+    /*******************************
+              Volcano plot
+    *******************************/
+    case "set volcano accessor":
+      return {
+        ...state,
+        volcanoAccessor: action.data,
+      };
+    case "clear volcano plot":
+      return {
+        ...state,
+        volcanoAccessor: null,
+      };
     /**************************
           Dataset Drawer
      **************************/

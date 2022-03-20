@@ -1,0 +1,14 @@
+:local(.volcanoplot) {
+  display: block;
+}
+
+:local(.volcanoplot) svg,
+:local(.volcanoplot) canvas {
+  font: 10px sans-serif;
+  position: absolute;
+}
+
+:local(.volcanoplot) canvas {
+  opacity: 0.9;
+  pointer-events: none;
+}

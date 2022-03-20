@@ -3,7 +3,7 @@
 import React from "react";
 import { connect } from "react-redux";
 import { AnchorButton, Collapse, H4 } from "@blueprintjs/core"
-import HistogramBrush from "../brushableHistogram";
+import Gene from "../geneExpression/gene";
 import actions from "../../actions";
 
 @connect((state) => ({
@@ -19,7 +19,7 @@ class Continuous extends React.PureComponent {
   }
   render() {
     /* initial value for iterator to simulate index, ranges is an object */
-    const { dispatch, schema, userLoggedIn } = this.props;
+    const { dispatch, schema, userLoggedIn, leftSidebarWidth } = this.props;
     const { contOpen } = this.state;
     if (!schema) return null;
     const obsIndex = schema.annotations.obs.index;
@@ -42,14 +42,19 @@ class Continuous extends React.PureComponent {
               minimal
               rightIcon={contOpen ? "chevron-down" : "chevron-right"} small
         />               
-        <Collapse isOpen={contOpen}>
-        {allContinuousNames.map((key, zebra) => (
-          <HistogramBrush key={key} onRemoveClick={userLoggedIn ? (
+        <Collapse isOpen={contOpen}>    
+        {allContinuousNames.map((key) => (
+          <Gene
+          key={key}
+          gene={key}
+          onRemoveClick={userLoggedIn ? (
             (field)=>{
               dispatch(actions.annotationDeleteCategoryAction(field));              
             }
           ) : null}
-          field={key} isObs zebra={zebra % 2 === 0} />
+          isObs
+          leftWidth={leftSidebarWidth}            
+          />                
         ))}
         </Collapse>
       </div>

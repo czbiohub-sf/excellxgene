@@ -408,23 +408,6 @@ class HistogramBrush extends React.PureComponent {
                   backgroundColor: zebra ? globals.lightestGrey : "white",
                 }}
               >
-                {!mini && isObs ? (
-                  <HistogramHeader
-                    fieldId={field}
-                    isColorBy={isColorAccessor}
-                    isObs={isObs}
-                    onColorByClick={this.handleColorAction(dispatch)}
-                    onRemoveClick={onRemoveClick ? onRemoveClick : removeHistogram}
-                    isScatterPlotX={isScatterplotXXaccessor}
-                    isScatterPlotY={isScatterplotYYaccessor}
-                    onScatterPlotXClick={
-                      showScatterPlot ? this.handleSetGeneAsScatterplotX : null
-                    }
-                    onScatterPlotYClick={
-                      showScatterPlot ? this.handleSetGeneAsScatterplotY : null
-                    }
-                  />
-                ) : null}
                 <Histogram
                   field={field}
                   fieldForId={fieldForId}

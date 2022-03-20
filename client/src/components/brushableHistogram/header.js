@@ -33,7 +33,6 @@ const HistogramHeader = React.memo(
       () => onColorByClick(fieldId, isObs),
       [fieldId, isObs]
     );
-
     return (
       <div
         style={{

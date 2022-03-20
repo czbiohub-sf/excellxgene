@@ -63,7 +63,7 @@ def read_gene_sets_tidycsv(gs_locator, context=None):
                 geneset_description, geneset_name, diffExp = row[:3]
                 x = "//;;//" if (diffExp=="TRUE" or diffExp == "True" or diffExp == "true") else ""
                 geneset_description+=x
-                gene_symbols = row[4:]
+                gene_symbols = row[3:]
                 try:
                     gene_symbols = gene_symbols[:gene_symbols.index("")]
                 except:

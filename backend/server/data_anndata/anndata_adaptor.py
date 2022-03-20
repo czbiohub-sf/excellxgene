@@ -143,7 +143,7 @@ def _error_callback(e, ws, cfn, pid):
     traceback.print_exception(type(e), e, e.__traceback__)
 
     
-def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff,ihm):
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
@@ -224,8 +224,12 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cu
             vB = meanBsq - meanB**2
             vB[vB<0]=0            
 
-    
-    return diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB,top_n,lfc_cutoff)
+    res = diffexp_generic.diffexp_ttest(meanA,vA,nA,meanB,vB,nB)
+    pickle_dumper(res['positive'],fname)
+    m = {}
+    for k in res.keys():
+        m[k] = res[k][:150]    
+    return m
 
 def pickle_loader(fn):
     with open(fn,"rb") as f:
@@ -1074,8 +1078,6 @@ def initialize_socket(da):
                 obsFilterA = data.get("set1", {"filter": {}})["filter"]
                 obsFilterB = data.get("set2", {"filter": {}})["filter"]
                 layer = data.get("layer","X")
-                top_n = data.get("count", 100)
-                lfc_cutoff = 0.01
                 shape = da.get_shape()
 
                 obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
@@ -1087,6 +1089,7 @@ def initialize_socket(da):
                 direc = pathlib.Path().absolute()                       
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                 fnn=data['groupName'].replace('/',':')
+                fnn2 = None
                 if not os.path.exists(f"{direc}/{userID}/diff/{fnn}"):
                     os.makedirs(f"{direc}/{userID}/diff/{fnn}")
                 if not data.get('multiplex',None):
@@ -1096,7 +1099,10 @@ def initialize_socket(da):
                     fnn2=str(data['category']).replace('/',':')                                    
                     pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/{fnn2}.p")
 
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,top_n,lfc_cutoff, current_app.hosted_mode)
+                if fnn2 is None:
+                    fnn2 = "Pop1 high"                
+                fname = f"{direc}/{userID}/diff/{fnn}/{fnn2}_output.p"
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname)
     
     @sock.route("/reembedding")
     @auth0_token_required
@@ -1672,8 +1678,8 @@ class AnndataAdaptor(DataAdaptor):
             for k in self._obs_init.keys():
                 vals = np.array(list(self._obs_init[k]))
                 if isinstance(vals[0],np.integer):
-                    vals = vals.astype('str')
-
+                    if (len(set(vals))<500):
+                        vals = vals.astype('str')
                 pickle_dumper(vals,"{}/obs/{}.p".format(userID,k.replace('/',':')))
             pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")                                
             for k in self._var_init.keys():

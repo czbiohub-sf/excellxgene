@@ -21,7 +21,8 @@ import { resetSubsetAction } from "../../actions/viewStack";
     userLoggedIn: state.controls.userInfo ? true : false,
     layoutChoice: state.layoutChoice,
     varRefresher: state.controls.varRefresher,
-    currentSelectionDEG: state.controls.currentSelectionDEG
+    currentSelectionDEG: state.controls.currentSelectionDEG,
+    volcanoAccessor: state.controls.volcanoAccessor
   };
 })
 class GeneSet extends React.Component {
@@ -283,7 +284,7 @@ class GeneSet extends React.Component {
   }
 
   render() {
-    const { setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn, currentSelectionDEG } = this.props;
+    const { dispatch, setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn, currentSelectionDEG, volcanoAccessor } = this.props;
     const diffExp = genesetDescription?.includes("//;;//")
 
     const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
@@ -365,6 +366,31 @@ class GeneSet extends React.Component {
             )}
           </span>
           <div style={{display: "flex", textAlign: "right"}}>
+          {diffExp && <Tooltip
+          content={
+            "Click to display volcano plot."
+          }
+          position={Position.RIGHT}
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
+          modifiers={{
+            preventOverflow: { enabled: false },
+            hide: { enabled: false },
+          }}          
+        >
+        <AnchorButton
+          onClick={() => {
+            if (`${genesetDescription};;${setName}`===volcanoAccessor) {
+              dispatch({type: "clear volcano plot"})
+            } else {
+              dispatch({type: "set volcano accessor",data: `${genesetDescription};;${setName}`})
+            }
+            
+          }}
+          minimal
+          active={`${genesetDescription};;${setName}`===volcanoAccessor}
+          icon={"scatter-plot"}
+        />
+        </Tooltip>}            
           {diffExp && <Tooltip
           content={
             "Click to select the cells associated with this DEG group."
