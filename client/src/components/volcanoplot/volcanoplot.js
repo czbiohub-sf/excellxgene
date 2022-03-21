@@ -687,6 +687,7 @@ class Volcanoplot extends React.PureComponent {
       volcanoAccessor,
       rightWidth
     } = this.props;
+    
     const { minimized, regl, viewport, selectedGenes, xScale, yScale, sgInitial, loading } = this.state;
     const bottomToolbarGutter = 48; // gutter for bottom tool bar
     return (
@@ -700,7 +701,7 @@ class Volcanoplot extends React.PureComponent {
           background: "white",
           /* x y blur spread color */
           boxShadow: "0px 0px 3px 2px rgba(153,153,153,0.2)",
-          zIndex: 2,
+          zIndex: 1,
         }}
         id="volcanoplot_wrapper"
       >
@@ -801,8 +802,8 @@ class Volcanoplot extends React.PureComponent {
               marginTop: margin.top,
               display: minimized ? "none" : null,              
             }}
-            width={viewport.width}
-            height={viewport.height}
+            width={width}
+            height={height}
             pointerEvents="auto"
           />          
           <canvas

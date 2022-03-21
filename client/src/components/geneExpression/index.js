@@ -418,7 +418,7 @@ class GeneExpression extends React.Component {
     const [nogroupElements,genesetElements,diffExpElements]=this.renderGeneSets();
     const saveLoading = !!outputController?.pendingFetch;
     return (
-      <div style={{zIndex: 1000}}>
+      <div>
        {userLoggedIn ?  <GenesetHotkeys
           dispatch={dispatch}
           genesets={genesets}
