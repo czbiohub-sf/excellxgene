@@ -1,7 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Button } from "@blueprintjs/core";
-
+import { Button, AnchorButton, Tooltip, Dialog } from "@blueprintjs/core";
 import * as globals from "../../globals";
 import Logo from "../framework/logo";
 import Truncate from "../util/truncate";
@@ -22,9 +21,20 @@ const DATASET_TITLE_FONT_SIZE = 14;
     tosURL: state.config?.parameters?.about_legal_tos,
     privacyURL: state.config?.parameters?.about_legal_privacy,
     title: correctVersion ? corporaProps?.title : undefined,
+    hostedMode: state.controls.hostedMode,
+    prevCrossfilter: state.obsCrossfilter,
+    annoMatrix: state.annoMatrix,
+    userLoggedIn: state.controls.userInfo ? true : false,
   };
 })
 class LeftSideBar extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      warningDialog: false
+    };
+  }
+
   handleClick = () => {
     const { dispatch } = this.props;
     dispatch({ type: "toggle dataset drawer" });
@@ -39,8 +49,12 @@ class LeftSideBar extends React.Component {
       tosURL,
       dispatch,
       title,
+      hostedMode,
+      prevCrossfilter,
+      annoMatrix,
+      userLoggedIn
     } = this.props;
-
+    const { warningDialog } = this.state;
     return (
       <div
         style={{
@@ -107,6 +121,56 @@ class LeftSideBar extends React.Component {
               dispatch,
             }}
           />
+          {hostedMode && userLoggedIn && <><Tooltip
+            content="Reset cellxgene to the initial state."
+            position="bottom"
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+          >                 
+            <AnchorButton
+              icon="reset"
+              onClick={()=>{this.setState({warningDialog: true})}}
+            />
+          </Tooltip>
+          <Dialog
+            title="Warning: all changes will be lost."
+            isOpen={warningDialog}
+            onClose={()=>{
+              this.setState({
+                warningDialog: false
+              })
+            }}
+          >
+            <div style={{
+              display: "flex",
+              margin: "0 auto",
+              paddingTop: "10px"
+            }}>
+            <div
+            style={{fontSize: "16px", paddingRight: "10px", margin: "auto 0"}}
+            >Are you sure you want to reset to the default state?</div>
+            <AnchorButton
+              type="button"
+              intent="danger"
+              icon="warning-sign"
+              onClick={() => {
+                fetch(
+                  `${globals.API.prefix}${globals.API.version}resetToRoot`,
+                  {
+                    method: "PUT",
+                    headers: new Headers({
+                      Accept: "application/octet-stream",
+                      "Content-Type": "application/json",
+                    }),
+                    credentials: "include",
+                    }
+                ).then(()=>{
+                  window.location.reload()
+                })
+                this.setState({warningDialog: false})
+              }}
+            > OK </AnchorButton>         
+            </div>
+          </Dialog></>}          
         </div>
       </div>
     );

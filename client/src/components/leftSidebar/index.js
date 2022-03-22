@@ -94,7 +94,7 @@ class LeftSideBar extends React.Component {
           <Continuous leftSidebarWidth={leftWidth}/>
         </div>
         {scatterplotXXaccessor && scatterplotYYaccessor ? (
-          <DynamicScatterplot />
+          <DynamicScatterplot leftWidth={leftWidth}/>
         ) : null}
       </div>
     );

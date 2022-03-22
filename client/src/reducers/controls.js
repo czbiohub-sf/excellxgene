@@ -30,7 +30,10 @@ const Controls = (
     scatterplotXXisObs: false,
     scatterplotYYisObs: false,
     undoed: false,
-    volcanoAccessor: null
+    volcanoAccessor: null,
+    pointScaler: 1.0,
+    chromeKeyContinuous: "Spectral",
+    chromeKeyCategorical: "Rainbow"
   },
   action
 ) => {
@@ -62,6 +65,24 @@ const Controls = (
         [action.name]: action.ws
       };
     }   
+    case "set point scaler": {
+      return {
+        ...state,
+        pointScaler: action.scaler
+      };
+    }     
+    case "set chrome key categorical": {
+      return {
+        ...state,
+        chromeKeyCategorical: action.key
+      };
+    } 
+    case "set chrome key continuous": {
+      return {
+        ...state,
+        chromeKeyContinuous: action.key
+      };
+    }             
     case "set current selection DEG": {
       return {
         ...state,

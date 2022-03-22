@@ -1,7 +1,7 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup } from "@blueprintjs/core";
-
+import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, MenuItem } from "@blueprintjs/core";
+import { Select } from "@blueprintjs/select"
 import * as globals from "../../globals";
 import styles from "./menubar.css";
 import actions from "../../actions";
@@ -13,6 +13,8 @@ import Reembedding from "./reembedding";
 import { getEmbSubsetView } from "../../util/stateManager/viewStackHelpers";
 import { requestSankey } from "../../actions/sankey";
 import StateParameterInput from "./parameterinputstate";
+import * as chromatic from "d3-scale-chromatic";
+import * as d3 from "d3";
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -24,6 +26,44 @@ function HotkeysDialog(props) {
   }, [open]);
   return <div />;
 }
+
+const continuous = (selectorId, colorScale) => {
+  const legendHeight = 30;
+  const legendWidth = 300;
+
+  const canvas = d3
+    .select(selectorId)
+    .style("height", `${legendHeight}px`)
+    .style("width", `${legendWidth}px`)
+    .append("canvas")
+    .attr("width", legendWidth)
+    .attr("height", 1)
+    .style("height", `${legendHeight}px`)
+    .style("width", `${legendWidth}px`)
+    .style("background","#ccc")
+    .node();
+
+  const ctx = canvas.getContext("2d");
+
+  const legendScale = d3
+    .scaleLinear()
+    .range([1, legendWidth])
+    .domain([
+      colorScale.domain()[1],
+      colorScale.domain()[0],
+    ]); 
+
+  const image = ctx.createImageData(legendWidth, 1);
+  d3.range(legendWidth).forEach((i) => {
+    const c = d3.rgb(colorScale(legendScale.invert(i)));
+    image.data[4 * i] = c.r;
+    image.data[4 * i + 1] = c.g;
+    image.data[4 * i + 2] = c.b;
+    image.data[4 * i + 3] = 255;
+  });
+  ctx.putImageData(image, 0, 0);
+
+};
 
 @connect((state) => {
   const { annoMatrix } = state;
@@ -78,7 +118,11 @@ function HotkeysDialog(props) {
     maxLink: state.sankeySelection.maxLink,
     alignmentThreshold: state.sankeySelection.alignmentThreshold,
     userLoggedIn: state.controls.userInfo ? true : false,
-    annoMatrix
+    annoMatrix,
+    pointScaler: state.controls.pointScaler,
+    chromeKeyContinuous: state.controls.chromeKeyContinuous,
+    chromeKeyCategorical: state.controls.chromeKeyCategorical,
+    chromeKeys: Object.keys(chromatic).filter((item)=>item.startsWith("interpolate")).map((item)=>item.replace("interpolate","")).sort()
   };
 })
 class MenuBar extends React.PureComponent {
@@ -118,7 +162,8 @@ class MenuBar extends React.PureComponent {
       numGenes: 2000,
       dataLayer: "X",
       geneMetadata: "sam_weights",
-      numEdges: 5
+      numEdges: 5,
+      preferencesDialogOpen: false
     };
   }
 
@@ -179,12 +224,28 @@ class MenuBar extends React.PureComponent {
     }
   };
   componentDidUpdate = (prevProps) => {
-    if (this.props.layoutChoice.current !== prevProps.layoutChoice.current){
+    const { layoutChoice, chromeKeyCategorical, chromeKeyContinuous } = this.props;
+    if (layoutChoice.current !== prevProps.layoutChoice.current){
       this.setState({
         ...this.state,
         threshold: 0
       })
     }
+
+    if (chromeKeyCategorical !== prevProps.chromeKeyCategorical) {
+      d3.select("#categorical_legend_preferences").selectAll("*").remove();
+      continuous(
+        "#categorical_legend_preferences",
+        d3.scaleSequential(chromatic[`interpolate${chromeKeyCategorical}`]).domain([0,1])
+      );    
+    }
+    if (chromeKeyContinuous !== prevProps.chromeKeyContinuous) {
+      d3.select("#continuous_legend_preferences").selectAll("*").remove();
+      continuous(
+        "#continuous_legend_preferences",
+        d3.scaleSequential(chromatic[`interpolate${chromeKeyContinuous}`]).domain([0,1])
+      );    
+    }    
   }
   handleSaveData = () => {
     const { dispatch, tooManyCells } = this.props;
@@ -358,9 +419,13 @@ class MenuBar extends React.PureComponent {
       userLoggedIn,
       tooManyCells,
       var_keys,
-      geneSelection
+      geneSelection,
+      pointScaler,
+      chromeKeyContinuous,
+      chromeKeyCategorical,
+      chromeKeys
     } = this.props;
-    const { pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
+    const { preferencesDialogOpen, pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
     const loading = !!outputController?.pendingFetch;
     const loadingSankey = !!sankeyController?.pendingFetch;
@@ -384,12 +449,121 @@ class MenuBar extends React.PureComponent {
           zIndex: 10000000000000,
         }}
       >
+        <Tooltip
+          content="Preferences"
+          position="bottom"
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
+        >
+          <AnchorButton className={styles.menubarButton} icon="cog"
+            onClick={()=>{this.setState({preferencesDialogOpen: true})}}
+          />
+        </Tooltip>        
+        <Dialog
+          title="Preferences"
+          isOpen={preferencesDialogOpen}
+          onClose={()=>{this.setState({preferencesDialogOpen: false})}}
+          onOpened={()=>{
+            d3.select("#categorical_legend_preferences").selectAll("*").remove();
+            continuous(
+              "#categorical_legend_preferences",
+              d3.scaleSequential(chromatic[`interpolate${chromeKeyCategorical}`]).domain([0,1])
+            );   
+        
+            d3.select("#continuous_legend_preferences").selectAll("*").remove();
+            continuous(
+              "#continuous_legend_preferences",
+              d3.scaleSequential(chromatic[`interpolate${chromeKeyContinuous}`]).domain([0,1])
+            );            
+          }}
+        >
+          <div style={{
+            margin: "0 auto",
+            paddingTop: "10px",
+            width: "90%"
+          }}>
+            <ControlGroup fill={true} vertical={false}>
+              <span style={{width: "160px", paddingRight: "10px"}}>Point size scaler:</span>
+              <Slider
+                min={0.0}
+                max={10.0}
+                stepSize={0.01}
+                labelStepSize={5.0}
+                showTrackFill={false}
+                onChange={(value)=>{
+                  dispatch({type: "set point scaler", scaler: Math.max(0.01,value)})}}
+                value={pointScaler}
+              />
+            </ControlGroup>
+            <div style={{paddingTop: "20px", paddingBottom: "5px"}}>
+                <b>Categorical colorscale:</b>
+            </div>            
+            <ControlGroup fill={true} vertical={false}>
+              <Select
+                items={
+                  chromeKeys
+                }
+                filterable={false}
+                itemRenderer={(d, { handleClick }) => {
+                  return (
+                    <MenuItem
+                      onClick={handleClick}
+                      key={d}
+                      text={d}
+                    />
+                  );
+                }}
+                onItemSelect={(d) => {
+                  dispatch({type: "set chrome key categorical", key: d})
+                }}
+              >
+                <AnchorButton
+                  text={`${chromeKeyCategorical}`}
+                  rightIcon="double-caret-vertical"
+                />
+              </Select>  
+              <div
+                id="categorical_legend_preferences"
+              />                           
+            </ControlGroup>            
+            <div style={{paddingTop: "20px", paddingBottom: "5px"}}>
+                <b>Continuous colorscale:</b>
+            </div>
+            <ControlGroup fill={true} vertical={false}>
+              <Select
+                items={
+                  chromeKeys
+                }
+                filterable={false}
+                itemRenderer={(d, { handleClick }) => {
+                  return (
+                    <MenuItem
+                      onClick={handleClick}
+                      key={d}
+                      text={d}
+                    />
+                  );
+                }}
+                onItemSelect={(d) => {
+                  dispatch({type: "set chrome key continuous", key: d})
+                }}
+              >
+                <AnchorButton
+                  text={`${chromeKeyContinuous}`}
+                  rightIcon="double-caret-vertical"
+                />
+              </Select> 
+              <div
+                id="continuous_legend_preferences"
+              />
+            </ControlGroup>
+          </div>
+        </Dialog>        
         <UndoRedoReset
           dispatch={dispatch}
           undoDisabled={undoDisabled}
           redoDisabled={redoDisabled}
         />
-        <Clip
+        {false && <Clip
           pendingClipPercentiles={pendingClipPercentiles}
           clipPercentileMin={clipPercentileMin}
           clipPercentileMax={clipPercentileMax}
@@ -404,14 +578,15 @@ class MenuBar extends React.PureComponent {
           handleClipPercentileMinValueChange={
             this.handleClipPercentileMinValueChange
           }
-        />
+        />}
         {userLoggedIn && <ButtonGroup className={styles.menubarButton} style={{zIndex: 100000000000}}>
           <Reembedding />
         </ButtonGroup>}
-        <Tooltip
+        {false && <Tooltip
           content="When a category is colored by, show labels on the graph"
           position="bottom"
           disabled={graphInteractionMode === "zoom"}
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
         >
           <AnchorButton
             className={styles.menubarButton}
@@ -423,7 +598,7 @@ class MenuBar extends React.PureComponent {
             intent={showCentroidLabels ? "primary" : "none"}
             disabled={!isColoredByCategorical}
           />
-        </Tooltip>
+        </Tooltip>}
         <ButtonGroup className={styles.menubarButton}>
           <Tooltip
             content={
@@ -705,6 +880,7 @@ class MenuBar extends React.PureComponent {
         <Tooltip
           content="Screenshot the current sankey plot"
           position="bottom"
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
         >
         <AnchorButton
           type="button"
@@ -723,6 +899,7 @@ class MenuBar extends React.PureComponent {
           <Tooltip
           content="Screenshot the current embedding"
           position="bottom"
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}
         ><AnchorButton
         type="button"
         icon="camera"
@@ -746,6 +923,7 @@ class MenuBar extends React.PureComponent {
           <div style={{paddingRight: "15px"}}>{<Tooltip
           content="Edges with weights below this threshold are filtered out."
           position="bottom"
+          hoverOpenDelay={globals.tooltipHoverOpenDelay}          
           style={{
             width: "inherit"
           }}

@@ -1,5 +1,11 @@
 import React from "react";
+import { connect } from "react-redux";
 
+@connect((state) => {
+  return {
+    chromeKeyCategorical: state.controls.chromeKeyCategorical
+  };
+})
 export default class MiniStackedBar extends React.PureComponent {
   constructor(props) {
     super(props);
@@ -43,8 +49,8 @@ export default class MiniStackedBar extends React.PureComponent {
   };
 
   componentDidUpdate = (prevProps) => {
-    const { occupancy } = this.props;
-    if (occupancy !== prevProps.occupancy) this.drawStacks();
+    const { occupancy, chromeKeyCategorical } = this.props;
+    if (occupancy !== prevProps.occupancy || chromeKeyCategorical !== prevProps.chromeKeyCategorical) this.drawStacks();
   };
 
   componentDidMount = () => {

@@ -43,7 +43,8 @@ const HEIGHT_MINI = 15 - MARGIN_MINI.TOP - MARGIN_MINI.BOTTOM;
     continuousSelectionRange: state.continuousSelection[myName],
     isColorAccessor: state.colors.colorAccessor === field,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
-    logScaleExpr: state.reembedParameters.logScaleExpr
+    logScaleExpr: state.reembedParameters.logScaleExpr,
+    chromeKeyContinuous: state.controls.chromeKeyContinuous
   };
 })
 class HistogramBrush extends React.PureComponent {
@@ -367,7 +368,8 @@ class HistogramBrush extends React.PureComponent {
       removeHistZeros,
       onRemoveClick,
       dataLayerExpr,
-      logScaleExpr
+      logScaleExpr,
+      chromeKeyContinuous
     } = this.props;
     let { width } = this.props;
     if (!width) {
@@ -423,6 +425,7 @@ class HistogramBrush extends React.PureComponent {
                   isColorBy={isColorAccessor}
                   selectionRange={continuousSelectionRange}
                   mini={mini}
+                  chromeKeyContinuous={chromeKeyContinuous}
                 />
                 {!mini && (
                   <HistogramFooter

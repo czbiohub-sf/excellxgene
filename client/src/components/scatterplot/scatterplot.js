@@ -55,7 +55,9 @@ const getYScale = memoize(getScale);
     crossfilter,
     genesets: state.genesets.genesets,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
-    logScaleExpr: state.reembedParameters.logScaleExpr
+    logScaleExpr: state.reembedParameters.logScaleExpr,
+    chromeKeyCategorical: state.controls.chromeKeyCategorical,
+    chromeKeyContinuous: state.controls.chromeKeyContinuous
   };
 })
 class Scatterplot extends React.PureComponent {
@@ -245,6 +247,8 @@ class Scatterplot extends React.PureComponent {
       colors: colorsProp,
       crossfilter,
       pointDilation,
+      chromeKeyCategorical,
+      chromeKeyContinuous
     } = props.watchProps;
 
     const [
@@ -299,6 +303,8 @@ class Scatterplot extends React.PureComponent {
       height,
       xScale,
       yScale,
+      chromeKeyCategorical,
+      chromeKeyContinuous
     };
   };
 
@@ -335,7 +341,7 @@ class Scatterplot extends React.PureComponent {
 
   updateColorTable(colors, colorDf) {
     /* update color table state */
-    const { annoMatrix } = this.props;
+    const { annoMatrix, chromeKeyCategorical, chromeKeyContinuous } = this.props;
     const { schema } = annoMatrix;
     const { colorAccessor, userColors, colorMode } = colors;
     return createColorTable(
@@ -343,6 +349,8 @@ class Scatterplot extends React.PureComponent {
       colorAccessor,
       colorDf,
       schema,
+      chromeKeyCategorical,
+      chromeKeyContinuous,      
       userColors
     );
   }
@@ -471,7 +479,10 @@ class Scatterplot extends React.PureComponent {
       crossfilter,
       pointDilation,
       dataLayerExpr,
-      logScaleExpr
+      logScaleExpr,
+      chromeKeyCategorical,
+      chromeKeyContinuous,
+      leftWidth
     } = this.props;
     const { minimized, regl, viewport } = this.state;
     const bottomToolbarGutter = 48; // gutter for bottom tool bar
@@ -482,7 +493,7 @@ class Scatterplot extends React.PureComponent {
           position: "fixed",
           bottom: bottomToolbarGutter,
           borderRadius: "3px 3px 0px 0px",
-          left: globals.leftSidebarWidth + globals.scatterplotMarginLeft,
+          left: leftWidth + globals.scatterplotMarginLeft,
           padding: "0px 20px 20px 0px",
           background: "white",
           /* x y blur spread color */
@@ -555,7 +566,9 @@ class Scatterplot extends React.PureComponent {
               pointDilation,
               viewport,
               dataLayerExpr,
-              logScaleExpr
+              logScaleExpr,
+              chromeKeyCategorical,
+              chromeKeyContinuous
             }}
           >
             <Async.Pending initial>Loading...</Async.Pending>

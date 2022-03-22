@@ -54,7 +54,9 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
     numChecked: state.sankeySelection.numChecked,
     sankeyController: state.sankeyController,
     refresher: refresher,
-    userLoggedIn: state.controls.userInfo ? true : false
+    userLoggedIn: state.controls.userInfo ? true : false,
+    chromeKeyCategorical: state.controls.chromeKeyCategorical,
+    chromeKeyContinuous: state.controls.chromeKeyContinuous
   };
 })
 class Category extends React.PureComponent {
@@ -237,7 +239,7 @@ class Category extends React.PureComponent {
   };
 
   fetchAsyncProps = async (props) => {
-    const { annoMatrix, metadataField, colors } = props.watchProps;
+    const { annoMatrix, metadataField, colors, chromeKeyCategorical } = props.watchProps;
     const { crossfilter } = this.props;
 
     const [categoryData, categorySummary, colorData] = await this.fetchData(
@@ -251,6 +253,7 @@ class Category extends React.PureComponent {
     })
 
     return {
+      chromeKeyCategorical,
       categoryData,
       categorySummary,
       colorData,
@@ -296,7 +299,7 @@ class Category extends React.PureComponent {
 
   updateColorTable(colorData) {
     // color table, which may be null
-    const { schema, colors, metadataField } = this.props;
+    const { schema, colors, metadataField, chromeKeyCategorical, chromeKeyContinuous } = this.props;
     const { colorAccessor, userColors, colorMode } = colors;
     return {
       isColorAccessor: colorAccessor === metadataField,
@@ -307,6 +310,8 @@ class Category extends React.PureComponent {
         colorAccessor,
         colorData,
         schema,
+        chromeKeyCategorical,
+        chromeKeyContinuous,        
         userColors
       ),
     };
@@ -349,7 +354,8 @@ class Category extends React.PureComponent {
       layoutChoiceSankey,
       sankeyController,
       userLoggedIn,
-      leftSidebarWidth
+      leftSidebarWidth,
+      chromeKeyCategorical
     } = this.props;
     
     const sankeyLoading = !!sankeyController?.pendingFetch;
@@ -365,6 +371,7 @@ class Category extends React.PureComponent {
           watchFn={Category.watchAsync}
           promiseFn={this.fetchAsyncProps}
           watchProps={{
+            chromeKeyCategorical,
             metadataField,
             annoMatrix,
             categoricalSelection,
@@ -382,7 +389,7 @@ class Category extends React.PureComponent {
               <ErrorLoading metadataField={metadataField} error={error} />
             )}
           </Async.Rejected>
-          <Async.Fulfilled persist>
+          <Async.Fulfilled>
             {(asyncProps) => {
               const {
                 colorAccessor,
@@ -396,7 +403,6 @@ class Category extends React.PureComponent {
               const isTruncated = !!categorySummary?.isTruncated;
               const categorySummary = this.state?.categorySummary ?? categorySummaryOrig
               const selectionState = this.getSelectionState(categorySummary);              
-                      
               return (
                 <CategoryRender
                   metadataField={metadataField}
@@ -958,6 +964,7 @@ const CategoryValueList = React.memo(
         newTuplesFiltered.push(newTuples[index])
       }
     })
+
     if (!isUserAnno) {
       return (
         <>

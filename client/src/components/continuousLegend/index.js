@@ -1,7 +1,7 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as d3 from "d3";
-import { interpolateSpectral } from "d3-scale-chromatic";
+import * as chromatic from "d3-scale-chromatic";
 
 import {
   createColorTable,
@@ -109,15 +109,17 @@ const continuous = (selectorId, colorScale, colorAccessor) => {
   genesets: state.genesets.genesets,
   dataLayerExpr: state.reembedParameters.dataLayerExpr,
   logScaleExpr: state.reembedParameters.logScaleExpr,
-  layoutChoice: state.layoutChoice
+  layoutChoice: state.layoutChoice,
+  chromeKeyContinuous: state.controls.chromeKeyContinuous,
+  chromeKeyCategorical: state.controls.chromeKeyCategorical
 }))
 class ContinuousLegend extends React.Component {
   async componentDidUpdate(prevProps) {
-    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr, layoutChoice } = this.props;
+    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr, layoutChoice, chromeKeyCategorical, chromeKeyContinuous } = this.props;
     if (!colors || !annoMatrix) return;
 
     if (logScaleExpr !== prevProps.logScaleExpr || dataLayerExpr !== prevProps.dataLayerExpr || colors !== prevProps?.colors || annoMatrix !== prevProps?.annoMatrix
-        || layoutChoice.sankey !== prevProps.layoutChoice.sankey) {
+        || layoutChoice.sankey !== prevProps.layoutChoice.sankey || chromeKeyContinuous !== prevProps?.chromeKeyContinuous) {
       const { schema } = annoMatrix;
       const { colorMode, colorAccessor, userColors } = colors;
 
@@ -134,6 +136,8 @@ class ContinuousLegend extends React.Component {
         colorAccessor,
         colorDf,
         schema,
+        chromeKeyCategorical,
+        chromeKeyContinuous,        
         userColors
       );
 
@@ -148,7 +152,7 @@ class ContinuousLegend extends React.Component {
         if (range()[0][0] !== "#") {
           continuous(
             "#continuous_legend",
-            d3.scaleSequential(interpolateSpectral).domain(colorScale.domain()),
+            d3.scaleSequential(chromatic[`interpolate${chromeKeyContinuous}`]).domain(colorScale.domain()),
             colorAccessor
           );
         }

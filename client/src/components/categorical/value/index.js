@@ -56,7 +56,8 @@ function _currentLabelAsString(ownProps) {
     isDilated,
     isSelected,
     label,
-    userLoggedIn: state.controls.userInfo ? true : false
+    userLoggedIn: state.controls.userInfo ? true : false,
+    chromeKeyCategorical: state.controls.chromeKeyCategorical
   };
 })
 class CategoryValue extends React.Component {
@@ -183,7 +184,7 @@ class CategoryValue extends React.Component {
     If and only if true, update the component
     */
     const { props, state } = this;
-    const { leftSidebarWidth, categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable, categoryData } = props;
+    const { leftSidebarWidth, categoryIndex, categorySummary, isSelected, sortDirection, removeHistZeros, currentLayout, isSubsetted, colorTable, categoryData, chromeKeyCategorical } = props;
     const {
       categoryIndex: newCategoryIndex,
       categorySummary: newCategorySummary,
@@ -226,9 +227,10 @@ class CategoryValue extends React.Component {
     
     const removeZerosChanged = removeHistZeros !== newRemoveHistZeros;
     const plotChanged = (isSubsetted !== newIsSubsetted) || (currentLayout !== newCurrentLayout)
-    const colorTableChanged = colorTable.rgb.length !== newColorTable.rgb.length;
+    const colorTableChanged = colorTable.rgb.length !== newColorTable.rgb.length || `${colorTable.rgb[0]}` !== `${colorTable.rgb[0]}`;
     const categoryDataChanged = categoryData !== newCategoryData;
     const leftSidebarWidthChanged = leftSidebarWidth !== newLeftSidebarWidth;
+    const chromeKeyUpdated = chromeKeyCategorical !== nextProps.chromeKeyCategorical;
     return (
       labelChanged ||
       valueSelectionChange ||
@@ -243,7 +245,8 @@ class CategoryValue extends React.Component {
       plotChanged || 
       colorTableChanged ||
       categoryDataChanged ||
-      leftSidebarWidthChanged
+      leftSidebarWidthChanged ||
+      chromeKeyUpdated
     );
   };
 

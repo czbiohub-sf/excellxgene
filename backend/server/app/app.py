@@ -411,10 +411,20 @@ class DiffGenesInfo(Resource):
     def put(self, data_adaptor):
         return common_rest.diff_genes_put(request, data_adaptor)            
 
+
+class ResetToRootFolder(Resource):
+    @requires_authentication
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.reset_to_root_folder(request, data_adaptor)
+
 class AdminRestartMP(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
     @requires_authentication
+    @auth0_token_required
     def get(self, data_adaptor):
         return common_rest.admin_restart_get(request, data_adaptor)
 
@@ -501,6 +511,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(HostedModeAPI, "/hostedMode")
     add_resource(GeneInfoAPI, "/geneInfo")
     add_resource(GeneInfoBulkAPI, "/geneInfoBulk")
+    add_resource(ResetToRootFolder,"/resetToRoot")
     add_resource(AdminRestartMP, "/adminRestart")
     add_resource(UploadVarMetadata, "/uploadVarMetadata")    
     # Data routes

@@ -50,7 +50,7 @@ class Sankey extends React.Component {
     const nodeStrokeWidth = 4;
     const arrow = "\u2192";
     const nodeAlignment = d3s.sankeyCenter;
-    const colorScale = d3.interpolateRainbow;
+    const colorScale = d3.interpolateRainbow; // add to preferences?
     const path = d3s.sankeyLinkHorizontal();
     let initialMousePosition = {};
     let initialNodePosition = {};

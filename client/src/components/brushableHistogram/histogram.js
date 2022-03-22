@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { interpolateSpectral } from "d3-scale-chromatic";
+import * as chromatic from "d3-scale-chromatic";
 import * as d3 from "d3";
 
 import maybeScientific from "../../util/maybeScientific";
@@ -18,6 +18,7 @@ const Histogram = ({
   isColorBy,
   selectionRange,
   mini,
+  chromeKeyContinuous
 }) => {
   const svgRef = useRef(null);
   const [brush, setBrush] = useState(null);
@@ -50,7 +51,7 @@ const Histogram = ({
       .attr("transform", `translate(${marginLeft},${marginTop})`);
 
     const colorScale = d3
-      .scaleSequential(interpolateSpectral)
+      .scaleSequential(chromatic[`interpolate${chromeKeyContinuous}`])
       .domain([0, bins.length]);
 
     const histogramScale = d3

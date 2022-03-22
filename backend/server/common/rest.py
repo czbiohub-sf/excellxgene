@@ -205,6 +205,14 @@ def gene_info_get(request,data_adaptor):
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
 
+def reset_to_root_folder(request,data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    src = data_adaptor.guest_idhash
+    target = userID    
+    os.system(f"rsync -a --recursive --delete {src}/ {target}")
+    schema = schema_get_helper(data_adaptor)
+    return make_response(jsonify({"schema": schema}), HTTPStatus.OK)    
+
 def admin_restart_get(request,data_adaptor):
     assert(session['excxg_profile']['email']=='alexander.tarashansky@czbiohub.org')
     data_adaptor._reset_pool()
