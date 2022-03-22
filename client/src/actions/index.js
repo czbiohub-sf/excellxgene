@@ -860,7 +860,8 @@ export function requestDiffDelete(name) {
 export function requestDiffExpPops(name,pop) {
   return async (_dispatch, _getState) => {  
     const res = await fetch(
-      `${API.prefix}${API.version}diffExpPops?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`
+      `${API.prefix}${API.version}diffExpPops?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`,
+      {credentials: "include"}
     );
     const result = await res.json()
     if (res.ok && res.headers.get("Content-Type").includes("application/json")) {

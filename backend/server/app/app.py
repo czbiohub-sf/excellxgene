@@ -383,24 +383,28 @@ class ReembedParametersObsmAPI(Resource):
 class GeneInfoAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
+    @requires_authentication
     def get(self, data_adaptor):
         return common_rest.gene_info_get(request, data_adaptor)
 
 class DiffGroupInfo(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
+    @requires_authentication    
     def get(self, data_adaptor):
         return common_rest.diff_group_get(request, data_adaptor)
 
 class DiffStatsInfo(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
+    @requires_authentication
     def get(self, data_adaptor):
         return common_rest.diff_stats_get(request, data_adaptor)        
 
 class DiffGenesInfo(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
+    @requires_authentication    
     def get(self, data_adaptor):
         return common_rest.diff_genes_get(request, data_adaptor)    
     

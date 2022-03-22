@@ -582,12 +582,14 @@ class Volcanoplot extends React.PureComponent {
     const name = volcanoAccessor.split('//;;//;;').at(0)
     const pop = volcanoAccessor.split('//;;//;;').at(1)
     const res = await fetch(
-      `${globals.API.prefix}${globals.API.version}diffExpStats?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`
+      `${globals.API.prefix}${globals.API.version}diffExpStats?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`,
+      {credentials: "include"}
     );
     const result = await res.json();  
 
     const res2 = await fetch(
-      `${globals.API.prefix}${globals.API.version}diffExpGenes?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`
+      `${globals.API.prefix}${globals.API.version}diffExpGenes?name=${encodeURIComponent(name)}&pop=${encodeURIComponent(pop)}`,
+      {credentials: "include"}
     )
     const result2 = await res2.json();
     return [result, result2];

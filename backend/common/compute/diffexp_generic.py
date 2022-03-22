@@ -32,7 +32,7 @@ def diffexp_ttest_from_mean_var(meanA, varA, nA, meanB, varB, nB):
     # logfoldchanges: log2(meanA / meanB)
     logfoldchanges = np.log2(np.abs((meanA + 1e-9) / (meanB + 1e-9)))
 
-    stats_to_sort = tscores
+    stats_to_sort = -np.sign(tscores)*np.log10(pvals_adj+1e-200)
     # find all with lfc > cutoff
 
     # derive sort order

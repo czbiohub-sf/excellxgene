@@ -50,12 +50,12 @@ from numba.core import types
 from numba.typed import Dict
 
 
-"""
+
 if current_process().name == 'MainProcess':
     print("Configuring multiprocessing spawner...")
-    if sys.platform.startswith('linux'):
-        set_start_method("spawn")
-"""
+    if True or sys.platform.startswith('linux'):
+        set_start_method("fork")
+
 
 global active_processes
 active_processes = {}
@@ -125,12 +125,16 @@ def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
             da.pool.apply_async(_dummy).get(timeout=0.1)
         da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
     except TimeoutError:
-        print("Resetting pool...")
-        da._reset_pool()
-        for a in range(1,process_count+1):
-            if a in active_processes:
-                fn,args,_new_callback_fn,_new_error_fn = active_processes[a]
-                da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)            
+        try:
+            da.pool.apply_async(_dummy).get(timeout=1) 
+            da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
+        except TimeoutError:
+            print("Resetting pool...")
+            da._reset_pool()
+            #for a in range(1,process_count+1):
+            #    if a in active_processes:
+            #        fn,args,_new_callback_fn,_new_error_fn = active_processes[a]
+            #        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)            
 
 def _error_callback(e, ws, cfn, pid):
     ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
@@ -1428,6 +1432,15 @@ class AnndataAdaptor(DataAdaptor):
 
         print("Validating and initializing...")
         self._validate_and_initialize()
+
+        """print("Stabilizing multiprocessor...")
+        loop=True
+        while loop:
+            try:
+                self.pool.apply_async(_dummy).get(timeout=0.1)
+                loop=False
+            except TimeoutError:
+                pass"""
 
     def _create_pool(self):
         self.pool = Pool(os.cpu_count(), initializer=_initializer, initargs=(self.shm_layers_csr,self.shm_layers_csc), maxtasksperchild=None)
