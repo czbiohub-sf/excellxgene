@@ -255,16 +255,17 @@ def annotations_obs_get(request, data_adaptor):
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
-
+    
     try:
         labels = None
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
+            name_0 = pickle_loader(f"{userID}/obs/name_0.p")
             labels=pd.DataFrame()
             for f in fields:
                 labels[f] = pickle_loader(f"{userID}/obs/{f}.p")
-            labels.index = pd.Index(np.array(list(data_adaptor.data.obs['name_0']),dtype='object'))
+            labels.index = pd.Index(name_0,dtype='object')
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.OBS, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
@@ -285,13 +286,14 @@ def annotations_var_get(request, data_adaptor):
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
+            name_0 = pickle_loader(f"{userID}/var/name_0.p")
             labels=pd.DataFrame()
             for f in fields:
                 try:
                     labels[f] = pickle_loader(f"{userID}/var/{f};;{name}.p")
                 except:
                     labels[f] = pickle_loader(f"{userID}/var/{f}.p")
-            labels.index = pd.Index(np.array(list(data_adaptor.data.var['name_0']),dtype='object'))
+            labels.index = pd.Index(name_0,dtype='object')
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.VAR, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
@@ -341,7 +343,6 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
             vals = np.array(list(new_label_df[col]))
-            print(col,vals.dtype)
             if isinstance(vals[0],np.integer):
                 if (len(set(vals))<500):
                     vals = vals.astype('str')            
@@ -655,7 +656,7 @@ def save_metadata_put(request, data_adaptor):
     for k in labelNames:
         labels[k] = pickle_loader(f"{userID}/obs/{k}.p")
     
-    labels.index = pd.Index(np.array(list(data_adaptor.data.obs['name_0']),dtype='object'))
+    labels.index = pd.Index(labels['name_0'])
     labels = labels[obs_mask]
     labels.to_csv(f"{userID}/{userID}_obs.txt",sep='\t')
 
@@ -751,6 +752,133 @@ def rename_obs_put(request, data_adaptor):
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+
+def _can_cast_to_float32(dtype, array_values):
+    """
+    Optimistically returns True signifying that a type downcast to float32 is possible whenever the incoming type is
+    a float.
+
+    We also handle a special case here where the array is a Series object with integer categorical values AND NaNs.
+    Since NaNs are floating points in numpy, we upcast the integer array to float32 and return True.
+    """
+
+    if dtype.kind == "f":
+        if not np.can_cast(dtype, np.float32):
+            logging.warning(f"Type {dtype.name} will be converted to 32 bit float and may lose precision.")
+
+        return True
+
+    if dtype.kind == "O" and pd.Series(array_values).hasnans:
+        return True
+
+    return False
+
+def switch_cxg_mode(request,data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    mode = userID.split("/")[-1].split("\\")[-1]
+    ID = userID.split("/")[0].split("\\")[0]
+    if mode == "OBS":
+        if not os.path.exists(f"{ID}/VAR"):
+            os.makedirs(f"{ID}/VAR/nnm/")
+            os.makedirs(f"{ID}/VAR/emb/")
+            os.makedirs(f"{ID}/VAR/params/")
+            os.makedirs(f"{ID}/VAR/pca/")
+            os.makedirs(f"{ID}/VAR/obs/")
+            os.makedirs(f"{ID}/VAR/var/")
+            os.makedirs(f"{ID}/VAR/diff/")   
+            os.makedirs(f"{ID}/VAR/output/")  
+            pickle_dumper(np.zeros((data_adaptor.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
+        newMode = "VAR"
+    else:
+        newMode = "OBS"
+
+
+    pathOld = userID
+    pathNew = ID+"/"+newMode
+    
+    # convert obs cat to gene sets and var metadata
+    fns = glob(f"{pathOld}/obs/*.p")
+    obs = {}
+    for ann in fns:
+        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+        obs[ann] = pickle_loader(f"{pathOld}/obs/{ann}.p")
+
+    gene_sets = {}
+    name = obs['name_0']
+    del obs["name_0"]
+    for key in obs:
+        dtype = obs[key].dtype
+        dtype_name = dtype.name
+        dtype_kind = dtype.kind
+        if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:  
+            print(key,len(obs[key]),len(name))      
+            gene_sets[key] = _df_to_dict(obs[key],name)
+        elif _can_cast_to_float32(dtype,obs[key]):
+            pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
+    pickle_dumper(name,f"{pathNew}/var/name_0.p")
+
+    annotations = data_adaptor.dataset_config.user_annotations    
+    with open(f"{pathNew}/gene-sets.csv", "w", newline="") as f:
+        f.write(annotations.gene_sets_to_csv(gene_sets))    
+
+    # convert genesets to obs
+    v = pickle_loader(f"{pathOld}/var/name_0.p")
+    genesets, _ = annotations.read_gene_sets(data_adaptor)
+
+    print(genesets)
+    newObs = {}
+    for key1 in genesets:
+        C = []
+        O = []
+        for key2 in genesets[key1]:
+            o = genesets[key1][key2]
+            O.extend(o)
+            C.extend([key2]*len(o))
+        C = np.array(C)
+        O = np.array(O)
+        f = np.in1d(v,O,invert=True)
+        vnot = v[f]
+        C = np.append(C,["unassigned"]*len(vnot))
+        O = np.append(v[np.invert(f)],v[f])
+        newObs[key1] = pd.Series(data=C,index=O)[v].values.flatten()
+    
+    for key in newObs:
+        pickle_dumper(newObs[key],f"{pathNew}/obs/{key}.p")
+
+    pickle_dumper(v,f"{pathNew}/obs/name_0.p")        
+    
+
+    # convert var metadata to obs
+    fns = glob(f"{pathOld}/var/*.p")
+    var = {}
+    for ann in fns:
+        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+        var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
+    
+    for key in var:
+        pickle_dumper(var[key],f"{pathNew}/obs/{key}.p")
+
+    pickle_dumper(newMode, f"{ID}/mode.p")
+
+    try:
+        return make_response(jsonify({"success": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def _df_to_dict(a,b):
+    idx = np.argsort(a)
+    a = a[idx]
+    b = b[idx]
+    bounds = np.where(a[:-1] != a[1:])[0] + 1
+    bounds = np.append(np.append(0, bounds), a.size)
+    bounds_left = bounds[:-1]
+    bounds_right = bounds[1:]
+    slists = [b[bounds_left[i] : bounds_right[i]] for i in range(bounds_left.size)]
+    d = dict(zip(np.unique(a), [list(x) for x in slists]))
+    return d
 
 def rename_diff_put(request, data_adaptor):
     args = request.get_json()

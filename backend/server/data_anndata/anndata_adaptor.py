@@ -147,26 +147,26 @@ def _error_callback(e, ws, cfn, pid):
     traceback.print_exception(type(e), e, e.__traceback__)
 
     
-def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex):
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
     niB = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iB)))[0]
     nA = iA.size
     nB = iB.size
-
+    mode = userID.split("/")[-1].split("\\")[-1]
     CUTOFF = 35000
     
     if nA + nB == obs_mask_A.size:
         if nA < nB:
             if (nA < CUTOFF):
-                XI = _create_data_from_shm(*shm[layer])
+                XI = _create_data_from_shm(*shm[layer], mode=mode)
                 n = XI.shape[0]
                 meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)
                 meanAsq = vA-meanA**2
                 meanAsq[meanAsq<0]=0
             else:
-                XI = _create_data_from_shm_csc(*shm_csc[layer])
+                XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
                 n = XI.shape[0]
 
                 meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
@@ -181,13 +181,13 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
 
         else:
             if (nB < CUTOFF):
-                XI = _create_data_from_shm(*shm[layer])
+                XI = _create_data_from_shm(*shm[layer], mode=mode)
                 n = XI.shape[0]
                 meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
                 meanBsq = vB-meanB**2
                 meanBsq[meanBsq<0]=0                
             else:
-                XI = _create_data_from_shm_csc(*shm_csc[layer])
+                XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
                 n = XI.shape[0]
 
                 meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
@@ -201,11 +201,11 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             vA = meanAsq - meanA**2                 
     else:
         if (nA < CUTOFF):
-            XI = _create_data_from_shm(*shm[layer])
+            XI = _create_data_from_shm(*shm[layer], mode=mode)
             n = XI.shape[0]
             meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)    
         else:
-            XI = _create_data_from_shm_csc(*shm_csc[layer])
+            XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
             n = XI.shape[0]
 
             meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
@@ -215,11 +215,11 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             vA[vA<0]=0
 
         if (nB < CUTOFF):
-            XI = _create_data_from_shm(*shm[layer])
+            XI = _create_data_from_shm(*shm[layer], mode=mode)
             n = XI.shape[0]
             meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
         else:
-            XI = _create_data_from_shm_csc(*shm_csc[layer])
+            XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
             n = XI.shape[0]
 
             meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
@@ -274,7 +274,8 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     f = np.isnan(X).sum(1)==0    
     filt = np.logical_and(f,obs_mask)
 
-    X = _create_data_from_shm(*shm["X"])
+    mode = userID.split("/")[-1].split("\\")[-1]
+    X = _create_data_from_shm(*shm["X"],mode=mode)
 
     v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
     adata = AnnData(X = X[filt])
@@ -353,7 +354,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
                 
     for k in AnnDataDict["Xs"]:
         if k != "X":
-            X = _create_data_from_shm(*shm[k])
+            X = _create_data_from_shm(*shm[k],mode=mode)
             adata.layers[k] = X[filt]
 
     adata.write_h5ad(f"{direc}/output/{userID}_{currentLayout.replace(';','_')}.h5ad")
@@ -362,6 +363,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
 def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):    
     obs_mask = AnnDataDict['obs_mask']    
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
+    mode = userID.split("/")[-1].split("\\")[-1]
     X_full = None
     if embeddingMode == "Preprocess and run":
         with ServerTiming.time("layout.compute"):        
@@ -571,7 +573,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
     if X_full is None:
         dataLayer = reembedParams.get("dataLayer","X")
         obs_mask = AnnDataDict['obs_mask']
-        X_full = _create_data_from_shm(*shm[dataLayer])[obs_mask]
+        X_full = _create_data_from_shm(*shm[dataLayer],mode=mode)[obs_mask]
     
     if nnm is not None:
         if reembedParams.get("calculateSamWeights",False) and not reembedParams.get("doSAM",False):
@@ -771,8 +773,9 @@ def generate_correlation_map(x, y):
         cov = np.dot(x, y.T) - n * np.dot(mu_x[:, None], mu_y[None, :])
         return cov / np.dot(s_x[:, None], s_y[None, :])
 
-def compute_sankey_df_corr(labels, obs_mask, params, var):    
-    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]])[obs_mask],var=var)
+def compute_sankey_df_corr(labels, obs_mask, params, var, userID):    
+    mode = userID.split("/")[-1].split("\\")[-1]
+    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]],mode=mode)[obs_mask],var=var)
 
     if params["samHVG"]:
         adata = adata[:,np.sort(np.argsort(-np.array(list(adata.var[params['geneMetadata']])))[:min(params['numGenes'],adata.shape[1])])]
@@ -818,8 +821,9 @@ def get_avgs(X,c,cu):
         Xs.append(X[c==i].mean(0).A.flatten())
     return np.vstack(Xs)
 
-def compute_sankey_df_corr_sg(labels, obs_mask, params, var):
-    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]])[obs_mask])    
+def compute_sankey_df_corr_sg(labels, obs_mask, params, var, userID):
+    mode = userID.split("/")[-1].split("\\")[-1]
+    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]],mode=mode)[obs_mask])    
     adata = adata[:,var[params["selectedGenes"]].values]
 
     cl=[]
@@ -919,12 +923,13 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
     root = AnnDataDict['X_root']
     obs_mask = AnnDataDict['obs_mask']
     kkk=layers[0]
-    X = _create_data_from_shm(*shm[kkk])[obs_mask]
+    mode = userID.split("/")[-1].split("\\")[-1]
+    X = _create_data_from_shm(*shm[kkk],mode=mode)[obs_mask]
     adata = AnnData(X=X,obs=obs[obs_mask],var=var)
     adata.layers[layers[0]] = X
     for k in layers[1:]:
         kkk=k
-        X = _create_data_from_shm(*shm[kkk])[obs_mask]
+        X = _create_data_from_shm(*shm[kkk],mode=mode)[obs_mask]
         adata.layers[k] = X
 
     adata.obsm["X_root"] = root[obs_mask]
@@ -1115,7 +1120,7 @@ def initialize_socket(da):
                 if fnn2 is None:
                     fnn2 = "Pop1 high"                
                 fname = f"{direc}/{userID}/diff/{fnn}/{fnn2}_output.p"
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None))
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None), userID)
     
     @sock.route("/reembedding")
     @auth0_token_required
@@ -1226,9 +1231,9 @@ def initialize_socket(da):
                 if params["sankeyMethod"] == "Graph alignment":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df, "sankey",data,None,labels, name, obs_mask, userID, params['numEdges'])              
                 elif params["sankeyMethod"] == "Correlation":
-                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr, "sankey",data,None,labels, obs_mask, params, var)
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr, "sankey",data,None,labels, obs_mask, params, var, userID)
                 elif params["sankeyMethod"] == "Correlation (selected genes)":
-                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr_sg, "sankey",data,None,labels, obs_mask, params,pd.Series(index=v,data=np.arange(var.shape[0])))
+                    _multiprocessing_wrapper(da,ws,compute_sankey_df_corr_sg, "sankey",data,None,labels, obs_mask, params,pd.Series(index=v,data=np.arange(var.shape[0])), userID)
                 elif params["sankeyMethod"] == "Co-labeling":
                     _multiprocessing_wrapper(da,ws,compute_sankey_df_coclustering, "sankey",data,None,labels, obs_mask, params['numEdges'])                                        
 
@@ -1255,8 +1260,8 @@ def initialize_socket(da):
                     varm[k] = da.data.varm[k]
 
                 AnnDataDict={"Xs":layers, "varm": varm}
-
-                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,AnnDataDict,labelNames,np.array(list(da.data.obs['name_0'])),currentLayout,obs_mask,userID, current_app.hosted_mode)
+                name_0 = pickle_loader(f"{userID}/obs/name_0.p")
+                _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,AnnDataDict,labelNames,name_0,currentLayout,obs_mask,userID, current_app.hosted_mode)
 
  
     @sock.route("/leiden")
@@ -1348,17 +1353,23 @@ def _create_shm_from_data(X):
     return (a,b,c,X.shape)
 
 
-def _create_data_from_shm(a,b,c,Xsh):
-    indices = np.frombuffer(a,"int32")
-    indptr = np.frombuffer(b,"int32")
-    data = np.frombuffer(c,"float32")
-    return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
+def _create_data_from_shm(a,b,c,Xsh, mode="OBS"):
+    if mode == "OBS":
+        indices = np.frombuffer(a,"int32")
+        indptr = np.frombuffer(b,"int32")
+        data = np.frombuffer(c,"float32")
+        return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
+    else:
+        return _create_data_from_shm_csc(a,b,c,Xsh,mode="OBS").T
 
-def _create_data_from_shm_csc(a,b,c,Xsh):
-    indices = np.frombuffer(a,"int32")
-    indptr = np.frombuffer(b,"int32")
-    data = np.frombuffer(c,"float32")
-    return sp.sparse.csc_matrix((data,indices,indptr),shape=Xsh)
+def _create_data_from_shm_csc(a,b,c,Xsh, mode="OBS"):
+    if mode == "OBS":
+        indices = np.frombuffer(a,"int32")
+        indptr = np.frombuffer(b,"int32")
+        data = np.frombuffer(c,"float32")
+        return sp.sparse.csc_matrix((data,indices,indptr),shape=Xsh)
+    else:
+        return _create_data_from_shm(a,b,c,Xsh,mode="OBS")
 
 def _initializer(ishm,ishm_csc):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -1621,6 +1632,12 @@ class AnndataAdaptor(DataAdaptor):
                     adata.obsm[self.rootName] = np.zeros((adata.shape[0],2))            
             
             adata.obs_names_make_unique()
+            
+            _,yi = adata.X.nonzero()
+            yia,yic = np.unique(yi,return_counts=True)
+            yics = np.zeros(adata.shape[1])
+            yics[yia] = yic
+            adata = adata[:,yics>=10].copy()
 
             # cast all expressions to float32 if they're not already
             if adata.X.dtype != "float32":
@@ -1684,11 +1701,9 @@ class AnndataAdaptor(DataAdaptor):
                 break
         return root
 
-    def _initialize_user_folders(self,userID):
-        if not os.path.exists("output/"):
-            os.makedirs("output/")
-
-        if not os.path.exists(f"{userID}/"):
+    def _initialize_user_folders(self):
+        userID = self.guest_idhash+"/OBS"
+        if not os.path.exists(f"{self.guest_idhash}/"):
             os.makedirs(f"{userID}/nnm/")
             os.makedirs(f"{userID}/emb/")
             os.makedirs(f"{userID}/params/")
@@ -1696,6 +1711,10 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/obs/")
             os.makedirs(f"{userID}/var/")
             os.makedirs(f"{userID}/diff/")
+            os.makedirs(f"{userID}/output/")
+            pickle.dump("OBS",open(f"{self.guest_idhash}/mode.p","wb"))
+
+
 
             for k in self._obs_init.keys():
                 vals = np.array(list(self._obs_init[k]))
@@ -1781,7 +1800,7 @@ class AnndataAdaptor(DataAdaptor):
         self.guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
 
         print("Initializing user folders")
-        self._initialize_user_folders(self.guest_idhash)
+        self._initialize_user_folders()
 
     def _is_valid_layout(self, arr):
         """return True if this layout data is a valid array for front-end presentation:
@@ -1838,15 +1857,17 @@ class AnndataAdaptor(DataAdaptor):
                         )"""
 
     def annotation_to_fbs_matrix(self, axis, fields=None, labels=None):
+        annotations = self.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(self)}"       
         if axis == Axis.OBS:
             if labels is not None and not labels.empty:
-                labels["name_0"] = list(self.data.obs["name_0"])
+                labels["name_0"] = pickle_loader(f"{userID}/obs/name_0.p")
                 df = labels
             else:
                 df = self.data.obs
         else:
             if labels is not None and not labels.empty:
-                labels["name_0"] = list(self.data.var["name_0"])
+                labels["name_0"] = pickle_loader(f"{userID}/var/name_0.p")
                 df = labels
             else:
                 df = self.data.var
@@ -1903,8 +1924,11 @@ class AnndataAdaptor(DataAdaptor):
 
         #if row_idx is None:
         #    row_idx = np.arange(self.data.shape[0])
-        XI = _create_data_from_shm_csc(*self.shm_layers_csc[layer])
-
+        annotations = self.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(self)}"
+        mode = userID.split("/")[-1].split("\\")[-1]
+        XI = _create_data_from_shm_csc(*self.shm_layers_csc[layer],mode=mode)
+        
         if col_idx is None:
             col_idx = np.arange(self.data.shape[1])        
         

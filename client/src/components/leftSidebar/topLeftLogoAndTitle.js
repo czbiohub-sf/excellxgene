@@ -25,6 +25,7 @@ const DATASET_TITLE_FONT_SIZE = 14;
     prevCrossfilter: state.obsCrossfilter,
     annoMatrix: state.annoMatrix,
     userLoggedIn: state.controls.userInfo ? true : false,
+    cxgMode: state.controls.cxgMode
   };
 })
 class LeftSideBar extends React.Component {
@@ -50,8 +51,7 @@ class LeftSideBar extends React.Component {
       dispatch,
       title,
       hostedMode,
-      prevCrossfilter,
-      annoMatrix,
+      cxgMode,
       userLoggedIn
     } = this.props;
     const { warningDialog } = this.state;
@@ -72,27 +72,45 @@ class LeftSideBar extends React.Component {
           <Logo size={28} />
           <span
             style={{
-              fontSize: 24,
               position: "relative",
               top: -6,
-              fontWeight: "bold",
               marginLeft: 5,
-              color: globals.logoColor,
               userSelect: "none",
             }}
           >
+            <span style={{color: cxgMode === "OBS" ? "blue" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
             cell
-            <span
+            </span>
+            <AnchorButton 
+            style={{lineHeight: 0,
+                    marginTop: "-5px",
+                    marginLeft: "5px",
+                    marginRight: "5px",
+                    paddingLeft: "0px",
+                    paddingRight: "0px",
+                    paddingBottom: "0px",
+                    paddingTop: "0px"}}
+              onClick={async ()=>{
+                await fetch(
+                  `${globals.API.prefix}${globals.API.version}switchCxgMode`,
+                  {credentials: "include"}
+                );
+                window.location.reload()
+              }}
+            >
+            <div
               style={{
-                position: "relative",
-                top: 1,
-                fontWeight: 300,
-                fontSize: 24,
+                fontWeight: "bold",
+                fontSize: 28,
               }}
             >
               ×
-            </span>
+            </div>
+            </AnchorButton>
+
+            <span style={{color: cxgMode === "VAR" ? "red" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
             gene
+            </span>
           </span>
         </div>
         <div style={{ marginRight: 5, height: "100%" }}>

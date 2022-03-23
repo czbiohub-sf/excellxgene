@@ -33,7 +33,8 @@ const Controls = (
     volcanoAccessor: null,
     pointScaler: 1.0,
     chromeKeyContinuous: "Spectral",
-    chromeKeyCategorical: "Rainbow"
+    chromeKeyCategorical: "Rainbow",
+    cxgMode: "OBS"
   },
   action
 ) => {
@@ -165,7 +166,13 @@ const Controls = (
         ...state,
         hostedMode: action.hostedMode
       }
-    }    
+    }  
+    case "set cxg mode": {
+      return {
+        ...state,
+        cxgMode: action.cxgMode
+      }
+    }        
     case "request user defined gene started": {
       return {
         ...state,
