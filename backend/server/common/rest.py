@@ -128,11 +128,12 @@ def schema_get_helper(data_adaptor, userID = None):
     for f in fns:
         latent_spaces.append(f.split('/')[-1].split('\\')[-1][:-2])
 
+    mode = userID.split("/")[-1].split("\\")[-1]
     schema = {
-        "dataframe": {"nObs": data_adaptor.cell_count, "nVar": data_adaptor.gene_count, "type": str(data_adaptor.data.X.dtype)},
+        "dataframe": {"nObs": data_adaptor.NAME[mode]["obs"].size, "nVar": data_adaptor.NAME[mode]["var"].size, "type": str(data_adaptor.data.X.dtype)},
         "annotations": {
-            "obs": {"index": data_adaptor.parameters.get("obs_names"), "columns": []},
-            "var": {"index": data_adaptor.parameters.get("var_names"), "columns": []},
+            "obs": {"index": "name_0", "columns": []},
+            "var": {"index": "name_0", "columns": []},
         },
         "layout": {"obs": []},
         "layers": layers,
@@ -148,16 +149,18 @@ def schema_get_helper(data_adaptor, userID = None):
                 ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
                 if ann != "name_0":
                     x = pickle_loader(f"{userID}/var/{ann}.p")
-                    ann_schema = {"name": ann, "writable": True}
+                    a,c = np.unique(x,return_counts=True)
+                    if a.size > 2000 or c.max() < 5:
+                        ann_schema = {"name": ann, "writable": False}
+                    else:
+                        ann_schema = {"name": ann, "writable": True}
                     ann_schema.update(get_schema_type_hint_of_array(x))
                     schema["annotations"]["var"]["columns"].append(ann_schema)
             
             ann = "name_0"
-            curr_axis = data_adaptor.data.var
-            ann_schema = {"name": ann, "writable": True}
-            ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-            if ann_schema['type']!='categorical':
-                ann_schema['writable']=False
+            x = pickle_loader(f"{userID}/var/{ann}.p") 
+            ann_schema = {"name": ann, "writable": False}
+            ann_schema.update(get_schema_type_hint_of_array(x))
             schema["annotations"][ax]["columns"].append(ann_schema)
             
         elif str(ax) == "obs":
@@ -166,18 +169,19 @@ def schema_get_helper(data_adaptor, userID = None):
                 ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
                 if ann != "name_0":
                     x = pickle_loader(f"{userID}/obs/{ann}.p")
-                    ann_schema = {"name": ann, "writable": True}
+                    a,c = np.unique(x,return_counts=True)
+                    if a.size > 2000 or c.max() < 5:
+                        ann_schema = {"name": ann, "writable": False}
+                    else:
+                        ann_schema = {"name": ann, "writable": True}
                     ann_schema.update(get_schema_type_hint_of_array(x))
                     schema["annotations"][ax]["columns"].append(ann_schema)
             
             ann = "name_0"
-            curr_axis = data_adaptor.data.obs
-            ann_schema = {"name": ann, "writable": True}
-            ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-            if ann_schema['type']!='categorical':
-                ann_schema['writable']=False
+            x = pickle_loader(f"{userID}/obs/{ann}.p") 
+            ann_schema = {"name": ann, "writable": False}
+            ann_schema.update(get_schema_type_hint_of_array(x))
             schema["annotations"][ax]["columns"].append(ann_schema)
-
 
     for layout in [x.split('/')[-1].split('\\')[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
         layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
@@ -247,9 +251,19 @@ def userinfo_get(app_config, data_adaptor):
     return make_response(jsonify(config), HTTPStatus.OK)
 
 
+def _get_obs_keys(data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    fns = glob(f"{userID}/obs/*.p")
+    return [ann.split('.p')[0].split('/')[-1].split('\\')[-1] for ann in fns]
+
+def _get_var_keys(data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    fns = glob(f"{userID}/var/*.p")
+    return [ann.split('.p')[0].split('/')[-1].split('\\')[-1] for ann in fns]
+
 def annotations_obs_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
-    num_columns_requested = len(data_adaptor.get_obs_keys()) if len(fields) == 0 else len(fields)
+    num_columns_requested = len(_get_obs_keys(data_adaptor)) if len(fields) == 0 else len(fields)
     if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
         return abort(HTTPStatus.BAD_REQUEST)
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
@@ -274,7 +288,8 @@ def annotations_obs_get(request, data_adaptor):
 def annotations_var_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
     name = request.args.get("embName", None)
-    num_columns_requested = len(data_adaptor.get_var_keys()) if len(fields) == 0 else len(fields)
+
+    num_columns_requested = len(_get_var_keys(data_adaptor)) if len(fields) == 0 else len(fields)
     if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
         return abort(HTTPStatus.BAD_REQUEST)
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
@@ -322,10 +337,40 @@ def annotations_var_put(request, data_adaptor):
 
 
 def pickle_dumper(x,fn):
+    if '/' in fn:
+        toSub = '/'.join(fn.split('/')[:2])+'/'
+    elif '\\' in fn:
+        toSub = '\\'.join(fn.split('\\')[:2])+'\\'
+    name = fn.replace(toSub,"")
+    if "/" in name:
+        toSub2 = '/'.join(name.split('/')[:1])+"/"
+    elif "\\" in name:
+        toSub2 = '\\'.join(name.split('\\')[:1])+"\\"
+    else:
+        toSub2 = ""
+    if toSub2 != "":
+        name = name.replace(toSub2,"")
+    name = name.replace('/',':').replace('\\',':')
+    fn = toSub+toSub2+name
     with open(fn,"wb") as f:
         pickle.dump(x,f)
 
 def pickle_loader(fn):
+    if '/' in fn:
+        toSub = '/'.join(fn.split('/')[:2])+'/'
+    elif '\\' in fn:
+        toSub = '\\'.join(fn.split('\\')[:2])+'\\'
+    name = fn.replace(toSub,"")
+    if "/" in name:
+        toSub2 = '/'.join(name.split('/')[:1])+"/"
+    elif "\\" in name:
+        toSub2 = '\\'.join(name.split('\\')[:1])+"\\"
+    else:
+        toSub2 = ""
+    if toSub2 != "":
+        name = name.replace(toSub2,"")
+    name = name.replace('/',':').replace('\\',':')
+    fn = toSub+toSub2+name
     with open(fn,"rb") as f:
         x = pickle.load(f)
     return x
@@ -432,9 +477,12 @@ def data_var_put(request, data_adaptor):
     filter = args.get("filter",None)
     layer = args.get("layer","X")
     logscale = args.get("logscale","false")=="true"
+
+    userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
+    mode=pickle.load(open(f"{userID}/mode.p",'rb'))
     try:
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale,mode=mode),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -446,7 +494,10 @@ def data_var_get(request, data_adaptor):
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
-
+    
+    userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
+    mode=pickle.load(open(f"{userID}/mode.p",'rb'))
+    
     try:
         layer = request.values.get("layer", default="X")
         logscale = request.values.get("logscale", default="false") == "true"
@@ -455,7 +506,7 @@ def data_var_get(request, data_adaptor):
         args_filter_only.poplist("logscale")        
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale, mode=mode),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -812,7 +863,6 @@ def switch_cxg_mode(request,data_adaptor):
         dtype_name = dtype.name
         dtype_kind = dtype.kind
         if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:  
-            print(key,len(obs[key]),len(name))      
             gene_sets[key] = _df_to_dict(obs[key],name)
         elif _can_cast_to_float32(dtype,obs[key]):
             pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
@@ -859,7 +909,7 @@ def switch_cxg_mode(request,data_adaptor):
     for key in var:
         pickle_dumper(var[key],f"{pathNew}/obs/{key}.p")
 
-    pickle_dumper(newMode, f"{ID}/mode.p")
+    pickle.dump(newMode, open(f"{ID}/mode.p",'wb'))
 
     try:
         return make_response(jsonify({"success": True}), HTTPStatus.OK, {"Content-Type": "application/json"})

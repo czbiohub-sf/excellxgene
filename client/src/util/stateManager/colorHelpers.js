@@ -21,14 +21,12 @@ export function createColorQuery(colorMode, colorByAccessor, schema, genesets) {
       return ["obs", colorByAccessor];
     }
     case "color by expression": {
-      const varIndex = schema?.annotations?.var?.index;
-      if (!varIndex) return null;
       return [
         "X",
         {
           where: {
             field: "var",
-            column: varIndex,
+            column: [],
             value: colorByAccessor,
           },
         },
@@ -51,7 +49,7 @@ export function createColorQuery(colorMode, colorByAccessor, schema, genesets) {
             summarize: {
               method: "mean",
               field: "var",
-              column: varIndex,
+              column: [],
               values: _setGenes,
             },
           },

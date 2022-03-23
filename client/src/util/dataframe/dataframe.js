@@ -413,6 +413,7 @@ class Dataframe {
     const srcOffsets = srcLabels.map((l) => dataframe.colIndex.getOffset(l));
 
     // check for label collisions
+    console.log(dstLabels)
     if (dstLabels.some(this.hasCol, this)) {
       throw new Error("duplicate key collision");
     }

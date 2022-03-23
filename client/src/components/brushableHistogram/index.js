@@ -331,7 +331,7 @@ class HistogramBrush extends React.PureComponent {
           summarize: {
             method: "mean",
             field: "var",
-            column: varIndex,
+            column: [],
             values: setGenes.slice(0,50),
           },
         },
@@ -343,7 +343,7 @@ class HistogramBrush extends React.PureComponent {
       {
         where: {
           field: "var",
-          column: varIndex,
+          column: [],
           value: field,
         },
       },

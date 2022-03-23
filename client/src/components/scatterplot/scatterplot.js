@@ -318,7 +318,7 @@ class Scatterplot extends React.PureComponent {
       {
         where: {
           field: "var",
-          column: varIndex,
+          column: [],
           value: geneName,
         },
       },

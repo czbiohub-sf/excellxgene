@@ -447,7 +447,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       const { annoMatrix, genesets, differential } = getState();
       const { diffExpListsLists, diffExpListsNames } = genesets;
       const varIndexName = annoMatrix.schema.annotations.var.index;
-
+      
       annoMatrix.fetch("var", varIndexName).then((varIndex)=>{
         const diffexpLists = { negative: [], positive: [] };
         for (const polarity of Object.keys(diffexpLists)) {

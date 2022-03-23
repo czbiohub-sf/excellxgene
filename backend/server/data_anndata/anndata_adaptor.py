@@ -160,13 +160,13 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
     if nA + nB == obs_mask_A.size:
         if nA < nB:
             if (nA < CUTOFF):
-                XI = _create_data_from_shm(*shm[layer], mode=mode)
+                XI = _read_shmem(shm,shm_csc,layer,format="csr",mode=mode)
                 n = XI.shape[0]
                 meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)
                 meanAsq = vA-meanA**2
                 meanAsq[meanAsq<0]=0
             else:
-                XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
+                XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
                 n = XI.shape[0]
 
                 meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
@@ -181,13 +181,13 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
 
         else:
             if (nB < CUTOFF):
-                XI = _create_data_from_shm(*shm[layer], mode=mode)
+                XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
                 n = XI.shape[0]
                 meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
                 meanBsq = vB-meanB**2
                 meanBsq[meanBsq<0]=0                
             else:
-                XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
+                XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
                 n = XI.shape[0]
 
                 meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
@@ -201,11 +201,11 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             vA = meanAsq - meanA**2                 
     else:
         if (nA < CUTOFF):
-            XI = _create_data_from_shm(*shm[layer], mode=mode)
+            XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
             n = XI.shape[0]
             meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)    
         else:
-            XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
+            XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
             n = XI.shape[0]
 
             meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
@@ -215,11 +215,11 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             vA[vA<0]=0
 
         if (nB < CUTOFF):
-            XI = _create_data_from_shm(*shm[layer], mode=mode)
+            XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
             n = XI.shape[0]
             meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
         else:
-            XI = _create_data_from_shm_csc(*shm_csc[layer], mode=mode)
+            XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
             n = XI.shape[0]
 
             meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
@@ -275,7 +275,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     filt = np.logical_and(f,obs_mask)
 
     mode = userID.split("/")[-1].split("\\")[-1]
-    X = _create_data_from_shm(*shm["X"],mode=mode)
+    X = _read_shmem(shm,shm_csc,"X",format="csr",mode=mode)
 
     v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
     adata = AnnData(X = X[filt])
@@ -346,15 +346,10 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
         adata.uns["N_"+key.split(';;')[-1]+"_params"]=params[key]
     for key in embs.keys():
         adata.obsm["X_"+key.split(';;')[-1]] = embs[key][filt] 
-
-    keys = list(adata.var.keys())
-    for k in keys:
-        if ";;tMean" in k:
-            del adata.var[k]
                 
     for k in AnnDataDict["Xs"]:
         if k != "X":
-            X = _create_data_from_shm(*shm[k],mode=mode)
+            X = _read_shmem(shm,shm_csc,k,format="csr",mode=mode)
             adata.layers[k] = X[filt]
 
     adata.write_h5ad(f"{direc}/output/{userID}_{currentLayout.replace(';','_')}.h5ad")
@@ -573,7 +568,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
     if X_full is None:
         dataLayer = reembedParams.get("dataLayer","X")
         obs_mask = AnnDataDict['obs_mask']
-        X_full = _create_data_from_shm(*shm[dataLayer],mode=mode)[obs_mask]
+        X_full = _read_shmem(shm,shm_csc,dataLayer,format="csr",mode=mode)[obs_mask]
     
     if nnm is not None:
         if reembedParams.get("calculateSamWeights",False) and not reembedParams.get("doSAM",False):
@@ -775,7 +770,7 @@ def generate_correlation_map(x, y):
 
 def compute_sankey_df_corr(labels, obs_mask, params, var, userID):    
     mode = userID.split("/")[-1].split("\\")[-1]
-    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]],mode=mode)[obs_mask],var=var)
+    adata = AnnData(X=_read_shmem(shm,shm_csc,params["dataLayer"],format="csr",mode=mode)[obs_mask],var=var)
 
     if params["samHVG"]:
         adata = adata[:,np.sort(np.argsort(-np.array(list(adata.var[params['geneMetadata']])))[:min(params['numGenes'],adata.shape[1])])]
@@ -823,7 +818,7 @@ def get_avgs(X,c,cu):
 
 def compute_sankey_df_corr_sg(labels, obs_mask, params, var, userID):
     mode = userID.split("/")[-1].split("\\")[-1]
-    adata = AnnData(X=_create_data_from_shm(*shm[params["dataLayer"]],mode=mode)[obs_mask])    
+    adata = AnnData(X=_read_shmem(shm,shm_csc,params["dataLayer"],format="csr",mode=mode)[obs_mask])    
     adata = adata[:,var[params["selectedGenes"]].values]
 
     cl=[]
@@ -924,12 +919,12 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
     obs_mask = AnnDataDict['obs_mask']
     kkk=layers[0]
     mode = userID.split("/")[-1].split("\\")[-1]
-    X = _create_data_from_shm(*shm[kkk],mode=mode)[obs_mask]
+    X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
     adata = AnnData(X=X,obs=obs[obs_mask],var=var)
     adata.layers[layers[0]] = X
     for k in layers[1:]:
         kkk=k
-        X = _create_data_from_shm(*shm[kkk],mode=mode)[obs_mask]
+        X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
         adata.layers[k] = X
 
     adata.obsm["X_root"] = root[obs_mask]
@@ -1100,12 +1095,15 @@ def initialize_socket(da):
 
                 obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
                 obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])      
-
-                tMean = da.data.var[f'{layer};;tMean'].values
-                tMeanSq = da.data.var[f'{layer};;tMeanSq'].values     
+                
                 annotations = da.dataset_config.user_annotations        
                 direc = pathlib.Path().absolute()                       
                 userID = f"{annotations._get_userdata_idhash(da)}"  
+                mode = userID.split('/')[-1].split('\\')[-1]
+                
+                tMean = da.tMeans[mode][layer]
+                tMeanSq = da.tMeanSqs[mode][layer]
+                
                 fnn=data['groupName'].replace('/',':')
                 fnn2 = None
                 if not os.path.exists(f"{direc}/{userID}/diff/{fnn}"):
@@ -1167,7 +1165,7 @@ def initialize_socket(da):
                     for k in OBS_KEYS:
                         obs[k] = pickle_loader(f"{direc}/{userID}/obs/{k}.p")
                     obs.index = pd.Index(np.arange(obs.shape[0]))
-                    
+                                        
                     fnames = glob(f"{direc}/{userID}/var/*.p")
                     v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
                     var = pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
@@ -1188,8 +1186,8 @@ def initialize_socket(da):
                         "Xs": layers,
                         "obs": obs,
                         "var": var,
-                        "X_root":da._obsm_init[da.rootName],
-                        "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
+                        "X_root": pickle_loader(f"{direc}/{userID}/emb/root.p"),
+                        "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], obs.shape[0])
                     }
 
                     def post_processing(res):
@@ -1353,24 +1351,30 @@ def _create_shm_from_data(X):
     return (a,b,c,X.shape)
 
 
-def _create_data_from_shm(a,b,c,Xsh, mode="OBS"):
+def _read_shmem(shm,shm_csc,layer,format="csr",mode="OBS"):
     if mode == "OBS":
-        indices = np.frombuffer(a,"int32")
-        indptr = np.frombuffer(b,"int32")
-        data = np.frombuffer(c,"float32")
-        return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
+        if format == "csr":
+            return _create_data_from_shm(*shm[layer])
+        else:
+            return _create_data_from_shm_csc(*shm_csc[layer])
     else:
-        return _create_data_from_shm_csc(a,b,c,Xsh,mode="OBS").T
+        if format == "csr":
+            return _create_data_from_shm_csc(*shm_csc[layer]).T
+        else:
+            return _create_data_from_shm(*shm[layer]).T        
 
-def _create_data_from_shm_csc(a,b,c,Xsh, mode="OBS"):
-    if mode == "OBS":
-        indices = np.frombuffer(a,"int32")
-        indptr = np.frombuffer(b,"int32")
-        data = np.frombuffer(c,"float32")
-        return sp.sparse.csc_matrix((data,indices,indptr),shape=Xsh)
-    else:
-        return _create_data_from_shm(a,b,c,Xsh,mode="OBS")
+def _create_data_from_shm(a,b,c,Xsh):
+    indices = np.frombuffer(a,"int32")
+    indptr = np.frombuffer(b,"int32")
+    data = np.frombuffer(c,"float32")
+    return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
 
+def _create_data_from_shm_csc(a,b,c,Xsh):
+    indices = np.frombuffer(a,"int32")
+    indptr = np.frombuffer(b,"int32")
+    data = np.frombuffer(c,"float32")
+    return sp.sparse.csc_matrix((data,indices,indptr),shape=Xsh)
+    
 def _initializer(ishm,ishm_csc):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     global shm
@@ -1659,6 +1663,9 @@ class AnndataAdaptor(DataAdaptor):
                     adata.var[k]=var[k]
 
             print("Loading and precomputing layers necessary for fast differential expression and reembedding...")
+            self.tMeans = {"OBS": {}, "VAR": {}}
+            self.tMeanSqs = {"OBS": {}, "VAR": {}}
+            
             self.shm_layers_csr = {}
             self.shm_layers_csc = {}
             for k in adata.layers.keys():
@@ -1675,8 +1682,13 @@ class AnndataAdaptor(DataAdaptor):
                 
                 mean,v = sf.mean_variance_axis(adata.layers[k],axis=0)
                 meansq = v-mean**2
-                adata.var[f"{k};;tMean"] = mean
-                adata.var[f"{k};;tMeanSq"] = meansq
+                self.tMeans["OBS"][k] = mean
+                self.tMeanSqs["OBS"][k] = meansq
+
+                mean,v = sf.mean_variance_axis(adata.layers[k],axis=1)
+                meansq = v-mean**2
+                self.tMeans["VAR"][k] = mean
+                self.tMeanSqs["VAR"][k] = meansq                
 
                 adata.layers[k] = sp.sparse.csc_matrix(adata.shape).astype('float32')
                 gc.collect()
@@ -1690,6 +1702,8 @@ class AnndataAdaptor(DataAdaptor):
                         dtype = dtype.numpy_dtype
                     curr_axis[ann] = curr_axis[ann].astype(dtype)
             
+            self.NAME = {"OBS": {"obs": np.array(list(adata.obs_names)), "var": np.array(list(adata.var_names))},
+                         "VAR": {"var": np.array(list(adata.obs_names)), "obs": np.array(list(adata.var_names))}}
             self.data = adata
             print("Finished loading the data.")
     
@@ -1769,11 +1783,7 @@ class AnndataAdaptor(DataAdaptor):
             #sam.adata.obs[k] = pd.Categorical(sam.adata.obs[k].astype('str'))        
         self._obsm_init = self.data.obsm
         self._obs_init = self.data.obs
-        l = []
-        for i in self.data.var.keys():
-            if ";;tMean" in i:
-                l.append(i)
-        self._var_init = self.data.var.drop(labels=l,axis=1)
+        self._var_init = self.data.var
         self._uns_init = self.data.uns
         self._obsp_init = self.data.obsp
 
@@ -1878,45 +1888,26 @@ class AnndataAdaptor(DataAdaptor):
         return encode_matrix_fbs(df, col_idx=df.columns)
 
     def get_embedding_names(self):
-        """
-        Return pre-computed embeddings.
-
-        function:
-            a) generate list of default layouts
-            b) validate layouts are legal.  remove/warn on any that are not
-            c) cap total list of layouts at global const MAX_LAYOUTS
-        """
-        # load default layouts from the data.
-        layouts = self.dataset_config.embeddings__names
-
-        if layouts is None or len(layouts) == 0:
-            layouts = [key[2:] for key in self.data.obsm_keys() if type(key) == str and key.startswith("X_")]
-
-        # remove invalid layouts
-        valid_layouts = []
-        obsm_keys = self.data.obsm_keys()
-        for layout in layouts:
-            layout_name = f"X_{layout}"
-            if layout_name not in obsm_keys:
-                warnings.warn(f"Ignoring unknown layout name: {layout}.")
-            elif not self._is_valid_layout(self.data.obsm[layout_name]):
-                warnings.warn(f"Ignoring layout due to malformed shape or data type: {layout}")
-            else:
-                valid_layouts.append(layout)
-        # cap layouts to MAX_LAYOUTS
-        return valid_layouts[0:MAX_LAYOUTS]
+        annotations = self.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(self)}"
+        fns = glob(f"{userID}/emb/*.p")
+        return [ann.split('.p')[0].split('/')[-1].split('\\')[-1].split('X_')[-1] for ann in fns]
 
     def get_embedding_array(self, ename, dims=2):
         annotations = self.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(self)}"
-        try:
-            full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")
-        except:
-            full_embedding = self._obsm_init[f"X_{ename}"]
+        
+        full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")
         return full_embedding[:, 0:dims]
 
     def get_colors(self):
         return convert_anndata_category_colors_to_cxg_category_colors(self.data)
+
+    def mode_getter(self):
+        annotations = self.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(self)}"
+        mode = userID.split("/")[-1].split("\\")[-1]
+        return mode
 
     def get_X_array(self, col_idx, layer="X", logscale=False):
         def bisym_log_transform(x):
@@ -1924,10 +1915,9 @@ class AnndataAdaptor(DataAdaptor):
 
         #if row_idx is None:
         #    row_idx = np.arange(self.data.shape[0])
-        annotations = self.dataset_config.user_annotations        
-        userID = f"{annotations._get_userdata_idhash(self)}"
-        mode = userID.split("/")[-1].split("\\")[-1]
-        XI = _create_data_from_shm_csc(*self.shm_layers_csc[layer],mode=mode)
+        mode = self.mode_getter()
+
+        XI = _read_shmem(self.shm_layers_csr,self.shm_layers_csc,layer,format="csc",mode=mode)
         
         if col_idx is None:
             col_idx = np.arange(self.data.shape[1])        
@@ -1953,29 +1943,8 @@ class AnndataAdaptor(DataAdaptor):
         return x
 
     def get_shape(self):
-        return self.data.shape
-
-    def query_var_array(self, term_name):
-        return getattr(self.data.var, term_name)
-
-    def query_obs_array(self, term_name):
-        return getattr(self.data.obs, term_name)
-
-    def get_obs_index(self):
-        name = self.server_config.single_dataset__obs_names
-        if name is None:
-            return self.original_obs_index
+        mode =  self.mode_getter()
+        if mode == "OBS":
+            return self.data.shape
         else:
-            return self.data.obs[name]
-
-    def get_obs_columns(self):
-        return self.data.obs.columns
-
-    def get_obs_keys(self):
-        # return list of keys
-        return self.data.obs.keys().to_list()
-
-    def get_var_keys(self):
-        # return list of keys
-        return self.data.var.keys().to_list()
-
+            return (self.data.shape[1],self.data.shape[0])
