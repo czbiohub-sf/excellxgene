@@ -822,6 +822,8 @@ def _can_cast_to_int32(dtype, array_values=None):
     return False
 
 def switch_cxg_mode(request,data_adaptor):
+    embName = request.values.get("embName", default=None)
+
     userID = _get_user_id(data_adaptor)
     mode = userID.split("/")[-1].split("\\")[-1]
     ID = userID.split("/")[0].split("\\")[0]
@@ -875,7 +877,10 @@ def switch_cxg_mode(request,data_adaptor):
             a = np.array(a)
             b = np.array(b)
             d = _df_to_dict(a,b)
-
+            try:
+                del d['unassigned']
+            except:
+                pass            
             if suffix != "":
                 n = key.split('DEG_')[-1]
                 for dkey in d:
@@ -890,10 +895,7 @@ def switch_cxg_mode(request,data_adaptor):
                         d[dkey] = list(sname)
                 
             gene_sets[key.split('DEG_')[-1]+suffix] = d
-            try:
-                del gene_sets[key.split('DEG_')[-1]+suffix]['unassigned']
-            except:
-                pass
+
 
         elif _can_cast_to_float32(dtype,obs[key]) or _can_cast_to_int32(dtype,obs[key]) or flag:
             pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
@@ -909,23 +911,24 @@ def switch_cxg_mode(request,data_adaptor):
 
     newObs = {}
     for key1 in genesets:
-        C = []
-        O = []
-        for key2 in genesets[key1]:
-            o = genesets[key1][key2]
-            O.extend(o)
-            C.extend([key2]*len(o))
-        C = np.array(C)
-        O = np.array(O)
-        d = _df_to_dict(O,C)
-        C = np.array(['.'.join(d[k]) for k in d])
-        O = np.array(list(d.keys()))
-        
-        f = np.in1d(v,O,invert=True)
-        vnot = v[f] 
-        C = np.append(C,["unassigned"]*len(vnot)) 
-        O = np.append(O,vnot) 
-        newObs[key1] = pd.Series(data=C,index=O)[v].values.flatten()
+        if key1 != "":
+            C = []
+            O = []
+            for key2 in genesets[key1]:
+                o = genesets[key1][key2]
+                O.extend(o)
+                C.extend([key2]*len(o))
+            C = np.array(C)
+            O = np.array(O)
+            d = _df_to_dict(O,C)
+            C = np.array(['.'.join(d[k]) for k in d])
+            O = np.array(list(d.keys()))
+            
+            f = np.in1d(v,O,invert=True)
+            vnot = v[f] 
+            C = np.append(C,["unassigned"]*len(vnot)) 
+            O = np.append(O,vnot) 
+            newObs[key1] = pd.Series(data=C,index=O)[v].values.flatten()
     
     for key in newObs:
         prefix = "DEG_" if "//;;//" in key else ""
@@ -937,10 +940,23 @@ def switch_cxg_mode(request,data_adaptor):
     # convert var metadata to obs
     fns = glob(f"{pathOld}/var/*.p")
     var = {}
+    if embName is not None:
+        for ann in fns:
+            ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+            if ';;' in ann:
+                tlay = ann.split(';;')[-1]
+            else:
+                tlay = ""
+            if embName == tlay:
+                var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
+    
     for ann in fns:
         ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1].split(';;')[0]
-        var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
-    
+        if ';;' not in ann:
+            if ann not in var:
+                if ann != "name_0":
+                    var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")    
+
     for key in var:
         pickle_dumper(var[key],f"{pathNew}/obs/{key}.p")
 

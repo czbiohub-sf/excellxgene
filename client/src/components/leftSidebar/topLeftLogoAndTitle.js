@@ -25,7 +25,8 @@ const DATASET_TITLE_FONT_SIZE = 14;
     prevCrossfilter: state.obsCrossfilter,
     annoMatrix: state.annoMatrix,
     userLoggedIn: state.controls.userInfo ? true : false,
-    cxgMode: state.controls.cxgMode
+    cxgMode: state.controls.cxgMode,
+    layoutChoice: state.layoutChoice
   };
 })
 class LeftSideBar extends React.Component {
@@ -52,7 +53,8 @@ class LeftSideBar extends React.Component {
       title,
       hostedMode,
       cxgMode,
-      userLoggedIn
+      userLoggedIn,
+      layoutChoice
     } = this.props;
     const { warningDialog, loading } = this.state;
     return (
@@ -94,7 +96,7 @@ class LeftSideBar extends React.Component {
               onClick={async ()=>{
                 this.setState({loading: true})
                 await fetch(
-                  `${globals.API.prefix}${globals.API.version}switchCxgMode`,
+                  `${globals.API.prefix}${globals.API.version}switchCxgMode?embName=${layoutChoice.current}`,
                   {credentials: "include"}
                 );
                 window.location.reload()
