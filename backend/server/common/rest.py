@@ -12,8 +12,10 @@ from werkzeug.urls import url_unquote
 from anndata import AnnData
 import pickle
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
+from backend.common.utils.data_locator import DataLocator
 from backend.server.common.config.client_config import get_client_config, get_client_userinfo
 from backend.common.constants import Axis, DiffExpMode, JSON_NaN_to_num_warning_msg
+from backend.common.genesets import read_gene_sets_tidycsv
 from backend.common.errors import (
     FilterError,
     JSONEncodingValueError,
@@ -197,14 +199,14 @@ def gene_info_get(request,data_adaptor):
     varM = request.args.get("varM", None)    
     name = request.args.get("embName",None)
     userID = _get_user_id(data_adaptor)
-    direc = pathlib.Path().absolute()    
+     #direc    
 
     if varM is not None and gene is not None:
         try:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM};;{name}.p")
+            X = pickle_loader(f"{userID}/var/{varM};;{name}.p")
         except:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM}.p")
-        n = pickle_loader(f"{direc}/{userID}/var/name_0.p")                    
+            X = pickle_loader(f"{userID}/var/{varM}.p")
+        n = pickle_loader(f"{userID}/var/name_0.p")                    
         return make_response(jsonify({"response": X[n==gene]}), HTTPStatus.OK)
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
@@ -228,14 +230,14 @@ def gene_info_bulk_put(request,data_adaptor):
     varM = args['varMetadata']
     name = args.get("embName",None)
     userID = _get_user_id(data_adaptor)
-    direc = pathlib.Path().absolute()  
+     #direc  
 
     if varM != "":
         try:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM};;{name}.p")
+            X = pickle_loader(f"{userID}/var/{varM};;{name}.p")
         except:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM}.p")
-        n = pickle_loader(f"{direc}/{userID}/var/name_0.p")   
+            X = pickle_loader(f"{userID}/var/{varM}.p")
+        n = pickle_loader(f"{userID}/var/name_0.p")   
 
         return make_response(jsonify({"response": list(pd.Series(data=X,index=n)[geneSet].values)}), HTTPStatus.OK)
     else:
@@ -337,40 +339,10 @@ def annotations_var_put(request, data_adaptor):
 
 
 def pickle_dumper(x,fn):
-    if '/' in fn:
-        toSub = '/'.join(fn.split('/')[:2])+'/'
-    elif '\\' in fn:
-        toSub = '\\'.join(fn.split('\\')[:2])+'\\'
-    name = fn.replace(toSub,"")
-    if "/" in name:
-        toSub2 = '/'.join(name.split('/')[:1])+"/"
-    elif "\\" in name:
-        toSub2 = '\\'.join(name.split('\\')[:1])+"\\"
-    else:
-        toSub2 = ""
-    if toSub2 != "":
-        name = name.replace(toSub2,"")
-    name = name.replace('/',':').replace('\\',':')
-    fn = toSub+toSub2+name
     with open(fn,"wb") as f:
         pickle.dump(x,f)
 
 def pickle_loader(fn):
-    if '/' in fn:
-        toSub = '/'.join(fn.split('/')[:2])+'/'
-    elif '\\' in fn:
-        toSub = '\\'.join(fn.split('\\')[:2])+'\\'
-    name = fn.replace(toSub,"")
-    if "/" in name:
-        toSub2 = '/'.join(name.split('/')[:1])+"/"
-    elif "\\" in name:
-        toSub2 = '\\'.join(name.split('\\')[:1])+"\\"
-    else:
-        toSub2 = ""
-    if toSub2 != "":
-        name = name.replace(toSub2,"")
-    name = name.replace('/',':').replace('\\',':')
-    fn = toSub+toSub2+name
     with open(fn,"rb") as f:
         x = pickle.load(f)
     return x
@@ -391,7 +363,7 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
             if isinstance(vals[0],np.integer):
                 if (len(set(vals))<500):
                     vals = vals.astype('str')            
-            pickle_dumper(vals,"{}/obs/{}.p".format(userID,col.replace('/',':')))
+            pickle_dumper(vals,"{}/obs/{}.p".format(userID,col.replace('/','_')))
 
 def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     """helper function to write annotations from fbs"""
@@ -405,7 +377,7 @@ def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
-            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/var/{};;{}.p".format(userID,col.replace('/',':'),name))
+            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/var/{};;{}.p".format(userID,col.replace('/','_'),name))
 
 def check_new_labels_var(self, labels_df):
     """Check the new annotations labels, then set the labels_df index"""
@@ -477,12 +449,13 @@ def data_var_put(request, data_adaptor):
     filter = args.get("filter",None)
     layer = args.get("layer","X")
     logscale = args.get("logscale","false")=="true"
+    scale = args.get("scale","false")=="true"
 
     userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
     mode=pickle.load(open(f"{userID}/mode.p",'rb'))
     try:
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale,mode=mode),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale,scale=scale,mode=mode),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -501,12 +474,14 @@ def data_var_get(request, data_adaptor):
     try:
         layer = request.values.get("layer", default="X")
         logscale = request.values.get("logscale", default="false") == "true"
+        scale = request.values.get("scale", default="false") == "true"
         args_filter_only = request.args.copy()
         args_filter_only.poplist("layer")  
-        args_filter_only.poplist("logscale")        
+        args_filter_only.poplist("logscale")     
+        args_filter_only.poplist("scale")        
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale, mode=mode),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale, scale=scale, mode=mode),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -607,13 +582,13 @@ def sankey_data_put(request, data_adaptor):
 
 def upload_var_metadata_post(request, data_adaptor):
     file = request.files['file']
-    direc = pathlib.Path().absolute()
+     #direc
     userID = _get_user_id(data_adaptor)         
     filename = file.filename.split('/')[-1].split('\\')[-1]
-    file.save(f"{direc}/{userID}/{filename}")
-    A = pd.read_csv(f"{direc}/{userID}/{filename}",sep='\t',index_col=0)
+    file.save(f"{userID}/{filename}")
+    A = pd.read_csv(f"{userID}/{filename}",sep='\t',index_col=0)
     v1 = np.array(list(A.index))    
-    v2 = np.array(list(pickle_loader(f"{direc}/{userID}/var/name_0.p")))
+    v2 = np.array(list(pickle_loader(f"{userID}/var/name_0.p")))
     filt = np.in1d(v1,v2)
     v1 = v1[filt]    
     assert v1.size > 0
@@ -628,12 +603,12 @@ def upload_var_metadata_post(request, data_adaptor):
         valsrev = np.zeros(v2rev.size,dtype='object')
         valsrev[:] = filler
         vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
-        pickle_dumper(vals,"{}/{}/var/{}.p".format(direc,userID,k.replace('/',':')))
+        pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{direc}/{userID}/{filename}")
+            os.remove(f"{userID}/{filename}")
         except Exception as error:
             print(error)
         return response    
@@ -644,11 +619,11 @@ def save_var_metadata_put(request, data_adaptor):
     args = request.get_json()
     embName = args['embName']
 
-    direc = pathlib.Path().absolute()
+     #direc
     userID = _get_user_id(data_adaptor)        
 
-    fnames = glob(f"{direc}/{userID}/var/*.p")
-    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+    fnames = glob(f"{userID}/var/*.p")
+    v = pickle_loader(f"{userID}/var/name_0.p")
     var=pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
@@ -657,7 +632,7 @@ def save_var_metadata_put(request, data_adaptor):
         else:
             tlay = ""
         if embName == tlay:
-            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+            l = pickle_loader(f"{userID}/var/{n}.p")
             if n != "name_0":
                 var[n.split(';;')[0]] = pd.Series(data=l,index=v)  
 
@@ -666,23 +641,23 @@ def save_var_metadata_put(request, data_adaptor):
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' not in n:
             if n not in vkeys:
-                l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                l = pickle_loader(f"{userID}/var/{n}.p")
                 if n != "name_0":
                     var[n] = pd.Series(data=l,index=v)                   
     del var['name_0']    
-    var.to_csv(f"{userID}/{userID}_var.txt",sep='\t')
+    var.to_csv(f"{userID}/output/var.txt",sep='\t')
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{userID}/{userID}_var.txt")
+            os.remove(f"{userID}/output/var.txt")
         except Exception as error:
             print(error)
         return response
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/{userID}_var.txt",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/var.txt",as_attachment=True)
 
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -707,21 +682,22 @@ def save_metadata_put(request, data_adaptor):
     for k in labelNames:
         labels[k] = pickle_loader(f"{userID}/obs/{k}.p")
     
-    labels.index = pd.Index(labels['name_0'])
+    mode=userID.split('/')[-1].split('\\')[-1]
+    labels.index = pd.Index(data_adaptor.NAME[mode]["obs"])
     labels = labels[obs_mask]
-    labels.to_csv(f"{userID}/{userID}_obs.txt",sep='\t')
+    labels.to_csv(f"{userID}/output/obs.txt",sep='\t')
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{userID}/{userID}_obs.txt")
+            os.remove(f"{userID}/output/obs.txt")
         except Exception as error:
             print(error)
         return response
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/{userID}_obs.txt",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/obs.txt",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -825,6 +801,26 @@ def _can_cast_to_float32(dtype, array_values):
 
     return False
 
+def _can_cast_to_int32(dtype, array_values=None):
+    if pd.Series(array_values).hasnans:
+        return False
+
+    ordered_array_values = array_values
+    if array_values.dtype.name == "category" and not array_values.cat.ordered:
+        ordered_array_values = array_values.cat.as_ordered()
+
+    if dtype.kind in ["i", "u"]:
+        if np.can_cast(dtype, np.int32):
+            return True
+        ii32 = np.iinfo(np.int32)
+        if (
+            not pd.Series(ordered_array_values).empty
+            and (ordered_array_values.min() >= ii32.min and ordered_array_values.max() <= ii32.max)
+            or pd.Series(ordered_array_values).empty
+        ):
+            return True
+    return False
+
 def switch_cxg_mode(request,data_adaptor):
     userID = _get_user_id(data_adaptor)
     mode = userID.split("/")[-1].split("\\")[-1]
@@ -855,20 +851,55 @@ def switch_cxg_mode(request,data_adaptor):
         ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
         obs[ann] = pickle_loader(f"{pathOld}/obs/{ann}.p")
 
-    gene_sets = {}
+    if os.path.exists(f"{pathNew}/gene-sets.csv"):
+        gene_sets = read_gene_sets_tidycsv(DataLocator(f"{pathNew}/gene-sets.csv"))
+    else:
+        gene_sets = {}
+    
     name = obs['name_0']
     del obs["name_0"]
     for key in obs:
         dtype = obs[key].dtype
         dtype_name = dtype.name
         dtype_kind = dtype.kind
-        if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:  
-            gene_sets[key] = _df_to_dict(obs[key],name)
-        elif _can_cast_to_float32(dtype,obs[key]):
+        a,c = np.unique(obs[key],return_counts=True)
+        flag =  a.size > 2000 or c.max() < 5
+        if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
+            suffix = "//;;//" if key.startswith("DEG_") else ""
+            a = []
+            b = []
+            for i,k in enumerate(obs[key]):
+                m = k.split('.')
+                a.extend(m)
+                b.extend(len(m)*[name[i]])
+            a = np.array(a)
+            b = np.array(b)
+            d = _df_to_dict(a,b)
+
+            if suffix != "":
+                n = key.split('DEG_')[-1]
+                for dkey in d:
+                    if dkey != "unassigned":
+                        fnn = f"{pathNew}/diff/{n}/{dkey}_output.p"
+                        try:
+                            sname = name[np.vstack(pickle_loader(fnn))[:,0].astype('int')]
+                        except:
+                            suffix = ""
+                            break
+                        sname = sname[np.in1d(sname,d[dkey])]
+                        d[dkey] = list(sname)
+                
+            gene_sets[key.split('DEG_')[-1]+suffix] = d
+            try:
+                del gene_sets[key.split('DEG_')[-1]+suffix]['unassigned']
+            except:
+                pass
+
+        elif _can_cast_to_float32(dtype,obs[key]) or _can_cast_to_int32(dtype,obs[key]) or flag:
             pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
     pickle_dumper(name,f"{pathNew}/var/name_0.p")
 
-    annotations = data_adaptor.dataset_config.user_annotations    
+    annotations = data_adaptor.dataset_config.user_annotations  
     with open(f"{pathNew}/gene-sets.csv", "w", newline="") as f:
         f.write(annotations.gene_sets_to_csv(gene_sets))    
 
@@ -876,7 +907,6 @@ def switch_cxg_mode(request,data_adaptor):
     v = pickle_loader(f"{pathOld}/var/name_0.p")
     genesets, _ = annotations.read_gene_sets(data_adaptor)
 
-    print(genesets)
     newObs = {}
     for key1 in genesets:
         C = []
@@ -887,14 +917,19 @@ def switch_cxg_mode(request,data_adaptor):
             C.extend([key2]*len(o))
         C = np.array(C)
         O = np.array(O)
+        d = _df_to_dict(O,C)
+        C = np.array(['.'.join(d[k]) for k in d])
+        O = np.array(list(d.keys()))
+        
         f = np.in1d(v,O,invert=True)
-        vnot = v[f]
-        C = np.append(C,["unassigned"]*len(vnot))
-        O = np.append(v[np.invert(f)],v[f])
+        vnot = v[f] 
+        C = np.append(C,["unassigned"]*len(vnot)) 
+        O = np.append(O,vnot) 
         newObs[key1] = pd.Series(data=C,index=O)[v].values.flatten()
     
     for key in newObs:
-        pickle_dumper(newObs[key],f"{pathNew}/obs/{key}.p")
+        prefix = "DEG_" if "//;;//" in key else ""
+        pickle_dumper(newObs[key],f"{pathNew}/obs/{prefix}{key.split('//;;//')[0]}.p")
 
     pickle_dumper(v,f"{pathNew}/obs/name_0.p")        
     
@@ -903,7 +938,7 @@ def switch_cxg_mode(request,data_adaptor):
     fns = glob(f"{pathOld}/var/*.p")
     var = {}
     for ann in fns:
-        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1].split(';;')[0]
         var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
     
     for key in var:
@@ -936,8 +971,8 @@ def rename_diff_put(request, data_adaptor):
     newName = args.get("newName",None)
     userID = _get_user_id(data_adaptor)
     
-    if os.path.exists(f"{userID}/diff/{oldName.replace('/',':')}"):
-        os.rename(f"{userID}/diff/{oldName.replace('/',':')}",f"{userID}/diff/{newName.replace('/',':')}")
+    if os.path.exists(f"{userID}/diff/{oldName.replace('/','_')}"):
+        os.rename(f"{userID}/diff/{oldName.replace('/','_')}",f"{userID}/diff/{newName.replace('/','_')}")
     
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
@@ -952,11 +987,11 @@ def delete_diff_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     
     try:
-        if os.path.exists(f"{userID}/diff/{name.replace('/',':')}"):
-            fs = glob(f"{userID}/diff/{name.replace('/',':')}/*")
+        if os.path.exists(f"{userID}/diff/{name.replace('/','_')}"):
+            fs = glob(f"{userID}/diff/{name.replace('/','_')}/*")
             for f in fs:
                 os.remove(f)
-            os.rmdir(f"{userID}/diff/{name.replace('/',':')}")
+            os.rmdir(f"{userID}/diff/{name.replace('/','_')}")
     except: 
         pass
     
@@ -972,7 +1007,7 @@ def diff_group_get(request,data_adaptor):
     pop = request.args.get("pop",None)
     userID = _get_user_id(data_adaptor)
     try:
-        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}.p")
+        x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}.p")
         return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -984,7 +1019,7 @@ def diff_stats_get(request,data_adaptor):
     pop = request.args.get("pop",None)
     userID = _get_user_id(data_adaptor)
     try:
-        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_output.p")
+        x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_output.p")
         return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -996,7 +1031,7 @@ def diff_genes_get(request,data_adaptor):
     pop = request.args.get("pop",None)
     userID = _get_user_id(data_adaptor)
     try:
-        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_sg.p")
+        x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
         return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -1010,7 +1045,7 @@ def diff_genes_put(request,data_adaptor):
     sg = args['selectedGenes']
     userID = _get_user_id(data_adaptor)
     try:
-        pickle_dumper(sg,f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_sg.p")
+        pickle_dumper(sg,f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
         return make_response(jsonify({"ok": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -1302,21 +1337,20 @@ def summarize_var_helper(request, data_adaptor, key, raw_query):
     args_filter_only.poplist("key")
     args_filter_only.poplist("layer")
     args_filter_only.poplist("logscale")
+    args_filter_only.poplist("scale")
 
     try:
         layer = request.values.get("layer", default="X")  
         logscale = request.values.get("logscale", default="false")=="true"        
+        scale = request.values.get("scale", default="false")=="true"  
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.summarize_var(summary_method, filter, query_hash, layer, logscale),
+            data_adaptor.summarize_var(summary_method, filter, query_hash, layer, logscale, scale),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
     except (ValueError) as e:
         return abort(HTTPStatus.NOT_FOUND, description=str(e))
-    except (UnsupportedSummaryMethod, FilterError) as e:
-        return abort(HTTPStatus.BAD_REQUEST, description=str(e))
-
 
 def summarize_var_get(request, data_adaptor):
     return summarize_var_helper(request, data_adaptor, None, request.query_string)

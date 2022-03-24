@@ -146,8 +146,29 @@ def _error_callback(e, ws, cfn, pid):
         pass
     traceback.print_exception(type(e), e, e.__traceback__)
 
-    
-def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID):
+def sparse_scaler(X,logscale=False,scale=False, mode="OBS", mu=None, std=None):
+    def bisym_log_transform(x):
+        return np.sign(x)*np.log(1+np.abs(x))
+    if logscale:
+        X.data[:] = bisym_log_transform(X.data)
+        X.eliminate_zeros()
+    if scale:
+        x,y = X.nonzero()
+        if mode == "OBS":
+            s = std[y]
+            s[s==0]=1
+            X.data[:] = (X.data - mu[y]) / s
+            X.data[X.data>10]=10
+        else:
+            s = std[x]
+            s[s==0]=1
+            X.data[:] = (X.data - mu[x]) / s
+            X.data[X.data>10]=10
+        X.data[X.data<0]=0
+        
+        
+
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, logscale, scale, tMeanObs, tMeanSqObs):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
@@ -156,20 +177,27 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
     nB = iB.size
     mode = userID.split("/")[-1].split("\\")[-1]
     CUTOFF = 35000
-    
+    mu = tMeanObs
+    std = (tMeanSqObs**2 - mu**2)
+    std[std<0]=0
+    std=std**0.5
+
     if nA + nB == obs_mask_A.size:
         if nA < nB:
             if (nA < CUTOFF):
                 XI = _read_shmem(shm,shm_csc,layer,format="csr",mode=mode)
+                XS = XI[iA]
+                sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
                 n = XI.shape[0]
-                meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)
+                meanA,vA = sf.mean_variance_axis(XS,axis=0)
                 meanAsq = vA-meanA**2
                 meanAsq[meanAsq<0]=0
             else:
                 XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
                 n = XI.shape[0]
 
-                meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
+                meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA,
+                                                mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
                 meanA/=nA
                 meanAsq/=nA
                 vA = meanAsq - meanA**2
@@ -182,15 +210,18 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
         else:
             if (nB < CUTOFF):
                 XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
+                XS = XI[iB]
+                sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
                 n = XI.shape[0]
-                meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
+                meanB,vB = sf.mean_variance_axis(XS,axis=0)    
                 meanBsq = vB-meanB**2
                 meanBsq[meanBsq<0]=0                
             else:
                 XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
                 n = XI.shape[0]
 
-                meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
+                meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB,
+                                                mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
                 meanB/=nB
                 meanBsq/=nB
                 vB = meanBsq - meanB**2
@@ -202,13 +233,16 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
     else:
         if (nA < CUTOFF):
             XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
+            XS = XI[iA]
+            sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
             n = XI.shape[0]
-            meanA,vA = sf.mean_variance_axis(XI[iA],axis=0)    
+            meanA,vA = sf.mean_variance_axis(XS,axis=0)    
         else:
             XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
             n = XI.shape[0]
 
-            meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA)
+            meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA,
+                                            mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
             meanA/=nA
             meanAsq/=nA
             vA = meanAsq - meanA**2
@@ -216,13 +250,16 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
 
         if (nB < CUTOFF):
             XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
+            XS = XI[iB]
+            sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
             n = XI.shape[0]
-            meanB,vB = sf.mean_variance_axis(XI[iB],axis=0)    
+            meanB,vB = sf.mean_variance_axis(XS,axis=0)    
         else:
             XI = _read_shmem(shm, shm_csc, layer, format="csc", mode=mode)
             n = XI.shape[0]
 
-            meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB)
+            meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB,
+                                            mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
             meanB/=nB
             meanBsq/=nB
             vB = meanBsq - meanB**2
@@ -250,9 +287,9 @@ def pickle_loader(fn):
     return x
 
 def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
-    direc = pathlib.Path().absolute()        
+     #direc        
 
-    fnames = glob(f"{direc}/{userID}/emb/*.p")
+    fnames = glob(f"{userID}/emb/*.p")
 
 
     name = currentLayout.split(';')[-1]
@@ -263,10 +300,10 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if name == n.split(';')[-1] or (';;' not in currentLayout and ';;' not in n):
-            if exists(f) and exists(f"{direc}/{userID}/nnm/{n}.p") and exists(f"{direc}/{userID}/params/{n}.p"):
+            if exists(f) and exists(f"{userID}/nnm/{n}.p") and exists(f"{userID}/params/{n}.p"):
                 embs[n] = pickle_loader(f)
-                nnms[n] = pickle_loader(f"{direc}/{userID}/nnm/{n}.p")
-                params[n] = pickle_loader(f"{direc}/{userID}/params/{n}.p")
+                nnms[n] = pickle_loader(f"{userID}/nnm/{n}.p")
+                params[n] = pickle_loader(f"{userID}/params/{n}.p")
             elif exists(f):
                 embs[n] = pickle_loader(f)
     
@@ -277,7 +314,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
     mode = userID.split("/")[-1].split("\\")[-1]
     X = _read_shmem(shm,shm_csc,"X",format="csr",mode=mode)
 
-    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+    v = pickle_loader(f"{userID}/var/name_0.p")
     adata = AnnData(X = X[filt])
     adata.var_names = pd.Index(v)
     adata.obs_names = pd.Index(cids[filt])
@@ -288,11 +325,11 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
 
     if labelNames:
         for n in labelNames:
-            l = pickle_loader(f"{direc}/{userID}/obs/{n}.p")[filt]
+            l = pickle_loader(f"{userID}/obs/{n}.p")[filt]
             if n != "name_0":
                 adata.obs[n] = pd.Categorical(l)        
 
-    fnames = glob(f"{direc}/{userID}/var/*.p")
+    fnames = glob(f"{userID}/var/*.p")
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' in n:
@@ -301,7 +338,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             tlay = ""
 
         if name == tlay:
-            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+            l = pickle_loader(f"{userID}/var/{n}.p")
             if n != "name_0":
                 adata.var[n.split(';;')[0]] = pd.Series(data=l,index=v)              
     
@@ -311,12 +348,12 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' not in n:
             if n not in vkeys:
-                l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                l = pickle_loader(f"{userID}/var/{n}.p")
                 if n != "name_0":
                     adata.var[n] = pd.Series(data=l,index=v)  
 
 
-    fnames = glob(f"{direc}/{userID}/pca/*.p")
+    fnames = glob(f"{userID}/pca/*.p")
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' in n:
@@ -325,7 +362,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             tlay = ""
 
         if name == tlay:
-            l = pickle_loader(f"{direc}/{userID}/pca/{n}.p")[filt]
+            l = pickle_loader(f"{userID}/pca/{n}.p")[filt]
             adata.obsm[f"X_latent_{n.split(';;')[0]}"] = l
     
     
@@ -334,7 +371,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' not in n:
             if n not in vkeys:
-                l = pickle_loader(f"{direc}/{userID}/pca/{n}.p")[filt]
+                l = pickle_loader(f"{userID}/pca/{n}.p")[filt]
                 adata.obsm[f"X_latent_{n}"] = l
 
     temp = {}
@@ -352,8 +389,8 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             X = _read_shmem(shm,shm_csc,k,format="csr",mode=mode)
             adata.layers[k] = X[filt]
 
-    adata.write_h5ad(f"{direc}/output/{userID}_{currentLayout.replace(';','_')}.h5ad")
-    return f"{direc}/output/{userID}_{currentLayout.replace(';','_')}.h5ad"
+    adata.write_h5ad(f"{userID}/output/{userID}_{currentLayout.replace(';','_')}.h5ad")
+    return f"{userID}/{currentLayout.replace(';','_')}.h5ad"
 
 def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):    
     obs_mask = AnnDataDict['obs_mask']    
@@ -412,7 +449,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 X = sam.adata.X
                 preprocessing = "StandardScaler" if scaleData else "Normalizer"
                 bk=batchKey if batchMethod == "Harmony" else None
-                sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM)
+                sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM,max_iter=5)
                 sam.adata.X = X        
                 adata=sam.adata
 
@@ -454,22 +491,22 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             pca[obs_mask] = obsm
                     
     elif embeddingMode == "Create embedding from subset":
-        direc = pathlib.Path().absolute()    
-        umap = pickle_loader(f"{direc}/{userID}/emb/{currentLayout}.p")                     
+         #direc    
+        umap = pickle_loader(f"{userID}/emb/{currentLayout}.p")                     
         result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
         result[obs_mask] = umap[obs_mask] 
         X_umap = result  
 
         try:
-            nnm = pickle_loader(f"{direc}/{userID}/nnm/{currentLayout}.p")[obs_mask][:,obs_mask]
+            nnm = pickle_loader(f"{userID}/nnm/{currentLayout}.p")[obs_mask][:,obs_mask]
         except:
             nnm = None
 
         try:
-            obsm = pickle_loader(f"{direc}/{userID}/pca/pca;;{currentLayout}.p")
+            obsm = pickle_loader(f"{userID}/pca/pca;;{currentLayout}.p")
         except:
             try:
-                obsm = pickle_loader(f"{direc}/{userID}/pca/pca.p")
+                obsm = pickle_loader(f"{userID}/pca/pca.p")
             except:
                 obsm = None
         if obsm is None:
@@ -493,12 +530,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         umapMinDist = reembedParams.get("umapMinDist",0.1)
         latentSpace = reembedParams.get("latentSpace","")
             
-        direc = pathlib.Path().absolute() 
+         #direc 
 
         try:
-            obsm = pickle_loader(f"{direc}/{userID}/pca/{latentSpace};;{currentLayout}.p")   
+            obsm = pickle_loader(f"{userID}/pca/{latentSpace};;{currentLayout}.p")   
         except:
-            obsm = pickle_loader(f"{direc}/{userID}/pca/{latentSpace}.p")   
+            obsm = pickle_loader(f"{userID}/pca/{latentSpace}.p")   
 
         adata = AnnData(X=np.zeros(obsm.shape)[obs_mask],obsm={"X_pca":obsm[obs_mask]})    
 
@@ -547,14 +584,14 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         d = nnm.data
         nnm = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(obs_mask.size,)*2).tocsr()
 
-    direc = pathlib.Path().absolute()        
-    if exists(f"{direc}/{userID}/params/latest.p"):
-        latestPreParams = pickle_loader(f"{direc}/{userID}/params/latest.p")
+     #direc        
+    if exists(f"{userID}/params/latest.p"):
+        latestPreParams = pickle_loader(f"{userID}/params/latest.p")
     else:
         latestPreParams = None
 
     if exists(f"{userID}/params/{parentName}.p"):
-        parentParams = pickle_loader(f"{direc}/{userID}/params/{parentName}.p")
+        parentParams = pickle_loader(f"{userID}/params/{parentName}.p")
     else:
         parentParams = None
 
@@ -574,23 +611,23 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         if reembedParams.get("calculateSamWeights",False) and not reembedParams.get("doSAM",False):
             var = dispersion_ranking_NN(X_full,nnm_sub)
             for k in var.keys():
-                fn = "{}/{}/var/{};;{}.p".format(direc,userID,k.replace('/',':'),name)
+                fn = "{}/var/{};;{}.p".format(userID,k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
                 pickle_dumper(np.array(list(var[k])).astype('float'),fn)
         elif reembedParams.get("doSAM",False):
             keys = ['weights','spatial_dispersions']
             for k in keys:
-                fn = "{}/{}/var/{};;{}.p".format(direc,userID,"sam_"+k.replace('/',':'),name)
+                fn = "{}/var/{};;{}.p".format(userID,"sam_"+k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn.split(';;')[0]+'.p')
                 pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn)            
-        pickle_dumper(nnm, f"{direc}/{userID}/nnm/{name}.p")
+        pickle_dumper(nnm, f"{userID}/nnm/{name}.p")
     
-    pickle_dumper(X_umap, f"{direc}/{userID}/emb/{name}.p")
-    pickle_dumper(reembedParams, f"{direc}/{userID}/params/{name}.p")
+    pickle_dumper(X_umap, f"{userID}/emb/{name}.p")
+    pickle_dumper(reembedParams, f"{userID}/params/{name}.p")
     if pca is not None:
-        pickle_dumper(pca, f"{direc}/{userID}/pca/pca;;{name}.p")
+        pickle_dumper(pca, f"{userID}/pca/pca;;{name}.p")
 
     return layout_schema
 
@@ -599,12 +636,12 @@ def pickle_dumper(x,fn):
         pickle.dump(x,f)
 
 def compute_leiden(obs_mask,name,resolution,userID):
-    direc = pathlib.Path().absolute() 
+     #direc 
     try:
-        nnm = pickle_loader(f"{direc}/{userID}/nnm/{name}.p")   
+        nnm = pickle_loader(f"{userID}/nnm/{name}.p")   
         nnm = nnm[obs_mask][:,obs_mask]         
     except:
-        emb = pickle_loader(f"{direc}/{userID}/emb/{name}.p")            
+        emb = pickle_loader(f"{userID}/emb/{name}.p")            
         emb = emb[obs_mask]
         nnm = ut.calc_nnm(emb,20,'euclidean')
 
@@ -645,9 +682,13 @@ def compute_sankey_df(labels, name, obs_mask, userID, numEdges):
         x = (w-y).astype('int')
         return x,y
     
-    direc = pathlib.Path().absolute() 
-    nnm = pickle_loader(f"{direc}/{userID}/nnm/{name}.p")              
-    nnm = nnm[obs_mask][:,obs_mask]
+    try:
+        nnm = pickle_loader(f"{userID}/nnm/{name}.p")   
+        nnm = nnm[obs_mask][:,obs_mask]         
+    except:
+        emb = pickle_loader(f"{userID}/emb/{name}.p")            
+        emb = emb[obs_mask]
+        nnm = ut.calc_nnm(emb,20,'euclidean')
 
     cl=[]
     clu = []
@@ -1042,7 +1083,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
                 except:
                     pass
         
-    direc = pathlib.Path().absolute() 
+     #direc 
    
     adata_raw.layers['X'] = adata_raw.X            
     doBatchPrep = reembedParams.get("doBatchPrep",False)
@@ -1075,7 +1116,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
         "dataLayer":dataLayer,
         "sumNormalizeCells":sumNormalizeCells,        
     }        
-    pickle_dumper(prepParams, f"{direc}/{userID}/params/latest.p")
+    pickle_dumper(prepParams, f"{userID}/params/latest.p")
     return adata_raw
    
 
@@ -1091,34 +1132,38 @@ def initialize_socket(da):
                 obsFilterA = data.get("set1", {"filter": {}})["filter"]
                 obsFilterB = data.get("set2", {"filter": {}})["filter"]
                 layer = data.get("layer","X")
+                logscale = data.get("logscale",False)
+                scale = data.get("scale",False)
                 shape = da.get_shape()
 
                 obs_mask_A = da._axis_filter_to_mask(Axis.OBS, obsFilterA["obs"], shape[0])
                 obs_mask_B = da._axis_filter_to_mask(Axis.OBS, obsFilterB["obs"], shape[0])      
                 
                 annotations = da.dataset_config.user_annotations        
-                direc = pathlib.Path().absolute()                       
+                 #direc                       
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                 mode = userID.split('/')[-1].split('\\')[-1]
                 
                 tMean = da.tMeans[mode][layer]
                 tMeanSq = da.tMeanSqs[mode][layer]
+                tMeanObs = da.tMeans["OBS"][layer]
+                tMeanSqObs = da.tMeanSqs["OBS"][layer]                
                 
-                fnn=data['groupName'].replace('/',':')
+                fnn=data['groupName'].replace('/','_')
                 fnn2 = None
-                if not os.path.exists(f"{direc}/{userID}/diff/{fnn}"):
-                    os.makedirs(f"{direc}/{userID}/diff/{fnn}")
+                if not os.path.exists(f"{userID}/diff/{fnn}"):
+                    os.makedirs(f"{userID}/diff/{fnn}")
                 if not data.get('multiplex',None):
-                    pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/Pop1 high.p")
-                    pickle_dumper(np.where(obs_mask_B)[0],f"{direc}/{userID}/diff/{fnn}/Pop2 high.p")
+                    pickle_dumper(np.where(obs_mask_A)[0],f"{userID}/diff/{fnn}/Pop1 high.p")
+                    pickle_dumper(np.where(obs_mask_B)[0],f"{userID}/diff/{fnn}/Pop2 high.p")
                 else:
-                    fnn2=str(data['category']).replace('/',':')                                    
-                    pickle_dumper(np.where(obs_mask_A)[0],f"{direc}/{userID}/diff/{fnn}/{fnn2}.p")
+                    fnn2=str(data['category']).replace('/','_')                                    
+                    pickle_dumper(np.where(obs_mask_A)[0],f"{userID}/diff/{fnn}/{fnn2}.p")
 
                 if fnn2 is None:
                     fnn2 = "Pop1 high"                
-                fname = f"{direc}/{userID}/diff/{fnn}/{fnn2}_output.p"
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None), userID)
+                fname = f"{userID}/diff/{fnn}/{fnn2}_output.p"
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None), userID, logscale, scale, tMeanObs, tMeanSqObs)
     
     @sock.route("/reembedding")
     @auth0_token_required
@@ -1159,15 +1204,15 @@ def initialize_socket(da):
                         OBS_KEYS.append(batchKey)
 
                     layers = list(np.unique(layers))
-                    direc = pathlib.Path().absolute()  
+                     #direc  
 
                     obs = pd.DataFrame()
                     for k in OBS_KEYS:
-                        obs[k] = pickle_loader(f"{direc}/{userID}/obs/{k}.p")
+                        obs[k] = pickle_loader(f"{userID}/obs/{k}.p")
                     obs.index = pd.Index(np.arange(obs.shape[0]))
                                         
-                    fnames = glob(f"{direc}/{userID}/var/*.p")
-                    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+                    fnames = glob(f"{userID}/var/*.p")
+                    v = pickle_loader(f"{userID}/var/name_0.p")
                     var = pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
                     for f in fnames:
                         n = f.split('/')[-1].split('\\')[-1][:-2]
@@ -1177,7 +1222,7 @@ def initialize_socket(da):
                             tlay = parentName
 
                         if parentName == tlay:
-                            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                            l = pickle_loader(f"{userID}/var/{n}.p")
                             if n != "name_0":
                                 var[n] = pd.Series(l)
                     del var['name_0']
@@ -1186,7 +1231,7 @@ def initialize_socket(da):
                         "Xs": layers,
                         "obs": obs,
                         "var": var,
-                        "X_root": pickle_loader(f"{direc}/{userID}/emb/root.p"),
+                        "X_root": np.zeros((obs.shape[0],2)),
                         "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], obs.shape[0])
                     }
 
@@ -1208,9 +1253,9 @@ def initialize_socket(da):
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                
-                direc = pathlib.Path().absolute()   
-                fnames = glob(f"{direc}/{userID}/var/*.p")
-                v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+                 #direc   
+                fnames = glob(f"{userID}/var/*.p")
+                v = pickle_loader(f"{userID}/var/name_0.p")
                 var = pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
                 for f in fnames:
                     n = f.split('/')[-1].split('\\')[-1][:-2]
@@ -1220,7 +1265,7 @@ def initialize_socket(da):
                         tlay = name
 
                     if name == tlay:
-                        l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                        l = pickle_loader(f"{userID}/var/{n}.p")
                         if n != "name_0":
                             var[n] = pd.Series(l)
                 del var['name_0']
@@ -1279,7 +1324,7 @@ def initialize_socket(da):
                 _multiprocessing_wrapper(da,ws,compute_leiden, "leiden",data,None,obs_mask,name,resolution,userID)
 
 @njit(parallel=True)
-def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True):
+def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True, mu=np.array([]), std=np.array([]), mode="OBS", logscale=False, scale=False):
     htable = Dict.empty(
         key_type=types.int64,
         value_type=types.boolean,
@@ -1299,9 +1344,19 @@ def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True):
         if calculate_sq:
             s2 = 0
         for j in prange(xi.size):
-            s += di[j] if htable[xi[j]] else 0
+            ps = di[j] if htable[xi[j]] else 0
+            if logscale:
+                ps = np.sign(ps)*(1+np.log(np.abs(ps)))
+            if scale:                    
+                if mode == "OBS":
+                    ps = (ps - mu[i])/(std[i] if std[i] != 0 else 1)
+                else:
+                    ps = (ps - mu[xi[j]])/(std[xi[j]] if std[xi[j]] != 0 else 1)
+
+            s += ps
             if calculate_sq:
-                s2 += di[j]**2 if htable[xi[j]] else 0
+                ps2 = ps**2 if htable[xi[j]] else 0
+                s2 += ps2
                 
         res[i] = s
         if calculate_sq:
@@ -1614,9 +1669,9 @@ class AnndataAdaptor(DataAdaptor):
                     adata.layers[k] = sparse.csr_matrix(adata.layers[k])
 
             if preprocess:
-                target_sum = np.median(np.array(adata.X.sum(1)).flatten())
+                #target_sum = np.median(np.array(adata.X.sum(1)).flatten())
                 adata.layers['raw_counts'] = adata.X.copy()
-                sc.pp.normalize_total(adata,target_sum=target_sum)                
+                #sc.pp.normalize_total(adata,target_sum=target_sum)                
                 sc.pp.log1p(adata)
                 adata.layers['X'] = adata.X
                 
@@ -1704,6 +1759,11 @@ class AnndataAdaptor(DataAdaptor):
             
             self.NAME = {"OBS": {"obs": np.array(list(adata.obs_names)), "var": np.array(list(adata.var_names))},
                          "VAR": {"var": np.array(list(adata.obs_names)), "obs": np.array(list(adata.var_names))}}
+            
+            if "X_root" in adata.obsm.keys():
+                adata.obsm["X_Root"] = adata.obsm["X_root"]
+                del adata.obsm["X_root"]
+
             self.data = adata
             print("Finished loading the data.")
     
@@ -1735,10 +1795,28 @@ class AnndataAdaptor(DataAdaptor):
                 if isinstance(vals[0],np.integer):
                     if (len(set(vals))<500):
                         vals = vals.astype('str')
-                pickle_dumper(vals,"{}/obs/{}.p".format(userID,k.replace('/',':')))
+
+                dtype = vals.dtype
+                dtype_name = dtype.name
+                dtype_kind = dtype.kind
+                if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:
+                    vals = np.array([i.replace('.','_') for i in vals])
+
+                pickle_dumper(vals,"{}/obs/{}.p".format(userID,k.replace('/','_')))
             pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")                                
             for k in self._var_init.keys():
-                pickle_dumper(np.array(list(self._var_init[k])),"{}/var/{}.p".format(userID,k.replace('/',':')))
+                vals = np.array(list(self._var_init[k]))
+                if isinstance(vals[0],np.integer):
+                    if (len(set(vals))<500):
+                        vals = vals.astype('str')
+
+                dtype = vals.dtype
+                dtype_name = dtype.name
+                dtype_kind = dtype.kind
+                if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:
+                    vals = np.array([i.replace('.','_') for i in vals])
+                pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
+
             pickle_dumper(np.array(list(self._var_init.index)),f"{userID}/var/name_0.p")                
 
             for k in self._obsm_init.keys():
@@ -1909,7 +1987,7 @@ class AnndataAdaptor(DataAdaptor):
         mode = userID.split("/")[-1].split("\\")[-1]
         return mode
 
-    def get_X_array(self, col_idx, layer="X", logscale=False):
+    def get_X_array(self, col_idx, layer="X", logscale=False, scale=False):
         def bisym_log_transform(x):
              return np.sign(x)*np.log(1+np.abs(x))
 
@@ -1932,7 +2010,22 @@ class AnndataAdaptor(DataAdaptor):
             x=x[:,None]
             if logscale:
                 x = bisym_log_transform(x)
-            #x=x[row_idx][:,None]                
+            if scale:
+                if mode == "OBS":
+                    std = (self.tMeanSqs["OBS"][layer][i1] - self.tMeans["OBS"][layer][i1]**2)**0.5
+                    if std == 0:
+                        std = 1
+                    x = (x - self.tMeans["OBS"][layer][i1])/std
+                    x[x>10]=10
+                    x[x<0]=0
+                elif mode == "VAR":
+                    mu = self.tMeans["OBS"][layer]
+                    std = (self.tMeanSqs["OBS"][layer] - mu**2)
+                    std[std<=0]=1
+                    std=std**0.5
+                    x = (x - mu[:,None]) / std[:,None]
+                    x[x>10]=10
+                    x[x<0]=0
         else:
             x = XI[:,col_idx]
             if logscale:
@@ -1940,6 +2033,24 @@ class AnndataAdaptor(DataAdaptor):
                     x.data[:] = bisym_log_transform(x.data)
                 else:
                     x = bisym_log_transform(x)
+
+            if scale:
+                x = x.A
+                if mode == "OBS":
+                    std = (self.tMeanSqs["OBS"][layer][col_idx] - self.tMeans["OBS"][layer][col_idx]**2)**0.5
+                    mu = self.tMeans["OBS"][layer][col_idx]
+                    std[std==0]=1
+                    x = (x - mu[None,:])/std[None,:]
+                    x[x>10]=10
+                    x[x<0]=0
+                elif mode == "VAR":
+                    std = (self.tMeanSqs["OBS"][layer] - self.tMeans["OBS"][layer]**2)
+                    mu = self.tMeans["OBS"][layer]
+                    std[std<=0]=1
+                    std=std**0.5
+                    x = (x - mu[:,None])/std[:,None]  
+                    x[x>10]=10
+                    x[x<0]=0         
         return x
 
     def get_shape(self):

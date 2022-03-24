@@ -83,6 +83,7 @@ function createModelTF() {
   screenCap: state.controls.screenCap,
   dataLayerExpr: state.reembedParameters.dataLayerExpr,
   logScaleExpr: state.reembedParameters.logScaleExpr,
+  scaleExpr: state.reembedParameters.scaleExpr,
   pointScaler: state.controls.pointScaler,
   chromeKeyContinuous: state.controls.chromeKeyContinuous,
   chromeKeyCategorical: state.controls.chromeKeyCategorical,
@@ -153,7 +154,7 @@ class Graph extends React.Component {
       if (colorDf && colorMode !== "color by categorical metadata") {
         const col = colorDf.icol(0).asArray();
         for (let i = 0, len = x.length; i < len; i += 1) {
-          if (col[i]===0 && x[i] === _flagSelected){
+          if (col[i]<=0 && x[i] === _flagSelected){
             x[i] = _flagHalfSelected;
           }
         }
@@ -290,6 +291,7 @@ class Graph extends React.Component {
       graphInteractionMode,
       dataLayerExpr,
       logScaleExpr,
+      scaleExpr,
       pointScaler
     } = this.props;
     const { toolSVG, viewport, regl } = this.state;
@@ -304,7 +306,8 @@ class Graph extends React.Component {
       selectionTool !== prevProps.selectionTool || // change of selection tool
       prevProps.graphInteractionMode !== graphInteractionMode  ||// lasso/zoom mode is switched
       prevProps.dataLayerExpr !== dataLayerExpr ||
-      prevProps.logScaleExpr !== logScaleExpr
+      prevProps.logScaleExpr !== logScaleExpr ||
+      prevProps.scaleExpr !== scaleExpr
     ) {
       stateChanges = {
         ...stateChanges,
@@ -1183,6 +1186,7 @@ class Graph extends React.Component {
       screenCap,
       dataLayerExpr,
       logScaleExpr,
+      scaleExpr,
       pointScaler,
       chromeKeyCategorical,
       chromeKeyContinuous
@@ -1316,6 +1320,7 @@ class Graph extends React.Component {
             screenCap,
             dataLayerExpr,
             logScaleExpr,
+            scaleExpr,
             pointScaler,
             chromeKeyCategorical,
             chromeKeyContinuous

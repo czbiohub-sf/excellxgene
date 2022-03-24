@@ -19,6 +19,7 @@ const MINI_HISTOGRAM_WIDTH = 110;
     isScatterplotYYaccessor: state.controls.scatterplotYYaccessor === gene,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr,
+    scaleExpr: state.reembedParameters.scaleExpr,
     userLoggedIn: state.controls.userInfo ? true : false
   };
 })

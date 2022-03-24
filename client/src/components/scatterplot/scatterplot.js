@@ -20,6 +20,7 @@ import {
   flagBackground,
   flagSelected,
   flagHighlight,
+  flagHalfSelected
 } from "../../util/glHelpers";
 
 function createProjectionTF(viewportWidth, viewportHeight) {
@@ -56,6 +57,7 @@ const getYScale = memoize(getScale);
     genesets: state.genesets.genesets,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr,
+    scaleExpr: state.reembedParameters.scaleExpr,
     chromeKeyCategorical: state.controls.chromeKeyCategorical,
     chromeKeyContinuous: state.controls.chromeKeyContinuous
   };
@@ -113,6 +115,25 @@ class Scatterplot extends React.PureComponent {
   });
 
   computeSelectedFlags = memoize(
+    (crossfilter, colorMode, colorDf, _flagSelected, _flagHalfSelected, _flagUnselected ) => {
+      const x = crossfilter.fillByIsSelected(
+        new Float32Array(crossfilter.size()),
+        _flagSelected,
+        _flagUnselected
+      );
+      if (colorDf && colorMode !== "color by categorical metadata") {
+        const col = colorDf.icol(0).asArray();
+        for (let i = 0, len = x.length; i < len; i += 1) {
+          if (col[i]<=0 && x[i] === _flagSelected){
+            x[i] = _flagHalfSelected;
+          }
+        }
+      }
+      return x;
+    }
+  );
+
+  /*computeSelectedFlags = memoize(
     (crossfilter, _flagSelected, _flagUnselected) => {
       const x = crossfilter.fillByIsSelected(
         new Float32Array(crossfilter.size()),
@@ -121,7 +142,7 @@ class Scatterplot extends React.PureComponent {
       );
       return x;
     }
-  );
+  );*/
 
   computeHighlightFlags = memoize(
     (nObs, pointDilationData, pointDilationLabel) => {
@@ -151,7 +172,7 @@ class Scatterplot extends React.PureComponent {
   });
 
   computePointFlags = memoize(
-    (crossfilter, colorByData, pointDilationData, pointDilationLabel) => {
+    (crossfilter, colorByData, colorMode, colorDf, pointDilationData, pointDilationLabel) => {
       /*
       We communicate with the shader using three flags:
       - isNaN -- the value is a NaN. Only makes sense when we have a colorAccessor
@@ -169,8 +190,10 @@ class Scatterplot extends React.PureComponent {
 
       const selectedFlags = this.computeSelectedFlags(
         crossfilter,
+        colorMode,
+        colorDf, 
         flagSelected,
-        0
+        flagHalfSelected        
       );
       const highlightFlags = this.computeHighlightFlags(
         nObs,
@@ -288,9 +311,13 @@ class Scatterplot extends React.PureComponent {
     const pointDilationData = pointDilationDf
       ?.col(pointDilationCategory)
       ?.asArray();
+
+
     const flags = this.computePointFlags(
       crossfilter,
       colorByData,
+      colorsProp.colorMode,
+      colorDf,      
       pointDilationData,
       pointDilationLabel
     );
@@ -318,7 +345,7 @@ class Scatterplot extends React.PureComponent {
       {
         where: {
           field: "var",
-          column: [],
+          column: varIndex,
           value: geneName,
         },
       },
@@ -480,6 +507,7 @@ class Scatterplot extends React.PureComponent {
       pointDilation,
       dataLayerExpr,
       logScaleExpr,
+      scaleExpr,
       chromeKeyCategorical,
       chromeKeyContinuous,
       leftWidth
@@ -567,6 +595,7 @@ class Scatterplot extends React.PureComponent {
               viewport,
               dataLayerExpr,
               logScaleExpr,
+              scaleExpr,
               chromeKeyCategorical,
               chromeKeyContinuous
             }}

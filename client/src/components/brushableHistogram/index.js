@@ -44,6 +44,7 @@ const HEIGHT_MINI = 15 - MARGIN_MINI.TOP - MARGIN_MINI.BOTTOM;
     isColorAccessor: state.colors.colorAccessor === field,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr,
+    scaleExpr: state.reembedParameters.scaleExpr,
     chromeKeyContinuous: state.controls.chromeKeyContinuous
   };
 })
@@ -331,7 +332,7 @@ class HistogramBrush extends React.PureComponent {
           summarize: {
             method: "mean",
             field: "var",
-            column: [],
+            column: varIndex,
             values: setGenes.slice(0,50),
           },
         },
@@ -343,7 +344,7 @@ class HistogramBrush extends React.PureComponent {
       {
         where: {
           field: "var",
-          column: [],
+          column: varIndex,
           value: field,
         },
       },
@@ -369,6 +370,7 @@ class HistogramBrush extends React.PureComponent {
       onRemoveClick,
       dataLayerExpr,
       logScaleExpr,
+      scaleExpr,
       chromeKeyContinuous
     } = this.props;
     let { width } = this.props;
@@ -384,7 +386,7 @@ class HistogramBrush extends React.PureComponent {
       <Async
         watchFn={HistogramBrush.watchAsync}
         promiseFn={this.fetchAsyncProps}
-        watchProps={{ annoMatrix, setGenes, removeHistZeros, dataLayerExpr, logScaleExpr }}
+        watchProps={{ annoMatrix, setGenes, removeHistZeros, dataLayerExpr, logScaleExpr, scaleExpr }}
       >
         <Async.Pending initial>
           <StillLoading displayName={field} zebra={zebra} />

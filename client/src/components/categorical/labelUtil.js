@@ -32,7 +32,7 @@ const errorMessageMap = {
   duplicate: "Name must be unique",
   "trim-spaces": "Leading and trailing spaces not allowed",
   "illegal-characters":
-    "Only alphanumeric and special characters (-_.) allowed",
+    "Only alphanumeric and special characters (-_+) allowed",
   "multi-space-run": "Multiple consecutive spaces not allowed",
 };
 

@@ -51,8 +51,10 @@ class GeneExpression extends React.Component {
   }
 
   handleChangeOrSelect = (name) => {
+    const { nameBeingEdited } = this.state;
+    const suffix = nameBeingEdited.includes('//;;//') ? '//;;//' : ''
     this.setState({
-      newNameText: `${name}//;;//`,
+      newNameText: `${name}${suffix}`,
     });
   };
 
@@ -429,10 +431,17 @@ class GeneExpression extends React.Component {
               marginBottom: "20px",
               display: "flex",
               justifyContent: "right",
+              columnGap: "10px"
             }}>   
-            <span style={{margin: "auto 0", paddingRight: "10px"}}>
+            {/*<span style={{margin: "auto 0", paddingRight: "10px"}}>
             <b>{"Expression options:"}</b>
-            </span>    
+            </span>*/}    
+            <ParameterInput
+              label="Scale genes"
+              param="scaleExpr"
+              tooltipContent={"Check to standardize gene expression across cells."}
+              left
+            />               
             <ParameterInput
               label="Log scale"
               param="logScaleExpr"

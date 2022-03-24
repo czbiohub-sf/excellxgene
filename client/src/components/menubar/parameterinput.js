@@ -80,7 +80,10 @@ class ParameterInput extends React.PureComponent {
                   onChange={() => {
                     if (param === "logScaleExpr"){ 
                       annoMatrix.setLogscale(!params[param])
-                    }       
+                    }    
+                    if (param === "scaleExpr"){ 
+                      annoMatrix.setScaleExpr(!params[param])
+                    }                           
                     if (param === "doSAM"){
                       dispatch({
                         type: "reembed: set parameter",

@@ -107,6 +107,7 @@ export default class AnnoMatrix {
     this._gcInfo = new Map();
     this.layer = "X";
     this.logscale = false;
+    this.scale = false;
     
   }
 
@@ -139,6 +140,15 @@ export default class AnnoMatrix {
       }      
     }    
   }  
+  setScaleExpr(scale) {
+    if (scale !== this.scale){
+      this.scale = scale;
+      this._cache.X = Dataframe.empty(this.rowIndex);
+      if (this.viewOf){
+        this.viewOf.setScaleExpr(scale);
+      }      
+    }    
+  }    
   /**
    ** Schema helper/accessors
    **/
@@ -471,6 +481,7 @@ export default class AnnoMatrix {
   async _fetch(field, q) {
     const layer = this?.layer ?? "X";
     const logscale = this?.logscale ?? false;
+    const scale = this?.scale ?? false;
 
     if (!AnnoMatrix.fields().includes(field)) return undefined;
     const queries = Array.isArray(q) ? q : [q];
@@ -498,7 +509,7 @@ export default class AnnoMatrix {
           this._getPendingLoad(field, query, async (_field, _query) => {
             /* fetch, then index.  _doLoad is subclass interface */
             if (!this._cache[field].hasCol(_query)){
-              const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer, logscale);
+              const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer, logscale, scale);
               this._cache[_field] = this._cache[_field].withColsFrom(df);
               
               this._whereCache = _whereCacheMerge(

@@ -100,7 +100,7 @@ const continuous = (selectorId, colorScale, colorAccessor) => {
     .attr("dy", "1em")
     .style("text-anchor", "middle")
     .style("fill", "white")
-    .text(colorAccessor);
+    .text(colorAccessor.split('//;;//').at(0));
 };
 
 @connect((state) => ({
@@ -109,17 +109,18 @@ const continuous = (selectorId, colorScale, colorAccessor) => {
   genesets: state.genesets.genesets,
   dataLayerExpr: state.reembedParameters.dataLayerExpr,
   logScaleExpr: state.reembedParameters.logScaleExpr,
+  scaleExpr: state.reembedParameters.scaleExpr,
   layoutChoice: state.layoutChoice,
   chromeKeyContinuous: state.controls.chromeKeyContinuous,
   chromeKeyCategorical: state.controls.chromeKeyCategorical
 }))
 class ContinuousLegend extends React.Component {
   async componentDidUpdate(prevProps) {
-    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr, layoutChoice, chromeKeyCategorical, chromeKeyContinuous } = this.props;
+    const { annoMatrix, colors, genesets, dataLayerExpr, logScaleExpr, scaleExpr, layoutChoice, chromeKeyCategorical, chromeKeyContinuous } = this.props;
     if (!colors || !annoMatrix) return;
 
     if (logScaleExpr !== prevProps.logScaleExpr || dataLayerExpr !== prevProps.dataLayerExpr || colors !== prevProps?.colors || annoMatrix !== prevProps?.annoMatrix
-        || layoutChoice.sankey !== prevProps.layoutChoice.sankey || chromeKeyContinuous !== prevProps?.chromeKeyContinuous) {
+        || scaleExpr !== prevProps.scaleExpr || layoutChoice.sankey !== prevProps.layoutChoice.sankey || chromeKeyContinuous !== prevProps?.chromeKeyContinuous) {
       const { schema } = annoMatrix;
       const { colorMode, colorAccessor, userColors } = colors;
 

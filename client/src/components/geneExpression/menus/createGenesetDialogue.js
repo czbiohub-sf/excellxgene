@@ -5,6 +5,8 @@ import { connect } from "react-redux";
 import { Button, Dialog, Classes, Colors } from "@blueprintjs/core";
 import { Tooltip2 } from "@blueprintjs/popover2";
 import LabelInput from "../../labelInput";
+import { AnnotationsHelpers } from "../../../util/stateManager";
+import { labelPrompt } from "../../categorical/labelUtil";
 import actions from "../../../actions";
 
 @connect((state) => ({
@@ -101,11 +103,26 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   instruction = (genesetDescription, genesetName, genesets) => {
-    return this.validate(genesetDescription, genesetName, genesets)
+    const error = AnnotationsHelpers.annotationNameIsErroneous(genesetName);
+    return labelPrompt(
+      error,
+      this.validate(genesetDescription, genesetName, genesets)
       ? "Gene set name must be unique."
-      : "New, unique gene set name";
+      : "New, unique gene set name",
+      ":"
+    );    
   };
-
+  instruction2 = (genesetDescription) => {
+    let error = AnnotationsHelpers.annotationNameIsErroneous(genesetDescription);
+    if (error === "empty-string") {
+      error = false;
+    }
+    return labelPrompt(
+      error,
+      `Optionally add a group name for this gene set`,
+      ":"
+    );    
+  };
   validate = (genesetDescription, genesetName, genesets) => {
     if (genesetDescription in genesets) {
       if (genesetName in genesets[genesetDescription]) {
@@ -114,6 +131,18 @@ class CreateGenesetDialogue extends React.PureComponent {
     }
     return false;
   };
+
+  validate1 = (genesetName) => {
+    return AnnotationsHelpers.annotationNameIsErroneous(genesetName)
+  }
+
+  validate2 = (genesetDescription) => {
+    let error = AnnotationsHelpers.annotationNameIsErroneous(genesetDescription);
+    if (error === "empty-string") {
+      error = false;
+    }
+    return error;
+  }
 
   render() {
     const { genesetDescription, genesetName } = this.state;
@@ -157,9 +186,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                   {this.genesetNameError()}
                 </p>
                 <p style={{ marginTop: 20 }}>
-                  Optionally add a{" "}
-                  <span style={{ fontWeight: 700 }}>group name</span> for this
-                  gene set
+                  {this.instruction2(genesetDescription)}
                 </p>
                 <LabelInput
                   onChange={this.handleDescriptionInputChange}
@@ -202,7 +229,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                   data-testid={`${metadataField}:submit-geneset`}
                   onClick={this.createGeneset}
                   disabled={
-                    !genesetName || this.validate(genesetDescription, genesetName, genesets)
+                    !genesetName || this.validate(genesetDescription, genesetName, genesets) || this.validate1(genesetName) || this.validate2(genesetDescription)
                   }
                   intent="primary"
                   type="submit"

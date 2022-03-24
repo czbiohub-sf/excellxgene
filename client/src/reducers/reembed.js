@@ -95,6 +95,7 @@ const defaultDimredParams = {
   umapMinDist: 0.1,
   dataLayerExpr: "X",
   logScaleExpr: false,
+  scaleExpr: false,
   embeddingMode: "Preprocess and run",
   latentSpace: "",
   calculateSamWeights: false
@@ -108,10 +109,10 @@ export const defaultReembedParams = {
 export const reembedParameters = (state = defaultReembedParams, action) => {
   switch (action.type) {
     case "reembed: load": {
-      const { dataLayerExpr: layerExpr, logScaleExpr: logExpr } = state;
+      const { dataLayerExpr: layerExpr, logScaleExpr: logExpr, scaleExpr: scExpr } = state;
       const { params } = action;
-      const {dataLayerExpr: a, logScaleExpr: b, ...newParams} = params;
-      return {...newParams, dataLayerExpr: layerExpr, logScaleExpr: logExpr};
+      const {dataLayerExpr: a, logScaleExpr: b, scaleExpr: c, ...newParams} = params;
+      return {...newParams, dataLayerExpr: layerExpr, logScaleExpr: logExpr, scaleExpr: scExpr};
     }
     case "reembed: set parameter": {
       const { batchPrepParams, batchPrepKey, batchPrepLabel } = state;

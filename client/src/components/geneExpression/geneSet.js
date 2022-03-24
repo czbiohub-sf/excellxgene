@@ -341,7 +341,7 @@ class GeneSet extends React.Component {
           >
             <Truncate
               tooltipAddendum={
-                genesetDescription ? `: ${genesetDescription}` : ""
+                genesetDescription ? `: ${genesetDescription.split('//;;//').at(0)}` : ""
               }
             >
               <span

@@ -54,7 +54,7 @@ class LeftSideBar extends React.Component {
       cxgMode,
       userLoggedIn
     } = this.props;
-    const { warningDialog } = this.state;
+    const { warningDialog, loading } = this.state;
     return (
       <div
         style={{
@@ -82,6 +82,7 @@ class LeftSideBar extends React.Component {
             cell
             </span>
             <AnchorButton 
+            loading={loading}
             style={{lineHeight: 0,
                     marginTop: "-5px",
                     marginLeft: "5px",
@@ -91,6 +92,7 @@ class LeftSideBar extends React.Component {
                     paddingBottom: "0px",
                     paddingTop: "0px"}}
               onClick={async ()=>{
+                this.setState({loading: true})
                 await fetch(
                   `${globals.API.prefix}${globals.API.version}switchCxgMode`,
                   {credentials: "include"}

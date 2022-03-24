@@ -74,14 +74,15 @@ Private
 */
 
 function dropGenesetSummaryDimension(obsCrossfilter, state, genesetDescription, genesetName) {
-  const { genesets } = state;
+  const { genesets, annoMatrix } = state;
+  const varIndex = annoMatrix.schema.annotations?.var?.index;
   const gs = genesets?.genesets?.[genesetDescription] ?? {};
   const genes = gs?.[genesetName] ?? [];
   const query = {
     summarize: {
       method: "mean",
       field: "var",
-      column: [],
+      column: varIndex,
       values: genes,
     },
   };
@@ -94,7 +95,7 @@ function dropGeneDimension(obsCrossfilter, state, gene) {
   const query = {
     where: {
       field: "var",
-      column: [],
+      column: varIndex,
       value: gene,
     },
   };
