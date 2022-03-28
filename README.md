@@ -18,7 +18,6 @@ bash ~/miniconda.sh -b -p $HOME/miniconda
 ```
 conda create -n cxg python=3.8
 conda activate cxg
-conda install tbb=2020.3 tbb-devel=2020.3
 ```
 
 3. Install excellxgene with pip:
