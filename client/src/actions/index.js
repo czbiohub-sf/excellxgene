@@ -972,7 +972,6 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
       set2: { filter: { obs: { index: set2 } } },
       multiplex: false,
       layer: annoMatrix.layer,
-      logscale: annoMatrix.logscale,
       scale: annoMatrix.scale,
       groupName: new Date().toLocaleString().replace(/\//g,"_")
 
@@ -1039,7 +1038,6 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
             dateString: dateString,
             nameList: allCategories,
             layer: annoMatrix.layer,
-            logscale: annoMatrix.logscale,
             scale: annoMatrix.scale,            
             category: cat,
             num: z,

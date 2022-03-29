@@ -20,7 +20,10 @@ import {
   _urlEncodeComplexQuery,
   _hashStringValues,
 } from "./query";
-
+import {
+  Dataframe,
+  IdentityInt32Index,
+} from "../util/dataframe";
 const promiseThrottle = new PromiseLimit(5);
 
 export default class AnnoMatrixLoader extends AnnoMatrix {
@@ -262,14 +265,26 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
         priority = 0; // high prio load for embeddings
         break;
       }
+      case "jemb": {
+        doRequest = _embLoader(this.baseURL, field, query);
+        priority = 0; // high prio load for embeddings
+        break;
+      }      
       default:
         throw new Error("Unknown field name");
     }
 
     const buffer = await promiseThrottle.priorityAdd(priority, doRequest);
-    const result = matrixFBSToDataframe(buffer);    
+    let result = matrixFBSToDataframe(buffer);    
     if (!result || result.isEmpty()) throw Error("Unknown field/col");
-
+    if (field==="emb" && result.length > this.schema.dataframe.nObs) {
+      result = result.isubset([...Array(this.schema.dataframe.nObs).keys()]) 
+    }
+    if (field==="jemb" && result.length > this.schema.dataframe.nObs) {
+      result = result.isubset([...Array.from({length: (result.length - this.schema.dataframe.nObs)}, (_, i) => i + this.schema.dataframe.nObs)])    
+    } else if (field === "jemb"){
+      result = Dataframe.empty(new IdentityInt32Index(this.schema.dataframe.nVar))      
+    }
     const whereCacheUpdate = _whereCacheCreate(
       field,
       query,

@@ -159,7 +159,7 @@ class MenuBar extends React.PureComponent {
       revealSankeyDialog: false,
       sankeyMethod: "Graph alignment",
       samHVG: false,
-      numGenes: 2000,
+      numGenes: 3000,
       dataLayer: "X",
       geneMetadata: "sam_weights",
       numEdges: 5,
@@ -167,7 +167,7 @@ class MenuBar extends React.PureComponent {
     };
   }
 
-  handleSankey = (threshold,reset,params={sankeyMethod: "Graph alignment",numGenes: 2000, samHVG: false, dataLayer: "X", geneMetadata: "sam_weights", numEdges: 5}) => {
+  handleSankey = (threshold,reset,params={sankeyMethod: "Graph alignment",numGenes: 3000, samHVG: false, dataLayer: "X", geneMetadata: "sam_weights", numEdges: 5}) => {
     const { dispatch, layoutChoice, geneSelection } = this.props;
     if (params['sankeyMethod'] === "Correlation (selected genes)"){
       params["selectedGenes"] = geneSelection

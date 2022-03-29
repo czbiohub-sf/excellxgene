@@ -96,9 +96,6 @@ def can_cast_to_float32(dtype, array_values):
     """
 
     if dtype.kind == "f":
-        if not np.can_cast(dtype, np.float32):
-            logging.warning(f"Type {dtype.name} will be converted to 32 bit float and may lose precision.")
-
         return True
 
     if dtype.kind == "O" and pd.Series(array_values).hasnans:

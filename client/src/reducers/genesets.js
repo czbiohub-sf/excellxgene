@@ -30,7 +30,8 @@ const GeneSets = (
     lastTid: undefined,
     genesets: {},
     diffExpListsLists: [],
-    diffExpListsNames: []
+    diffExpListsNames: [],
+    selectedGenesLasso: []
   },
   action
 ) => {
@@ -269,8 +270,12 @@ const GeneSets = (
         ...state,
         genesets,
       };
+    } case "set other mode selection": {
+      return {
+        ...state,
+        selectedGenesLasso: action.selected
+      }
     }
-
     /**
      * Used by autosave to update the server synchronization TID
      */

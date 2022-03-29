@@ -52,7 +52,7 @@ export default class AnnoMatrix {
     /*
     return the fields present in the AnnoMatrix instance.
     */
-    return ["obs", "var", "emb", "X", "layers", "latent_spaces", "initial_embeddings"];
+    return ["obs", "var", "emb", "jemb", "X", "layers", "latent_spaces", "initial_embeddings"];
   }
 
   constructor(schema, nObs, nVar, rowIndex = null) {
@@ -95,12 +95,14 @@ export default class AnnoMatrix {
       obs: Dataframe.empty(this.rowIndex),
       var: Dataframe.empty(this.rowIndex),
       emb: Dataframe.empty(this.rowIndex),
+      jemb: Dataframe.empty(new IdentityInt32Index(nVar)),
       X: Dataframe.empty(this.rowIndex),
     };
     this._pendingLoad = {
       obs: {},
       var: {},
       emb: {},
+      jemb: {},
       X: {},
     };
     this._whereCache = {};
@@ -501,7 +503,6 @@ export default class AnnoMatrix {
           }
       )
     );
-
     /* load uncached queries */
     if (uncachedQueries.length > 0) {
       await Promise.all(
@@ -510,6 +511,7 @@ export default class AnnoMatrix {
             /* fetch, then index.  _doLoad is subclass interface */
             if (!this._cache[field].hasCol(_query)){
               const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer, logscale, scale);
+              
               this._cache[_field] = this._cache[_field].withColsFrom(df);
               
               this._whereCache = _whereCacheMerge(
@@ -645,7 +647,7 @@ export default class AnnoMatrix {
     or false if we are in some other context (eg, history state).
     */
     const { isHot } = hints;
-    const candidateFields = isHot ? ["X"] : ["X", "emb", "var", "obs"];
+    const candidateFields = isHot ? ["X"] : ["X", "emb", "jemb", "var", "obs"];
     candidateFields.forEach((field) =>
       this._gcField(field, isHot, _getWritableColumns(this.schema, field))
     );
@@ -677,13 +679,14 @@ export default class AnnoMatrix {
 
   Do not override _clone();
   **/
-  _cloneDeeper(clone) {
+  _cloneDeeper(clone) {    
     clone._cache = _shallowClone(this._cache);
     clone._gcInfo = new Map();
     clone._pendingLoad = {
       obs: {},
       var: {},
       emb: {},
+      jemb: {},
       X: {},
     };
     return clone;

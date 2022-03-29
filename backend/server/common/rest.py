@@ -724,7 +724,21 @@ def delete_obsm_put(request, data_adaptor):
     embNames = args.get("embNames",None)
     fail=False
     userID = _get_user_id(data_adaptor)
+    ID = userID.split('/')[0].split('\\')[0]
+    paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
+
     if embNames is not None:
+        for embName in embNames:
+            if embName in paired_embeddings:
+                k1 = paired_embeddings[embName]
+                k2 = embName
+                del paired_embeddings[k1]
+                try:
+                    del paired_embeddings[k2]
+                except:
+                    pass
+                pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")                
+
         for embName in embNames:
             if os.path.exists(f"{userID}/emb/{embName}.p"):
                 os.remove(f"{userID}/emb/{embName}.p")
@@ -791,9 +805,6 @@ def _can_cast_to_float32(dtype, array_values):
     """
 
     if dtype.kind == "f":
-        if not np.can_cast(dtype, np.float32):
-            logging.warning(f"Type {dtype.name} will be converted to 32 bit float and may lose precision.")
-
         return True
 
     if dtype.kind == "O" and pd.Series(array_values).hasnans:
@@ -837,11 +848,15 @@ def switch_cxg_mode(request,data_adaptor):
             os.makedirs(f"{ID}/VAR/var/")
             os.makedirs(f"{ID}/VAR/diff/")   
             os.makedirs(f"{ID}/VAR/output/")  
-            pickle_dumper(np.zeros((data_adaptor.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
+            
         newMode = "VAR"
     else:
         newMode = "OBS"
 
+    if len(glob(f"{ID}/VAR/emb/*.p")) == 0:
+        pickle_dumper(np.zeros((data_adaptor.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
+    if len(glob(f"{ID}/OBS/emb/*.p")) == 0:
+        pickle_dumper(np.zeros((data_adaptor.data.shape[0],2)),f"{ID}/OBS/emb/root.p")
 
     pathOld = userID
     pathNew = ID+"/"+newMode
@@ -921,7 +936,13 @@ def switch_cxg_mode(request,data_adaptor):
             C = np.array(C)
             O = np.array(O)
             d = _df_to_dict(O,C)
-            C = np.array(['.'.join(d[k]) for k in d])
+
+            for kk in d.keys():
+                if len(d[kk])>1:
+                    d[kk] = d[kk][np.argmin(np.array([np.where(np.array(genesets[key1][mm])==kk)[0][0] for  mm in d[kk]]))]
+                else:
+                    d[kk] = d[kk][0]
+            C = np.array(list(d.values()))
             O = np.array(list(d.keys()))
             
             f = np.in1d(v,O,invert=True)
@@ -948,6 +969,7 @@ def switch_cxg_mode(request,data_adaptor):
             else:
                 tlay = ""
             if embName == tlay:
+                ann = ann.split(';;')[0]
                 var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
     
     for ann in fns:
@@ -1104,11 +1126,25 @@ def rename_obsm_put(request, data_adaptor):
     oldName = args.get("oldName",None)
     newName = args.get("newName",None)
     userID = _get_user_id(data_adaptor)
+    ID = userID.split('/')[0].split('\\')[0]
+    paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
 
-    
     if embNames is not None and oldName is not None and newName is not None:
         for embName in embNames:
-            newItem = rename_wrapper(embName,oldName,newName)            
+            newItem = rename_wrapper(embName,oldName,newName)                        
+            if embName in paired_embeddings:
+                k1 = paired_embeddings[embName]
+                k2 = embName
+                del paired_embeddings[k1]; 
+                try:
+                    del paired_embeddings[k2]
+                except:
+                    pass
+                paired_embeddings[newItem] = k1
+                paired_embeddings[k1] = newItem
+                pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")                                          
+        
+            newItem = rename_wrapper(embName,oldName,newName)                        
             if os.path.exists(f"{userID}/emb/{embName}.p"):
                 os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{newItem}.p")
             if os.path.exists(f"{userID}/nnm/{embName}.p"):

@@ -28,6 +28,28 @@ import {
   flagHalfSelected
 } from "../../util/glHelpers";
 
+function withinPolygon(polygon, x, y) {
+  const n = polygon.length;
+  let p = polygon[n - 1];
+  let x0 = p[0];
+  let y0 = p[1];
+  let x1;
+  let y1;
+  let inside = false;
+
+  for (let i = 0; i < n; i += 1) {
+    p = polygon[i];
+    x1 = p[0];
+    y1 = p[1];
+
+    if (y1 > y !== y0 > y && x < ((x0 - x1) * (y - y1)) / (y0 - y1) + x1)
+      inside = !inside;
+    x0 = x1;
+    y0 = y1;
+  }
+  return inside;
+}
+
 /*
 Simple 2D transforms control all point painting.  There are three:
   * model - convert from underlying per-point coordinate to a layout.
@@ -57,7 +79,16 @@ function createProjectionTF(viewportWidth, viewportHeight) {
   mat3.scale(m, m, aspectScale);
   return m;
 }
+function Float32Concat(first, second)
+{
+    var firstLength = first.length,
+        result = new Float32Array(firstLength + second.length);
 
+    result.set(first);
+    result.set(second, firstLength);
+
+    return result;
+}
 function createModelTF() {
   /*
   preallocate coordinate system transformation between data and gl.
@@ -87,6 +118,8 @@ function createModelTF() {
   pointScaler: state.controls.pointScaler,
   chromeKeyContinuous: state.controls.chromeKeyContinuous,
   chromeKeyCategorical: state.controls.chromeKeyCategorical,
+  cxgMode: state.controls.cxgMode,
+  allGenes: state.controls.allGenes.__columns[0]
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -102,7 +135,6 @@ class Graph extends React.Component {
     const pointBuffer = regl.buffer();
     const colorBuffer = regl.buffer();
     const flagBuffer = regl.buffer();
-
     return {
       camera,
       regl,
@@ -133,12 +165,12 @@ class Graph extends React.Component {
     return positions;
   });
 
-  computePointColors = memoize((rgb) => {
+  computePointColors = memoize((rgb, nPoints) => {
     /*
     compute webgl colors for each point
     */
-    const colors = new Float32Array(3 * rgb.length);
-    for (let i = 0, len = rgb.length; i < len; i += 1) {
+    const colors = new Float32Array(3 * nPoints);
+    for (let i = 0, len = nPoints; i < len; i += 1) {
       colors.set(rgb[i], 3 * i);
     }
     return colors;
@@ -241,7 +273,7 @@ class Graph extends React.Component {
       tool: null,
       container: null,
       viewport,
-
+      selectedOther: [],
       // projection
       camera: null,
       modelTF,
@@ -258,6 +290,7 @@ class Graph extends React.Component {
       pointBuffer: null,
       colorBuffer: null,
       flagBuffer: null,
+      nPoints: null,
 
       // component rendering derived state - these must stay synchronized
       // with the reducer state they were generated from.
@@ -299,7 +332,6 @@ class Graph extends React.Component {
       prevState.viewport.height !== viewport.height ||
       prevState.viewport.width !== viewport.width;// || graphWidth !== prevProps.graphWidth;
     let stateChanges = {};
-    
     if (
       (viewport.height && viewport.width && !toolSVG) || // first time init
       hasResized || //  window size has changed we want to recreate all SVGs
@@ -497,18 +529,64 @@ class Graph extends React.Component {
     dispatch(actions.graphLassoStartAction(layoutChoice.current));
   }
 
+  polygonBoundingBox = (polygon) => {
+    let minX = Number.MAX_VALUE;
+    let minY = Number.MAX_VALUE;
+    let maxX = Number.MIN_VALUE;
+    let maxY = Number.MIN_VALUE;
+    for (let i = 0, l = polygon.length; i < l; i += 1) {
+      const point = polygon[i];
+      const [x, y] = point;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return [minX, minY, maxX, maxY];
+  }
+  selectWithinPolygon(polygon,multiselect) {
+    const { selectedOther } = this.state;
+    const { dispatch, allGenes } = this.props;
+    const [minX, minY, maxX, maxY] = this.polygonBoundingBox(polygon);
+    const { positions2: positions } = this.state;
+    const [X,Y] = positions;
+    const I = [];
+    let i = 0;
+    for (let z = 0; z < X.length; z+=1) {
+      const x = X[z]
+      const y = Y[z]
+      if (!(x < minX || x > maxX || y < minY || y > maxY)) {
+        if (withinPolygon(polygon,x,y)){
+          I.push(i)
+        }
+      }
+      i+=1;
+    }
+    if (multiselect) {
+      this.setState({selectedOther: [...new Set([...I, ...(selectedOther ?? [])])]})
+    } else {
+      this.setState({selectedOther: I})
+    }
+    dispatch({type: "set other mode selection", selected: I.map((item)=>allGenes[item])})        
+  }
+
   // when a lasso is completed, filter to the points within the lasso polygon
   handleLassoEnd(polygon) {
     const minimumPolygonArea = 10;
     const { dispatch, layoutChoice, multiselect } = this.props;
-
+    const { positions2: positions } = this.state;
     if (
       polygon.length < 3 ||
       Math.abs(d3.polygonArea(polygon)) < minimumPolygonArea
     ) {
       // if less than three points, or super small area, treat as a clear selection.
       dispatch(actions.graphLassoDeselectAction(layoutChoice.current));
+      this.setState({selectedOther: []})
+      dispatch({type: "set other mode selection", selected: []})    
     } else {
+        if (positions) {
+          this.selectWithinPolygon(polygon.map((xy) => this.mapScreenToPoint(xy)), multiselect)
+        }      
       dispatch(
         actions.graphLassoEndAction(
           layoutChoice.current,
@@ -622,11 +700,13 @@ class Graph extends React.Component {
       screenCap,
       pointScaler,
       chromeKeyCategorical,
-      chromeKeyContinuous
+      chromeKeyContinuous,
+      selectedOther
     } = props.watchProps;
     if (!(modifyingLayouts)){
       const { modelTF } = this.state;
-      const [layoutDf, colorDf, pointDilationDf] = await this.fetchData(
+
+      const [layoutDf, layoutDf2, colorDf, pointDilationDf] = await this.fetchData(
         annoMatrix,
         layoutChoice,
         colorsProp,
@@ -635,10 +715,10 @@ class Graph extends React.Component {
       const { currentDimNames } = layoutChoice;
       const X = layoutDf.col(currentDimNames[0]).asArray();
       const Y = layoutDf.col(currentDimNames[1]).asArray();
+      let positions = this.computePointPositions(X, Y, modelTF);
 
-      const positions = this.computePointPositions(X, Y, modelTF);
       const colorTable = this.updateColorTable(colorsProp, colorDf);
-      const colors = this.computePointColors(colorTable.rgb);
+      let colors = this.computePointColors(colorTable.rgb, annoMatrix.nObs);
 
       const { colorAccessor } = colorsProp;
       const colorByData = colorDf?.col(colorAccessor)?.asArray();
@@ -651,7 +731,7 @@ class Graph extends React.Component {
         ?.col(pointDilationCategory)
         ?.asArray();
 
-      const flags = this.computePointFlags(
+      let flags = this.computePointFlags(
         crossfilter,
         colorByData,
         colorsProp.colorMode,
@@ -659,12 +739,52 @@ class Graph extends React.Component {
         pointDilationData,
         pointDilationLabel
       );
-      this.setState((state) => {
-        return { ...state, colorState: { colors, colorDf, colorTable } };
-      });
 
       const { width, height } = viewport;
+      let nPoints = annoMatrix.nObs;
+      if (layoutDf2.__columns.length > 0) {
+        const X2 = layoutDf2.col(currentDimNames[0]).asArray();
+        const Y2 = layoutDf2.col(currentDimNames[1]).asArray();
+        const positions2 = this.computePointPositions(X2, Y2, modelTF);
+        this.setState({...this.state, positions2: [X2,Y2]})
+        positions = Float32Concat(positions,positions2);
 
+        const flags2 = new Float32Array(layoutDf2.length)
+        flags2.forEach((_item,index)=>{
+          if (selectedOther.length === 0) {
+            flags2[index] = flagHalfSelected;
+          } else {
+            flags2[index] = null;
+          }
+          
+        })
+        selectedOther.forEach((item)=>{
+          flags2[item] = flagHalfSelected
+        })
+        flags = Float32Concat(flags,flags2)
+        
+        const { cxgMode } = this.props;
+        const colors2 = new Float32Array(3 * layoutDf2.length);
+        for (let i = 0, len = layoutDf2.length; i < len; i += 1) {
+          if (cxgMode === "OBS") {
+            if (!flags2[i]) {
+              colors2.set([0.5,0,0], 3 * i);
+            } else {
+              colors2.set([1,0,0], 3 * i);
+            }
+          } else {
+            if (!flags2[i]) {
+              colors2.set([0,0,0.5], 3 * i);
+            } else {
+              colors2.set([0,0,1], 3 * i);
+            }          } 
+        }
+        colors = Float32Concat(colors,colors2) 
+        nPoints = nPoints + annoMatrix.nVar;       
+      }
+      this.setState((state) => {
+        return { ...state, colorState: { colors, colorDf, colorTable }, nPoints: nPoints };
+      });
 
       return {
         positions,
@@ -675,7 +795,8 @@ class Graph extends React.Component {
         screenCap,
         pointScaler,
         chromeKeyCategorical,
-        chromeKeyContinuous
+        chromeKeyContinuous,
+        layoutChoice
       };
     } else {
       return this.cachedAsyncProps;
@@ -694,6 +815,7 @@ class Graph extends React.Component {
     const promises = [];
     // layout 
     promises.push(annoMatrix.fetch("emb", layoutChoice.current));
+    promises.push(annoMatrix.fetch("jemb", layoutChoice.current))
     // color
     const query = this.createColorByQuery(colors);
     if (query) {
@@ -884,6 +1006,7 @@ class Graph extends React.Component {
       flagBuffer,
       camera,
       projectionTF,
+      nPoints
     } = this.state;
     const { screenCap } = this.props;
     this.renderPoints(
@@ -894,7 +1017,8 @@ class Graph extends React.Component {
       flagBuffer,
       camera,
       projectionTF,
-      screenCap
+      screenCap,
+      nPoints
     );
   });
 
@@ -1131,12 +1255,12 @@ class Graph extends React.Component {
     flagBuffer,
     camera,
     projectionTF,
-    screenCap
+    screenCap,
+    nPoints
   ) {
     const { annoMatrix, dispatch, layoutChoice, pointScaler } = this.props;
     if (!this.reglCanvas || !annoMatrix) return;
 
-    const { schema } = annoMatrix;
     const cameraTF = camera.view();
     const projView = mat3.multiply(mat3.create(), projectionTF, cameraTF);
     const { width, height } = this.reglCanvas;
@@ -1150,9 +1274,9 @@ class Graph extends React.Component {
       color: colorBuffer,
       position: pointBuffer,
       flag: flagBuffer,
-      count: annoMatrix.nObs,
+      count: nPoints,
       projView,
-      nPoints: schema.dataframe.nObs,
+      nPoints: nPoints,
       minViewportDimension: Math.min(width, height),
     }, pointScaler
     );
@@ -1171,6 +1295,11 @@ class Graph extends React.Component {
       });                
     }
     regl._gl.flush();
+
+    if (nPoints <= annoMatrix.nObs) {
+      this.setState({...this.state,positions2: null, selectedOther: []})
+      dispatch({type: "set other mode selection", selected: []})  
+    }
   }
 
   render() {
@@ -1201,7 +1330,8 @@ class Graph extends React.Component {
       viewport,
       regl,
       lidarRadius,
-      renderedMetadata
+      renderedMetadata,
+      selectedOther
     } = this.state;
     const radius = lidarRadius ?? 20;
     const cameraTF = camera?.view()?.slice();
@@ -1323,7 +1453,8 @@ class Graph extends React.Component {
             scaleExpr,
             pointScaler,
             chromeKeyCategorical,
-            chromeKeyContinuous
+            chromeKeyContinuous,
+            selectedOther
           }}
         >
           <Async.Pending initial>

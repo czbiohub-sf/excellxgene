@@ -8,10 +8,12 @@ import scipy as sp
 import traceback
 from pandas.core.dtypes.dtypes import CategoricalDtype
 from scipy import sparse
+from sklearn.preprocessing import StandardScaler
 from server_timing import Timing as ServerTiming
 import igraph as ig
 import leidenalg
 import time
+from sklearn.decomposition import PCA
 import os
 import gc
 from glob import glob
@@ -44,10 +46,12 @@ from hashlib import blake2b
 from functools import wraps
 from multiprocessing import current_process, set_start_method, resource_tracker
 from os.path import exists
-import sklearn.utils.sparsefuncs as sf
 from numba import njit, prange, config, threading_layer
 from numba.core import types
 from numba.typed import Dict
+from sklearn.utils import check_array, check_random_state, sparsefuncs as sf
+from sklearn.utils.validation import _check_psd_eigenvalues
+from sklearn.utils.extmath import svd_flip
 
 
 
@@ -64,6 +68,96 @@ global process_count
 process_count = 0
 
 anndata_version = version.parse(str(anndata.__version__)).release
+
+def _init_arpack_v0(size, random_state):
+    random_state = check_random_state(random_state)
+    v0 = random_state.uniform(-1, 1, size)
+    return v0
+
+def kpca(XL,npcs=150,seed=0,which='LA'):
+    random_init = _init_arpack_v0(XL.shape[1],seed)
+    w, u = sp.sparse.linalg.eigsh(XL, which=which, k=npcs, v0=random_init)
+    u, _ = svd_flip(u,np.zeros_like(u).T)
+
+    indices = w.argsort()[::-1]
+    w = w[indices]
+    u = u[:, indices]*w**0.5
+    w= _check_psd_eigenvalues(w,enable_warnings=False) 
+    return u
+
+def kernel_svd(K, k=100, seed=0):
+    K = check_array(K, accept_sparse=['csr', 'csc'])
+    K=(K+K.T)/2
+    H = get_centering_operator(K)
+    XL = get_linear_operator((H,K,H))
+    return kpca(XL,npcs=k,seed=seed)
+
+def get_centering_operator(X):
+    ones = np.ones(X.shape[0])[None, :].dot
+    onesT = np.ones(X.shape[0])[:, None].dot    
+    O = sp.sparse.diags(np.ones(X.shape[0])).tocsr()
+
+    def p(x):
+        return O.dot(x) - onesT(ones(x))/X.shape[0]
+
+    H = sp.sparse.linalg.LinearOperator(
+        matvec=p,
+        dtype=X.dtype,
+        matmat=p,
+        shape=(X.shape[0],X.shape[0]),
+        rmatvec=p,
+        rmatmat=p,
+    )
+    return H
+
+def get_linear_operator(matrices):
+    def p(x):
+        v = matrices[-1].dot(x)
+        for m in matrices[::-1][1:]:
+            v = m.dot(v)
+        return v
+    
+    def pt(x):
+        v = matrices[0].T.dot(x)
+        for m in matrices[1:]:
+            v = m.T.dot(v)
+        return v
+    
+    H = sp.sparse.linalg.LinearOperator(
+        matvec=p,
+        dtype=matrices[0].dtype,
+        matmat=p,
+        shape=(matrices[0].shape[0],matrices[-1].shape[1]),
+        rmatvec=pt,
+        rmatmat=pt,
+    ) 
+    return H
+
+
+def sparse_knn(D, k, mu):
+    D1 = D.tocoo()
+    idr = np.argsort(D1.row)
+    D1.row[:] = D1.row[idr]
+    D1.col[:] = D1.col[idr]
+    D1.data[:] = D1.data[idr]
+
+    _, ind = np.unique(D1.row, return_index=True)
+    ind = np.append(ind, D1.data.size)
+    for i in range(ind.size - 1):
+        idx = np.argsort(D1.data[ind[i] : ind[i + 1]] - mu[D1.col[ind[i] : ind[i+1]]])
+        if idx.size > k:
+            idx = idx[:-k]
+            D1.data[np.arange(ind[i], ind[i + 1])[idx]] = 0
+    D1.eliminate_zeros()
+    return D1
+
+def mima(X1):
+    x,y = X1.nonzero()
+    data = X1.data
+    mi = X1.min(0).A.flatten()
+    ma = X1.max(0).A.flatten()
+    X1.data[:] = (data - mi[y])/(ma[y]-mi[y])
+    
 
 def desktop_mode_only(f):
     @wraps(f)
@@ -146,12 +240,7 @@ def _error_callback(e, ws, cfn, pid):
         pass
     traceback.print_exception(type(e), e, e.__traceback__)
 
-def sparse_scaler(X,logscale=False,scale=False, mode="OBS", mu=None, std=None):
-    def bisym_log_transform(x):
-        return np.sign(x)*np.log(1+np.abs(x))
-    if logscale:
-        X.data[:] = bisym_log_transform(X.data)
-        X.eliminate_zeros()
+def sparse_scaler(X,scale=False, mode="OBS", mu=None, std=None):
     if scale:
         x,y = X.nonzero()
         if mode == "OBS":
@@ -166,9 +255,7 @@ def sparse_scaler(X,logscale=False,scale=False, mode="OBS", mu=None, std=None):
             X.data[X.data>10]=10
         X.data[X.data<0]=0
         
-        
-
-def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, logscale, scale, tMeanObs, tMeanSqObs):
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, scale, tMeanObs, tMeanSqObs):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
@@ -187,7 +274,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             if (nA < CUTOFF):
                 XI = _read_shmem(shm,shm_csc,layer,format="csr",mode=mode)
                 XS = XI[iA]
-                sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
+                sparse_scaler(XS,scale=scale,mode=mode,mu=mu,std=std)
                 n = XI.shape[0]
                 meanA,vA = sf.mean_variance_axis(XS,axis=0)
                 meanAsq = vA-meanA**2
@@ -197,7 +284,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
                 n = XI.shape[0]
 
                 meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA,
-                                                mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
+                                                mu=mu,std=std,mode=mode,scale=scale)
                 meanA/=nA
                 meanAsq/=nA
                 vA = meanAsq - meanA**2
@@ -211,7 +298,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             if (nB < CUTOFF):
                 XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
                 XS = XI[iB]
-                sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
+                sparse_scaler(XS,scale=scale,mode=mode,mu=mu,std=std)
                 n = XI.shape[0]
                 meanB,vB = sf.mean_variance_axis(XS,axis=0)    
                 meanBsq = vB-meanB**2
@@ -221,7 +308,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
                 n = XI.shape[0]
 
                 meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB,
-                                                mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
+                                                mu=mu,std=std,mode=mode,scale=scale)
                 meanB/=nB
                 meanBsq/=nB
                 vB = meanBsq - meanB**2
@@ -234,7 +321,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
         if (nA < CUTOFF):
             XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
             XS = XI[iA]
-            sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
+            sparse_scaler(XS,scale=scale,mode=mode,mu=mu,std=std)
             n = XI.shape[0]
             meanA,vA = sf.mean_variance_axis(XS,axis=0)    
         else:
@@ -242,7 +329,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             n = XI.shape[0]
 
             meanA,meanAsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iA,niA,
-                                            mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
+                                            mu=mu,std=std,mode=mode,scale=scale)
             meanA/=nA
             meanAsq/=nA
             vA = meanAsq - meanA**2
@@ -251,7 +338,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
         if (nB < CUTOFF):
             XI = _read_shmem(shm, shm_csc, layer, format="csr", mode=mode)
             XS = XI[iB]
-            sparse_scaler(XS,logscale=logscale,scale=scale,mode=mode,mu=mu,std=std)
+            sparse_scaler(XS,scale=scale,mode=mode,mu=mu,std=std)
             n = XI.shape[0]
             meanB,vB = sf.mean_variance_axis(XS,axis=0)    
         else:
@@ -259,7 +346,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
             n = XI.shape[0]
 
             meanB,meanBsq = _partial_summer(XI.data,XI.indices,XI.indptr,XI.shape[1],iB,niB,
-                                            mu=mu,std=std,mode=mode,logscale=logscale,scale=scale)
+                                            mu=mu,std=std,mode=mode,scale=scale)
             meanB/=nB
             meanBsq/=nB
             vB = meanBsq - meanB**2
@@ -389,106 +476,304 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             X = _read_shmem(shm,shm_csc,k,format="csr",mode=mode)
             adata.layers[k] = X[filt]
 
-    adata.write_h5ad(f"{userID}/output/{userID}_{currentLayout.replace(';','_')}.h5ad")
-    return f"{userID}/{currentLayout.replace(';','_')}.h5ad"
+    adata.write_h5ad(f"{userID}/output/{currentLayout.replace(';','_')}.h5ad")
+    return f"{userID}/output/{currentLayout.replace(';','_')}.h5ad"
 
-def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):    
+def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
+    for k in list(adata.obsm.keys()):
+        del adata.obsm[k]
+    
+    doSAM = reembedParams.get("doSAM",False)
+    nTopGenesHVG = reembedParams.get("nTopGenesHVG",2000)
+    nBinsHVG = reembedParams.get("nBins",20)
+    doBatch = reembedParams.get("doBatch",False)
+    batchMethod = reembedParams.get("batchMethod","Scanorama")
+    batchKey = reembedParams.get("batchKey","")
+    scanoramaKnn = reembedParams.get("scanoramaKnn",20)
+    scanoramaSigma = reembedParams.get("scanoramaSigma",15)
+    scanoramaAlpha = reembedParams.get("scanoramaAlpha",0.1)
+    scanoramaBatchSize = reembedParams.get("scanoramaBatchSize",5000)
+    bbknnNeighborsWithinBatch = reembedParams.get("bbknnNeighborsWithinBatch",3)
+    numPCs = reembedParams.get("numPCs",150)
+    pcaSolver = reembedParams.get("pcaSolver","randomized")
+    neighborsKnn = reembedParams.get("neighborsKnn",20)
+    neighborsMethod = reembedParams.get("neighborsMethod","umap")
+    distanceMetric = reembedParams.get("distanceMetric","cosine")
+    nnaSAM = reembedParams.get("nnaSAM",50)
+    weightModeSAM = reembedParams.get("weightModeSAM","dispersion")
+    umapMinDist = reembedParams.get("umapMinDist",0.1)
+    scaleData = reembedParams.get("scaleData",False)
+    samHVG = reembedParams.get("samHVG",False)
+
+    sam=None
+    if not doSAM:
+        if samHVG:
+            try:
+                adata = adata[:,np.sort(np.argsort(-np.array(list(adata.var['sam_weights'])))[:min(nTopGenesHVG,adata.shape[1])])]
+            except:
+                print("SAM weights not available, doing HVG selection...")
+                try:
+                    sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(nTopGenesHVG,adata.shape[1]), n_bins=nBinsHVG)                
+                    adata = adata[:,adata.var['highly_variable']]                
+                except:
+                    print('Error during HVG selection - some of your expressions are probably negative.')                
+        else:
+            try:
+                sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(nTopGenesHVG,adata.shape[1]), n_bins=nBinsHVG)                
+                adata = adata[:,adata.var['highly_variable']]                
+            except:
+                print('Error during HVG selection - some of your expressions are probably negative.')
+        X = adata.X
+        if scaleData:
+            sc.pp.scale(adata,max_value=10)
+
+        sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
+        adata.X = X
+    else:            
+        sam=SAM(counts = adata, inplace=True)
+        X = sam.adata.X
+        preprocessing = "StandardScaler" if scaleData else "Normalizer"
+        bk=batchKey if batchMethod == "Harmony" else None
+        sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM,max_iter=5)
+        sam.adata.X = X        
+        adata=sam.adata
+
+    if doBatch and not nobatch:
+        if doSAM:
+            adata_batch = sam.adata
+        else:
+            adata_batch = adata
+        
+        if batchMethod == "Harmony" and not doSAM:
+            sce.pp.harmony_integrate(adata_batch,batchKey,adjusted_basis="X_pca")
+        elif batchMethod == "BBKNN":
+            sce.pp.bbknn(adata_batch, batch_key=batchKey, metric=distanceMetric, n_pcs=numPCs, neighbors_within_batch=bbknnNeighborsWithinBatch)
+        elif batchMethod == "Scanorama":
+            sce.pp.scanorama_integrate(adata_batch, batchKey, basis='X_pca', adjusted_basis='X_pca',
+                                knn=scanoramaKnn, sigma=scanoramaSigma, alpha=scanoramaAlpha,
+                                batch_size=scanoramaBatchSize)    
+
+        if doSAM:
+            sam.adata = adata_batch
+        else:
+            adata = adata_batch
+
+    if not doSAM or (doSAM and batchMethod == "BBKNN" and not nobatch):
+        if not doBatch or doBatch and batchMethod != "BBKNN":
+            sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric) 
+        
+        if kernelPca:
+            Z = kernel_svd(adata.obsp['connectivities'].dot(adata.obsp['connectivities'].T),min(min(adata.shape) - 1, numPCs))
+            adata.obsm['X_umap'] = SAM().run_umap(X=Z,min_dist=umapMinDist,metric=distanceMetric,seed=0)[0]  
+            adata.obsp['connectivities'] = ut.calc_nnm(Z,neighborsKnn,distanceMetric)
+            adata.obsp['connectivities'].data[:]=1                      
+        elif umap:   
+            sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
+    else:
+        if kernelPca:
+            Z = kernel_svd(sam.adata.obsp['connectivities'].dot(sam.adata.obsp['connectivities'].T),min(min(adata.shape) - 1, numPCs))
+            sam.adata.obsm['X_umap'] = sam.run_umap(X=Z,min_dist=umapMinDist,metric=distanceMetric,seed=0)[0]         
+            adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
+            adata.obsp['connectivities'] = ut.calc_nnm(Z,neighborsKnn,distanceMetric)
+            adata.obsp['connectivities'].data[:]=1
+        elif umap:
+            sam.run_umap(metric=distanceMetric,min_dist=umapMinDist)
+            adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
+        adata.obsp['connectivities'] = sam.adata.obsp['connectivities']
+    if umap:
+        u = adata.obsm["X_umap"]        
+    
+    nnm = adata.obsp['connectivities']
+    obsm = adata.obsm['X_pca']
+
+    if umap:
+        return nnm,obsm,u,sam
+    else:
+        return nnm,obsm,sam
+
+def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):
+    mode = userID.split("/")[-1].split("\\")[-1]
+    ID = userID.split("/")[0].split("\\")[0]
+    
     obs_mask = AnnDataDict['obs_mask']    
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
-    mode = userID.split("/")[-1].split("\\")[-1]
+    otherMode = "OBS" if mode == "VAR" else "VAR"
     X_full = None
-    if embeddingMode == "Preprocess and run":
-        with ServerTiming.time("layout.compute"):        
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, ihm)
-            X_full = adata.X
-            if adata.isbacked:
-                raise NotImplementedError("Backed mode is incompatible with re-embedding")
+    if embName == "":
+        embName = f"umap_{str(hex(int(time.time())))[2:]}"
 
-            for k in list(adata.obsm.keys()):
-                del adata.obsm[k]
+    if not np.all(obs_mask):
+        name = f"{parentName};;{embName}"
+    else:
+        name = embName    
+    
+    if exists(f"{userID}/emb/{name}.p"):
+        name = f"{name}_{str(hex(int(time.time())))[2:]}"
+    paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
+    if embeddingMode == "Cell and gene embedding":
+        if exists(f"{ID}/{otherMode}/emb/{name}.p"):
+            name2 = f"{name}_{str(hex(int(time.time())))[2:]}"        
+        else:
+            name2 = name
+        name2 = name2.split(';;')[-1]
+
+        paired_embeddings[name] = name2
+        paired_embeddings[name2]= name
+
+        pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")
+
+        if mode == "VAR": #if mode is #VAR
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": np.array([True]*AnnDataDict['var'].shape[0])}
+            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #cells
+            adata = adata[:,obs_mask]
             
-            doSAM = reembedParams.get("doSAM",False)
-            nTopGenesHVG = reembedParams.get("nTopGenesHVG",2000)
-            nBinsHVG = reembedParams.get("nBins",20)
-            doBatch = reembedParams.get("doBatch",False)
-            batchMethod = reembedParams.get("batchMethod","Scanorama")
-            batchKey = reembedParams.get("batchKey","")
-            scanoramaKnn = reembedParams.get("scanoramaKnn",20)
-            scanoramaSigma = reembedParams.get("scanoramaSigma",15)
-            scanoramaAlpha = reembedParams.get("scanoramaAlpha",0.1)
-            scanoramaBatchSize = reembedParams.get("scanoramaBatchSize",5000)
-            bbknnNeighborsWithinBatch = reembedParams.get("bbknnNeighborsWithinBatch",3)
-            numPCs = reembedParams.get("numPCs",150)
-            pcaSolver = reembedParams.get("pcaSolver","randomized")
-            neighborsKnn = reembedParams.get("neighborsKnn",20)
-            neighborsMethod = reembedParams.get("neighborsMethod","umap")
-            distanceMetric = reembedParams.get("distanceMetric","cosine")
-            nnaSAM = reembedParams.get("nnaSAM",50)
-            weightModeSAM = reembedParams.get("weightModeSAM","dispersion")
-            umapMinDist = reembedParams.get("umapMinDist",0.1)
-            scaleData = reembedParams.get("scaleData",False)
-            samHVG = reembedParams.get("samHVG",False)
+            adata2 = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR") #genes
 
-            if not doSAM:
-                if samHVG:
-                    adata = adata[:,np.sort(np.argsort(-np.array(list(adata.var['sam_weights'])))[:min(nTopGenesHVG,adata.shape[1])])]
-                else:
-                    try:
-                        sc.pp.highly_variable_genes(adata,flavor='seurat_v3',n_top_genes=min(nTopGenesHVG,adata.shape[1]), n_bins=nBinsHVG)                
-                        adata = adata[:,adata.var['highly_variable']]                
-                    except:
-                        print('Error during HVG selection - some of your expressions are probably negative.')
-                X = adata.X
-                if scaleData:
-                    sc.pp.scale(adata,max_value=10)
+            X_full = adata2.X
+        elif mode == "OBS":
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "OBS") #cells
 
-                sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
-                adata.X = X
-            else:            
-                sam=SAM(counts = adata, inplace=True)
-                X = sam.adata.X
-                preprocessing = "StandardScaler" if scaleData else "Normalizer"
-                bk=batchKey if batchMethod == "Harmony" else None
-                sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM,max_iter=5)
-                sam.adata.X = X        
-                adata=sam.adata
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": np.array([True]*AnnDataDict['var'].shape[0])}
+            adata2 = compute_preprocess(AnnDataDict2, reembedParams, userID, "VAR", other=True) #genes
+            adata2 = adata2[:,obs_mask]
 
-            if doBatch:
-                if doSAM:
-                    adata_batch = sam.adata
-                else:
-                    adata_batch = adata
-                
-                if batchMethod == "Harmony" and not doSAM:
-                    sce.pp.harmony_integrate(adata_batch,batchKey,adjusted_basis="X_pca")
-                elif batchMethod == "BBKNN":
-                    sce.pp.bbknn(adata_batch, batch_key=batchKey, metric=distanceMetric, n_pcs=numPCs, neighbors_within_batch=bbknnNeighborsWithinBatch)
-                elif batchMethod == "Scanorama":
-                    sce.pp.scanorama_integrate(adata_batch, batchKey, basis='X_pca', adjusted_basis='X_pca',
-                                        knn=scanoramaKnn, sigma=scanoramaSigma, alpha=scanoramaAlpha,
-                                        batch_size=scanoramaBatchSize)    
+            X_full = adata.X
+        
+        nnm1, pca1, sam1 = embed(adata,reembedParams, umap=False, nobatch=True)
+        
+        cl=SAM().leiden_clustering(X=nnm1,res=10)
+        clu = np.unique(cl)
+        avgs = []
+        for c in clu:                
+            avgs.append(adata.X[cl==c].mean(0).A.flatten()) #do soft-averaging with coclustering matrix instead, perhaps
+        avgs = np.array(avgs)
+        pca_obj = PCA(n_components = None)
+        pca_obj.fit(avgs)
+        pca2 = pca_obj.components_.T
+        nnm2 = ut.calc_nnm(pca2,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
+        nnm2.data[:] = 1
+        if reembedParams.get("kernelPca",False):
+            pca1 = kernel_svd(nnm1,reembedParams.get("numPCs",50))
+            nnm1 = ut.calc_nnm(pca1,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
+            nnm1.data[:]=1    
 
-                if doSAM:
-                    sam.adata = adata_batch
-                else:
-                    adata = adata_batch
+            pca2 = kernel_svd(nnm2,reembedParams.get("numPCs",50))
+            nnm2 = ut.calc_nnm(pca2,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
+            nnm2.data[:]=1    
+        
+        # given nnm1, pca1, sam1, nnm2, pca2
+        X1 = StandardScaler(with_mean=False).fit_transform(adata.X) # cells
+        X2 = StandardScaler(with_mean=False).fit_transform(adata2.X)
+        mu1 = X1.mean(0).A.flatten()
+        mu2 = X2.mean(0).A.flatten()        
+        KNN1v2 = sparse_knn(X1,40,mu1).tocsr()
+        KNN2v1 = sparse_knn(X2,40,mu2).tocsr()
+        KNN1v2.data[:]=1
+        KNN2v1.data[:]=1
+        X1 = X1.multiply(KNN1v2).tocsr()
+        X2 = X2.multiply(KNN2v1).tocsr()
+        mima(X1)
+        mima(X2)        
+        
+        X = sp.sparse.bmat([[nnm1,X1],[X2,nnm2]]).tocsr()
+        print("Running Kernel PCA...")
+        Z = kernel_svd(X,k=pca1.shape[1])        
 
-            if not doSAM or doSAM and batchMethod == "BBKNN":
-                if not doBatch or doBatch and batchMethod != "BBKNN":
-                    sc.pp.neighbors(adata, n_neighbors=neighborsKnn, use_rep="X_pca",method=neighborsMethod, metric=distanceMetric)    
-                sc.tl.umap(adata, min_dist=umapMinDist,maxiter = 500 if adata.shape[0] <= 10000 else 200)
-            else:
-                sam.run_umap(metric=distanceMetric,min_dist=umapMinDist)
-                adata.obsm['X_umap'] = sam.adata.obsm['X_umap']
-                adata.obsp['connectivities'] = sam.adata.obsp['connectivities']
-                
-            umap = adata.obsm["X_umap"]
+        pca1 = Z[:nnm1.shape[0]]
+        pca2 = Z[nnm1.shape[0]:]
+
+        umapMinDist = reembedParams.get("umapMinDist",0.1)
+        neighborsKnn = reembedParams.get("neighborsKnn",20)
+        distanceMetric = reembedParams.get("distanceMetric","cosine")
+        print("Running UMAP...")
+        X_umap = SAM().run_umap(X=Z,metric=distanceMetric,seed = 0,min_dist=umapMinDist)[0]
+        
+        print("Calculating new graphs from kPCA...")
+        nnm1 = ut.calc_nnm(pca1,neighborsKnn,"cosine")
+        nnm2 = ut.calc_nnm(pca2,neighborsKnn,"cosine")
+        nnm1.data[:] = 1-nnm1.data
+        nnm1.data[nnm1.data<0.05]=0.05
+        nnm2.data[:] = 1-nnm2.data
+        nnm2.data[nnm2.data<0.05]=0.05
+
+        X_umap1 = X_umap[:nnm1.shape[0]]
+        X_umap2 = X_umap[nnm1.shape[0]:]
+        
+        if mode == "OBS":
+            X_umap = np.full((obs_mask.shape[0], X_umap1.shape[1]), np.NaN)
+            X_umap[obs_mask] = X_umap1
+
+            pca = np.full((obs_mask.shape[0], pca1.shape[1]), np.NaN)
+            pca[obs_mask] = pca1   
+            sam=sam1 
+            nnm = nnm1
+
+            ID = userID.split('/')[0].split('\\')[0]+'/VAR'
+            pickle_dumper(nnm2, f"{ID}/nnm/{name2}.p") 
+            pickle_dumper(X_umap2, f"{ID}/emb/{name2}.p")
+            pickle_dumper(pca2, f"{ID}/pca/pca;;{name2}.p")
+
+        else:
+            X_umap = np.full((obs_mask.shape[0], X_umap2.shape[1]), np.NaN)
+            X_umap[obs_mask] = X_umap2
+
+            pca = np.full((obs_mask.shape[0], pca2.shape[1]), np.NaN)
+            pca[obs_mask] = pca2 
+            sam=None
+            nnm = nnm2
+
+            ID = userID.split('/')[0].split('\\')[0]+'/OBS'
+            pickle_dumper(nnm1, f"{ID}/nnm/{name2}.p") 
+            pickle_dumper(X_umap1, f"{ID}/emb/{name2}.p")
+            pickle_dumper(pca1, f"{ID}/pca/pca;;{name2}.p")
+           
+
+        
+    
+    elif embeddingMode == "Preprocess and run":
+        if mode == "VAR":
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": np.array([True]*AnnDataDict['var'].shape[0])}
+            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #cells
+            adata = adata[:,obs_mask]
+            nnm, pca, _ = embed(adata,reembedParams, umap=False, nobatch=True)
+            cl=SAM().leiden_clustering(X=nnm,res=10)
+            clu = np.unique(cl)
+            avgs = []
+            for c in clu:                
+                avgs.append(adata.X[cl==c].mean(0).A.flatten()) #do soft-averaging with coclustering matrix instead, perhaps
+            avgs = np.array(avgs)
+            pca_obj = PCA(n_components = None)
+            pca_obj.fit(avgs)
+            obsm = pca_obj.components_.T
+            nnm = ut.calc_nnm(obsm,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
+            nnm.data[:] = 1
+            if reembedParams.get("kernelPca",False):
+                print("Running kernel PCA...")
+                Z = kernel_svd(nnm,reembedParams.get("numPCs",50))
+                nnm = ut.calc_nnm(Z,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
+                nnm.data[:]=1    
+            else:              
+                Z = obsm
+            umap = SAM().run_umap(X=Z,min_dist=reembedParams.get("umapMinDist",0.1),metric=reembedParams.get("distanceMetric",'correlation'),seed=0)[0]  
+
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR") #genes
+            X_full = adata.X
+
             result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
             result[obs_mask] = umap
-            X_umap,nnm = result, adata.obsp['connectivities'] 
-            obsm = adata.obsm['X_pca']
+            X_umap = result
             pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
-            pca[obs_mask] = obsm
+            pca[obs_mask] = obsm              
+        else:
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, mode)
+            X_full = adata.X
+            nnm, obsm, umap, sam = embed(adata,reembedParams,umap=True, kernelPca = reembedParams.get("kernelPca",False))
+            
+            result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
+            result[obs_mask] = umap
+            X_umap = result
+            pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
+            pca[obs_mask] = obsm    
                     
     elif embeddingMode == "Create embedding from subset":
          #direc    
@@ -561,17 +846,6 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         obsm = adata.obsm['X_pca']
         pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
         pca[obs_mask] = obsm        
-
-    if embName == "":
-        embName = f"umap_{str(hex(int(time.time())))[2:]}"
-
-    if not np.all(obs_mask):
-        name = f"{parentName};;{embName}"
-    else:
-        name = embName    
-    
-    if exists(f"{userID}/emb/{name}.p"):
-        name = f"{name}_{str(hex(int(time.time())))[2:]}"
         
 
     dims = [f"{name}_0", f"{name}_1"]
@@ -615,7 +889,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
                 pickle_dumper(np.array(list(var[k])).astype('float'),fn)
-        elif reembedParams.get("doSAM",False):
+        elif reembedParams.get("doSAM",False) and sam is not None:
             keys = ['weights','spatial_dispersions']
             for k in keys:
                 fn = "{}/var/{};;{}.p".format(userID,"sam_"+k.replace('/','_'),name)
@@ -644,6 +918,9 @@ def compute_leiden(obs_mask,name,resolution,userID):
         emb = pickle_loader(f"{userID}/emb/{name}.p")            
         emb = emb[obs_mask]
         nnm = ut.calc_nnm(emb,20,'euclidean')
+        nnm.data[:]=1
+        if np.all(obs_mask):
+            pickle_dumper(nnm, f"{userID}/nnm/{name}.p") 
 
     X = nnm
 
@@ -689,6 +966,9 @@ def compute_sankey_df(labels, name, obs_mask, userID, numEdges):
         emb = pickle_loader(f"{userID}/emb/{name}.p")            
         emb = emb[obs_mask]
         nnm = ut.calc_nnm(emb,20,'euclidean')
+        nnm.data[:]=1
+        if np.all(obs_mask):
+            pickle_dumper(nnm, f"{userID}/nnm/{name}.p") 
 
     cl=[]
     clu = []
@@ -952,14 +1232,12 @@ def compute_sankey_df_coclustering(labels, obs_mask, numEdges):
     cs = list(cs)     
     return {"edges":ps,"weights":cs}
 
-def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
+def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
     layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
     var = AnnDataDict['var']
-    root = AnnDataDict['X_root']
     obs_mask = AnnDataDict['obs_mask']
     kkk=layers[0]
-    mode = userID.split("/")[-1].split("\\")[-1]
     X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
     adata = AnnData(X=X,obs=obs[obs_mask],var=var)
     adata.layers[layers[0]] = X
@@ -968,7 +1246,6 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
         X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
         adata.layers[k] = X
 
-    adata.obsm["X_root"] = root[obs_mask]
 
     doBatchPrep = reembedParams.get("doBatchPrep",False)
     batchPrepParams = reembedParams.get("batchPrepParams",{})
@@ -987,7 +1264,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
     
     cn = np.array(list(adata.obs["name_0"]))        
     filt = np.array([True]*adata.shape[0])
-    if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
+    if not other and doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
         cl = np.array(list(adata.obs[batchPrepKey]))
         batches = np.unique(cl)
         adatas = []
@@ -1084,7 +1361,10 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
                     pass
         
      #direc 
-   
+    if mode == "VAR":   
+        adata_raw.X = StandardScaler(with_mean=False).fit_transform(adata_raw.X.T).T
+        adata_raw.X.data[adata_raw.X.data>10]=10   
+
     adata_raw.layers['X'] = adata_raw.X            
     doBatchPrep = reembedParams.get("doBatchPrep",False)
     batchPrepParams = reembedParams.get("batchPrepParams",{})
@@ -1116,9 +1396,12 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, ihm):
         "dataLayer":dataLayer,
         "sumNormalizeCells":sumNormalizeCells,        
     }        
-    pickle_dumper(prepParams, f"{userID}/params/latest.p")
+    ID = userID.split('/')[0].split('\\')[0]
+    pickle_dumper(prepParams, f"{ID}/OBS/params/latest.p")
+    pickle_dumper(prepParams, f"{ID}/VAR/params/latest.p")
     return adata_raw
    
+
 
 def initialize_socket(da):
     sock = da.socket
@@ -1132,7 +1415,6 @@ def initialize_socket(da):
                 obsFilterA = data.get("set1", {"filter": {}})["filter"]
                 obsFilterB = data.get("set2", {"filter": {}})["filter"]
                 layer = data.get("layer","X")
-                logscale = data.get("logscale",False)
                 scale = data.get("scale",False)
                 shape = da.get_shape()
 
@@ -1163,7 +1445,7 @@ def initialize_socket(da):
                 if fnn2 is None:
                     fnn2 = "Pop1 high"                
                 fname = f"{userID}/diff/{fnn}/{fnn2}_output.p"
-                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None), userID, logscale, scale, tMeanObs, tMeanSqObs)
+                _multiprocessing_wrapper(da,ws,compute_diffexp_ttest, "diffexp",data,None,layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, data.get('multiplex',None), userID, scale, tMeanObs, tMeanSqObs)
     
     @sock.route("/reembedding")
     @auth0_token_required
@@ -1189,7 +1471,7 @@ def initialize_socket(da):
                     batchPrepKey = reembedParams.get("batchPrepKey","")
                     batchPrepLabel = reembedParams.get("batchPrepLabel","")
                     dataLayer = reembedParams.get("dataLayer","X")
-                    OBS_KEYS = ["name_0"]
+                    OBS_KEYS = ["name_0","sam_weights"]
                     if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
                         cl = np.array(list(da.data.obs[batchPrepKey]))
                         batches = np.unique(cl)
@@ -1208,7 +1490,10 @@ def initialize_socket(da):
 
                     obs = pd.DataFrame()
                     for k in OBS_KEYS:
-                        obs[k] = pickle_loader(f"{userID}/obs/{k}.p")
+                        try:
+                            obs[k] = pickle_loader(f"{userID}/obs/{k}.p")
+                        except:
+                            pass
                     obs.index = pd.Index(np.arange(obs.shape[0]))
                                         
                     fnames = glob(f"{userID}/var/*.p")
@@ -1225,13 +1510,12 @@ def initialize_socket(da):
                             l = pickle_loader(f"{userID}/var/{n}.p")
                             if n != "name_0":
                                 var[n] = pd.Series(l)
-                    del var['name_0']
-                    
+                    var.index = pd.Index(np.arange(var.shape[0]))
+
                     AnnDataDict = {
                         "Xs": layers,
                         "obs": obs,
                         "var": var,
-                        "X_root": np.zeros((obs.shape[0],2)),
                         "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], obs.shape[0])
                     }
 
@@ -1249,7 +1533,7 @@ def initialize_socket(da):
                 labels = data.get("labels", None)
                 name = data.get("name", None)
                 filter = data.get("filter",None)
-                params = data.get("params",{"samHVG": False,"numGenes": 2000, "sankeyMethod": "Graph alignment", "selectedGenes": [], "dataLayer": "X", "numEdges": 5})
+                params = data.get("params",{"samHVG": False,"numGenes": 3000, "sankeyMethod": "Graph alignment", "selectedGenes": [], "dataLayer": "X", "numEdges": 5})
                 annotations = da.dataset_config.user_annotations        
                 userID = f"{annotations._get_userdata_idhash(da)}"  
                
@@ -1324,7 +1608,7 @@ def initialize_socket(da):
                 _multiprocessing_wrapper(da,ws,compute_leiden, "leiden",data,None,obs_mask,name,resolution,userID)
 
 @njit(parallel=True)
-def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True, mu=np.array([]), std=np.array([]), mode="OBS", logscale=False, scale=False):
+def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True, mu=np.array([]), std=np.array([]), mode="OBS", scale=False):
     htable = Dict.empty(
         key_type=types.int64,
         value_type=types.boolean,
@@ -1345,13 +1629,19 @@ def _partial_summer(d,x,ptr,m,inc,ninc, calculate_sq=True, mu=np.array([]), std=
             s2 = 0
         for j in prange(xi.size):
             ps = di[j] if htable[xi[j]] else 0
-            if logscale:
-                ps = np.sign(ps)*(1+np.log(np.abs(ps)))
             if scale:                    
                 if mode == "OBS":
-                    ps = (ps - mu[i])/(std[i] if std[i] != 0 else 1)
+                    if std[i] <= 0:
+                        denom = 1
+                    else:
+                        denom = std[i]
+                    ps = max(min((ps - mu[i])/denom,10),0)
                 else:
-                    ps = (ps - mu[xi[j]])/(std[xi[j]] if std[xi[j]] != 0 else 1)
+                    if std[xi[j]] <= 0:
+                        denom = 1
+                    else:
+                        denom = std[xi[j]]                    
+                    ps = max(min((ps - mu[xi[j]])/denom,10),0)
 
             s += ps
             if calculate_sq:
@@ -1739,7 +2029,9 @@ class AnndataAdaptor(DataAdaptor):
                 meansq = v-mean**2
                 self.tMeans["OBS"][k] = mean
                 self.tMeanSqs["OBS"][k] = meansq
-
+                adata.var['mean'] = mean
+                adata.var['variance'] = v
+                
                 mean,v = sf.mean_variance_axis(adata.layers[k],axis=1)
                 meansq = v-mean**2
                 self.tMeans["VAR"][k] = mean
@@ -1778,6 +2070,7 @@ class AnndataAdaptor(DataAdaptor):
     def _initialize_user_folders(self):
         userID = self.guest_idhash+"/OBS"
         if not os.path.exists(f"{self.guest_idhash}/"):
+            ID = userID.split('/')[0].split('\\')[0]
             os.makedirs(f"{userID}/nnm/")
             os.makedirs(f"{userID}/emb/")
             os.makedirs(f"{userID}/params/")
@@ -1787,6 +2080,27 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/diff/")
             os.makedirs(f"{userID}/output/")
             pickle.dump("OBS",open(f"{self.guest_idhash}/mode.p","wb"))
+
+
+            os.makedirs(f"{ID}/VAR/nnm/")
+            os.makedirs(f"{ID}/VAR/emb/")
+            os.makedirs(f"{ID}/VAR/params/")
+            os.makedirs(f"{ID}/VAR/pca/")
+            os.makedirs(f"{ID}/VAR/obs/")
+            os.makedirs(f"{ID}/VAR/var/")
+            os.makedirs(f"{ID}/VAR/diff/")   
+            os.makedirs(f"{ID}/VAR/output/")
+
+            for k in self._varm_init.keys():
+                k2 = "X_".join(k.split("X_")[1:])
+                pickle_dumper(self._varm_init[k],f"{ID}/VAR/emb/{k2}.p")
+                if self._varm_init[k].shape[1] > 2:
+                    pickle_dumper(self._varm_init[k],f"{ID}/VAR/pca/{k2}.p")
+
+                r = self._varp_init.get("N_"+k2,self._varp_init.get("connectivities",None))
+                if r is not None:
+                    pickle_dumper(r,f"{ID}/VAR/nnm/{k2}.p")
+                    pickle_dumper({},f"{ID}/VAR/params/{k2}.p")
 
 
 
@@ -1830,6 +2144,8 @@ class AnndataAdaptor(DataAdaptor):
                 if r is not None:
                     pickle_dumper(r,f"{userID}/nnm/{k2}.p")
                     pickle_dumper(p,f"{userID}/params/{k2}.p")
+
+            pickle_dumper({},f"{ID}/paired_embeddings.p")
              
 
     def _validate_and_initialize(self):
@@ -1862,6 +2178,8 @@ class AnndataAdaptor(DataAdaptor):
         self._obsm_init = self.data.obsm
         self._obs_init = self.data.obs
         self._var_init = self.data.var
+        self._varm_init = self.data.varm
+        self._varp_init = self.data.varp
         self._uns_init = self.data.uns
         self._obsp_init = self.data.obsp
 
@@ -1869,6 +2187,8 @@ class AnndataAdaptor(DataAdaptor):
         del self.data.obsm
         del self.data.uns
         del self.data.obsp
+        del self.data.varm
+        del self.data.varp
 
         self.data.obsm[self.rootName] = self._obsm_init[self.rootName]
         self.data.obs["name_0"] = self._obs_init["name_0"]
@@ -1974,9 +2294,15 @@ class AnndataAdaptor(DataAdaptor):
     def get_embedding_array(self, ename, dims=2):
         annotations = self.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(self)}"
+        ID = userID.split("/")[0].split("\\")[0]
+        paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
+        otherMode = "VAR" if (userID.split('/')[-1].split('\\')[-1] == "OBS") else "OBS"
         
-        full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")
-        return full_embedding[:, 0:dims]
+        full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")[:,0:dims]
+        if ename in paired_embeddings:
+            suffix_embedding = pickle_loader(f"{ID}/{otherMode}/emb/{paired_embeddings[ename]}.p")[:,0:dims]
+            full_embedding = np.vstack((full_embedding,suffix_embedding))
+        return full_embedding
 
     def get_colors(self):
         return convert_anndata_category_colors_to_cxg_category_colors(self.data)
@@ -2012,9 +2338,10 @@ class AnndataAdaptor(DataAdaptor):
                 x = bisym_log_transform(x)
             if scale:
                 if mode == "OBS":
-                    std = (self.tMeanSqs["OBS"][layer][i1] - self.tMeans["OBS"][layer][i1]**2)**0.5
-                    if std == 0:
+                    std = (self.tMeanSqs["OBS"][layer][i1] - self.tMeans["OBS"][layer][i1]**2)
+                    if std <= 0:
                         std = 1
+                    std = std**0.5
                     x = (x - self.tMeans["OBS"][layer][i1])/std
                     x[x>10]=10
                     x[x<0]=0
@@ -2037,9 +2364,10 @@ class AnndataAdaptor(DataAdaptor):
             if scale:
                 x = x.A
                 if mode == "OBS":
-                    std = (self.tMeanSqs["OBS"][layer][col_idx] - self.tMeans["OBS"][layer][col_idx]**2)**0.5
+                    std = (self.tMeanSqs["OBS"][layer][col_idx] - self.tMeans["OBS"][layer][col_idx]**2)
+                    std[std<=0]=1
+                    std=std**0.5
                     mu = self.tMeans["OBS"][layer][col_idx]
-                    std[std==0]=1
                     x = (x - mu[None,:])/std[None,:]
                     x[x>10]=10
                     x[x<0]=0
@@ -2051,6 +2379,7 @@ class AnndataAdaptor(DataAdaptor):
                     x = (x - mu[:,None])/std[:,None]  
                     x[x>10]=10
                     x[x<0]=0         
+
         return x
 
     def get_shape(self):

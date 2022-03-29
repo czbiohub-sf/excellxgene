@@ -24,7 +24,8 @@ import DefaultsButton from "./defaultsio";
   layoutChoice: state.layoutChoice,
   isSubsetted: state.controls.isSubsetted,
   userLoggedIn: state.controls.userInfo ? true : false,
-  hostedMode: state.controls.hostedMode
+  hostedMode: state.controls.hostedMode,
+  cxgMode: state.controls.cxgMode
 }))
 class Reembedding extends React.PureComponent {
   constructor(props) {
@@ -88,7 +89,7 @@ class Reembedding extends React.PureComponent {
   }
   render() {
     const { setReembedDialogActive, embName, reembeddingPanel } = this.state;
-    const { dispatch, reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn, hostedMode } = this.props;
+    const { dispatch, cxgMode, reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn, hostedMode } = this.props;
     const loading = !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const tipContent =
       "Click to perform preprocessing and dimensionality reduction on the currently selected cells.";

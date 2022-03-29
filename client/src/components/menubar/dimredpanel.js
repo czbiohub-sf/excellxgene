@@ -19,7 +19,8 @@ import BatchPanel from "./batchpanel";
   reembedParams: state.reembedParameters,
   annoMatrix: state.annoMatrix,
   currentLayout: state.layoutChoice.current,
-  varRefresher: state.controls.varRefresher
+  varRefresher: state.controls.varRefresher,
+  cxgMode: state.controls.cxgMode
 }))
 class DimredPanel extends React.PureComponent {
   constructor(props) {
@@ -73,7 +74,7 @@ class DimredPanel extends React.PureComponent {
           aboDisabled: true,
           allDisabled: false
         })
-      } else if (embeddingMode === "Preprocess and run") {
+      } else if (embeddingMode === "Preprocess and run" || embeddingMode === "Cell and gene embedding") {
         this.setState({
           cfshown: false,
           gfshown: false,
@@ -101,7 +102,7 @@ class DimredPanel extends React.PureComponent {
     const {
       cfshown, gfshown, hvgshown, samshown, trshown, aboDisabled, allDisabled
     } = this.state;
-    const { reembedParams, annoMatrix, dispatch, embName, onChange, currentLayout } = this.props;
+    const { reembedParams, annoMatrix, dispatch, cxgMode, embName, onChange, currentLayout } = this.props;
     const lS = annoMatrix.schema.latent_spaces;
     const latentSpaces = [];
     lS.forEach((item)=>{
@@ -149,7 +150,7 @@ class DimredPanel extends React.PureComponent {
             dispatch({type: "reembed: set parameter", key: "embeddingMode", value: item.target.value})
           }}
           selectedValue={reembedParams.embeddingMode}
-          inline
+      
         >
             <Radio label={
                 <Tooltip
@@ -203,6 +204,22 @@ class DimredPanel extends React.PureComponent {
                 </Tooltip>    
               } value="Run UMAP"/> 
             : null}
+              <Radio label={
+                <Tooltip
+                content="Calculate a joint embedding for both cells and genes."
+                position={Position.BOTTOM}
+                boundary="viewport"
+                hoverOpenDelay={globals.tooltipHoverOpenDelay}
+                modifiers={{
+                  preventOverflow: { enabled: false },
+                  hide: { enabled: false },
+                }}
+                targetTagName="span"
+                wrapperTagName="span"
+                >  
+                  Cell and gene embedding
+                </Tooltip>    
+              } value="Cell and gene embedding"/>             
         </RadioGroup>
       </div>  
       <div style={{paddingTop: "30px"}}>
@@ -219,7 +236,7 @@ class DimredPanel extends React.PureComponent {
         </Button>
       </div>  
       <Collapse isOpen={advancedShown || aboDisabled}>   
-      {allDisabled ? null :
+      {allDisabled || cxgMode === "VAR" || reembedParams.embeddingMode === "Cell and gene embedding" ? null :
       <div
       style={{
         paddingBottom: "10px",
@@ -228,56 +245,45 @@ class DimredPanel extends React.PureComponent {
         <BatchPanel disabled={allDisabled}/>           
       </div>
       }
-      {disabled ? null : <ControlGroup fill={true} vertical={false}>
-        <ParameterInput 
-          label="Use SAM?"
-          param="doSAM"
-          tooltipContent={"Check to use the SAM algorithm for dimensionality reduction. SAM weights will be added to gene metadata."}
+      {disabled ? null : <ControlGroup fill={true} vertical={false}>       
+      <ParameterInput
+          label="Kernel PCA?"
+          param="kernelPca"
+          tooltipContent={"Use kernel PCA for nonlinear dimensionality reduction."}
           disabled={disabled}
-        />                     
+        />            
         <ParameterInput
           label="Scale data?"
           param="scaleData"
           tooltipContent={"Scale the data such that genes have zero mean and unit variance prior to PCA."}
           disabled={disabled}
-        />
-        <ParameterInput 
-          label="Calculate SAM weights?"
-          param="calculateSamWeights"
-          tooltipContent={"Check to calculate SAM weights and add them to the gene metadata."}
-          disabled={disabled}
-        />              
+        />             
       </ControlGroup>}
       {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
             ...this.state,
             trshown: !this.state.trshown,
-            cfshown: false,
-            gfshown: false,
-            hvgshown: false,
-            samshown: false
           });
         }}
         text={<b>Highly variable gene selection</b>}
         minimal fill
         rightIcon={trshown ? "chevron-down" : "chevron-right"} small
-        disabled = {reembedParams.doSAM || disabled}
+        disabled = {disabled}
       />}   
       <div style={{"paddingLeft":"10px"}}>
-        <Collapse isOpen={trshown && !reembedParams.doSAM}>   
-        <ControlGroup fill={true} vertical={false}>
+        <Collapse isOpen={trshown}>   
+        {!reembedParams.doSAM && <ControlGroup fill={true} vertical={false}>
             <ParameterInput 
               label="Use SAM weights?"
               param="samHVG"
               tooltipContent={"Check to use SAM weights for feature selection."}
               disabled={disabled}
             />   
-          </ControlGroup>        
+          </ControlGroup>}
           <ControlGroup fill={true} vertical={false}>
             <ParameterInput
               min={0}
-              disabled={reembedParams.doSAM}
               max={annoMatrix.nVar}
               label={`n_top_genes (${reembedParams.samHVG ? "SAM weights" : "scanpy HVG"})`}
               param="nTopGenesHVG"
@@ -290,14 +296,10 @@ class DimredPanel extends React.PureComponent {
         onClick={() => {
           this.setState({ 
             ...this.state,
-            hvgshown: false,
             cfshown: !this.state.cfshown,
-            gfshown: false,
-            samshown: false,
-            trshown: false,
           });
         }}
-        text={<b>PCA</b>}
+        text={reembedParams.kernelPca ? <b>Kernel PCA</b> : <b>PCA</b>}
         minimal fill
         rightIcon={cfshown ? "chevron-down" : "chevron-right"} small
         disabled={disabled}
@@ -311,26 +313,22 @@ class DimredPanel extends React.PureComponent {
             param="numPCs"
             tooltipContent={"Number of top principal components to calculate."}
             />
-            <div style={{"margin":"auto 0"}}>
+            {false && <div style={{"margin":"auto 0"}}>
               <ParameterInput
               label="svd_solver"
               param="pcaSolver"
               options={["arpack","randomized","auto","lopcg"]}
               tooltipContent={"The SVD solver to use."}
               />   
-            </div>             
+            </div>}             
           </ControlGroup>
         </Collapse>
-      </div>     
+      </div>           
       {disabled ? null : <AnchorButton
         onClick={() => {
           this.setState({ 
             ...this.state,
-            hvgshown: false,
             gfshown: !this.state.gfshown,
-            cfshown: false,
-            samshown: false,
-            trshown: false,
           });
         }}
         text={<b>Neighbors</b>}
@@ -370,20 +368,30 @@ class DimredPanel extends React.PureComponent {
         onClick={() => {
           this.setState({ 
             ...this.state,
-            hvgshown: false,
-            cfshown: false,
-            gfshown: false,
             samshown: !this.state.samshown,
-            trshown: false,
           });
         }}
         text={<b>SAM</b>}
         minimal fill
         rightIcon={samshown ? "chevron-down" : "chevron-right"} small
-        disabled = {!reembedParams.doSAM || disabled}
+        disabled = {disabled}
       />}   
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={samshown}>    
+          <ControlGroup fill={true} vertical={false}>
+            <ParameterInput 
+              label="Use SAM?"
+              param="doSAM"
+              tooltipContent={"Check to use the SAM algorithm for dimensionality reduction. SAM weights will be added to gene metadata."}
+              disabled={disabled}
+            />                      
+            <ParameterInput 
+              label="Calculate SAM weights?"
+              param="calculateSamWeights"
+              tooltipContent={"Check to calculate SAM weights and add them to the gene metadata."}
+              disabled={disabled}
+            />             
+          </ControlGroup>
           <ControlGroup fill={true} vertical={false}>
             <ParameterInput
               label="num_norm_avg"
@@ -410,10 +418,6 @@ class DimredPanel extends React.PureComponent {
           this.setState({ 
             ...this.state,
             hvgshown: !this.state.hvgshown,
-            cfshown: false,
-            gfshown: false,
-            samshown: false,
-            trshown: false
           });
         }}
         text={<b>UMAP</b>}

@@ -6,7 +6,7 @@ import { AnnoMatrixObsCrossfilter } from "../annoMatrix";
 import { _setEmbeddingSubset, _userSubsetAnnoMatrix } from "../util/stateManager/viewStackHelpers";
 import { API } from "../globals";
 import { resetSubsetAction } from "./viewStack";
-import actions from ".";
+import _ from "lodash";
 
 export async function _switchEmbedding(
   prevAnnoMatrix,
@@ -89,7 +89,7 @@ const res = await fetch(
   }
 );
 
-let { layoutChoice } = getState();
+let { layoutChoice, annoMatrix } = getState();
 const newNames = [];
 toRename.forEach((item)=>{
   let newItem;
@@ -102,6 +102,26 @@ toRename.forEach((item)=>{
   } else if (item === oldName) { // no children
     newItem = newName;
   }
+  if (annoMatrix.viewOf) {
+    delete annoMatrix.viewOf.schema.layout.obsByName[item];
+    annoMatrix.viewOf.schema.layout.obsByName[newItem] = {dims: [`${newItem}_0`,`${newItem}_1`], name: newItem, type: "float32"}    
+
+    const layouts = [];
+    Object.keys(annoMatrix.viewOf.schema.layout.obsByName).forEach((item)=>{
+      layouts.push(annoMatrix.viewOf.schema.layout.obsByName[item])
+    })
+    annoMatrix.viewOf.schema.layout.obs = layouts;    
+
+  }
+  delete annoMatrix.schema.layout.obsByName[item]
+  annoMatrix.schema.layout.obsByName[newItem] = {dims: [`${newItem}_0`,`${newItem}_1`], name: newItem, type: "float32"}
+  
+  const layouts = [];
+  Object.keys(annoMatrix.schema.layout.obsByName).forEach((item)=>{
+    layouts.push(annoMatrix.schema.layout.obsByName[item])
+  })
+  annoMatrix.schema.layout.obs = layouts;
+
   newNames.push(newItem);
 })    
 const item = layoutChoice.current;
@@ -117,11 +137,9 @@ if (item.includes(`;;${oldName};;`)) { // middle
 } else {
   newCurrent = item;
 }
-
 toRename.forEach((item,index)=>{
   dispatch({type: "reembed: rename reembedding", embName: item, newName: newNames[index]});
 })
-
 await dispatch(layoutChoiceAction(newCurrent)); 
 dispatch({type: "modifying layouts", modifyingLayouts: false})
 
@@ -146,23 +164,17 @@ export const layoutChoiceAction = (newLayoutChoice) => async (
   On layout choice, make sure we have selected all on the previous layout, AND the new
   layout.
   */
-  const schema = await actions.schemaFetch()
-
   const {
     annoMatrix: prevAnnoMatrix,
     obsCrossfilter: prevCrossfilter,
     layoutChoice,
-  } = getState();
-  
-  const base = prevAnnoMatrix.base();
-  
-  await base.updateSchema(schema.schema)
+  } = getState();  
   
   dispatch({
     type: "reset subset"
   })  
   let [annoMatrix, obsCrossfilter] = await _switchEmbedding(
-    base,
+    prevAnnoMatrix,
     prevCrossfilter,
     layoutChoice.current,
     newLayoutChoice

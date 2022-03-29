@@ -173,10 +173,9 @@ export class AnnoMatrixRowSubsetView extends AnnoMatrixView {
     const df = await this.viewOf._fetch(field, query);
 
     // don't try to row-subset the var dimension.
-    if (field === "var") {
+    if (field === "var" || field == "jemb") {
       return [null, df];
     }
-
     const dfSubset = df.subset(null, null, this.rowIndex);
     const whereCacheUpdate = _whereCacheCreate(
       field,

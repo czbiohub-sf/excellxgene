@@ -16,6 +16,7 @@ import actions from "../../../actions";
   obsCrossfilter: state.obsCrossfilter,
   genesets: state.genesets.genesets,
   genesetsUI: state.genesetsUI,
+  selectedGenesLasso: state.genesets.selectedGenesLasso,
   geneSelection: Object.keys(state.geneSelection)
 }))
 class CreateGenesetDialogue extends React.PureComponent {
@@ -42,7 +43,9 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   createGeneset = (e) => {
-    const { dispatch , geneSelection} = this.props;
+    const { dispatch , geneSelection, selectedGenesLasso} = this.props;
+    const selectedGenes = [...new Set([...geneSelection,...selectedGenesLasso])];
+
     const {
       genesetName,
       genesToPopulateGeneset,
@@ -70,7 +73,7 @@ class CreateGenesetDialogue extends React.PureComponent {
       dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
     } else {
       const genesTmpHardcodedFormat = [];
-      geneSelection.forEach((_gene) => {
+      selectedGenes.forEach((_gene) => {
         genesTmpHardcodedFormat.push(_gene);
       });
       dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
