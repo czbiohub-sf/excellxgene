@@ -28,7 +28,8 @@ import LabelInput from "../labelInput";
     annoMatrix: state.annoMatrix,
     crossfilter: state.obsCrossfilter,
     userLoggedIn: state.controls.userInfo ? true : false,
-    modifyingLayouts: state.controls.modifyingLayouts
+    modifyingLayouts: state.controls.modifyingLayouts,
+    cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene"
   };
 })
 class Embedding extends React.Component {
@@ -154,7 +155,7 @@ class Embedding extends React.Component {
     e.preventDefault()    
   }
   render() {
-    const { layoutChoice, schema, crossfilter } = this.props;
+    const { layoutChoice, schema, crossfilter, cOrG } = this.props;
     const { newLayoutText, isEmbeddingExpanded } = this.state;
     const { annoMatrix } = crossfilter;
     return (
@@ -185,7 +186,7 @@ class Embedding extends React.Component {
                 }}
               >
                 {layoutChoice?.current.split(";;").at(-1)}: {crossfilter.countSelected()} out of{" "}
-                {crossfilter.size()} cells
+                {crossfilter.size()} {cOrG}s
               </Button>
             </Tooltip>
           }
@@ -206,7 +207,7 @@ class Embedding extends React.Component {
             >
               <H4>Embedding Choice</H4>
               <p style={{ fontStyle: "italic" }}>
-                There are {schema?.dataframe?.nObs} cells in the entire dataset.
+                There are {schema?.dataframe?.nObs} {cOrG}s in the entire dataset.
               </p>
               <EmbeddingChoices
                 onChange={this.handleLayoutChoiceChange}
@@ -217,6 +218,7 @@ class Embedding extends React.Component {
                 isEmbeddingExpanded={isEmbeddingExpanded}
                 handleEmbeddingExpansionChange={this.handleEmbeddingExpansionChange}
                 initEmbeddings={annoMatrix.schema?.initial_embeddings ?? []}
+                cOrG={cOrG}
               />
               <AnnoDialog
                 isActive={
@@ -362,7 +364,7 @@ const IndentedEmbeddingTree = (node,roots,tree,padding, els, currView, onDeleteE
   }
 }
 
-const EmbeddingChoices = ({ onChange, annoMatrix, layoutChoice, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange, initEmbeddings }) => {
+const EmbeddingChoices = ({ onChange, annoMatrix, layoutChoice, onDeleteEmbedding, activateEditLayoutMode, isEmbeddingExpanded, handleEmbeddingExpansionChange, initEmbeddings, cOrG }) => {
   const [ data, setData ] = React.useState(null)
   const [ renderedEmbeddingTree, setRenderedEmbeddingTree ] = React.useState(null)
   React.useEffect(() => {
@@ -388,7 +390,7 @@ const EmbeddingChoices = ({ onChange, annoMatrix, layoutChoice, onDeleteEmbeddin
             queryParent = "";
           }
           
-          const sizeHint = `${discreteCellIndex.size()} cells`;
+          const sizeHint = `${discreteCellIndex.size()} ${cOrG}s`;
           // add queryName to children of queryParent
           if (embeddingTree?.[queryParent]?.children) { //if children exists on queryParent
             embeddingTree[queryParent].children.push(queryName)

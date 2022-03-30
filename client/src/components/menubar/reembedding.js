@@ -25,7 +25,8 @@ import DefaultsButton from "./defaultsio";
   isSubsetted: state.controls.isSubsetted,
   userLoggedIn: state.controls.userInfo ? true : false,
   hostedMode: state.controls.hostedMode,
-  cxgMode: state.controls.cxgMode
+  cxgMode: state.controls.cxgMode,
+  selectedGenesLassoIndices: state.genesets.selectedGenesLassoIndices
 }))
 class Reembedding extends React.PureComponent {
   constructor(props) {
@@ -57,7 +58,7 @@ class Reembedding extends React.PureComponent {
     // this is where you need to trigger subset if cells were filtered.
   };
   handleRunAndDisableReembedDialog = () => {
-    const { dispatch, reembedParams, layoutChoice, obsCrossfilter, isSubsetted } = this.props;
+    const { dispatch, reembedParams, layoutChoice, obsCrossfilter, isSubsetted, selectedGenesLassoIndices } = this.props;
     const { embName } = this.state
     let parentName;
 
@@ -77,7 +78,7 @@ class Reembedding extends React.PureComponent {
     } else {
       parentName = layoutChoice.current;
     }
-    dispatch(actions.requestReembed(reembedParams,parentName, embName));
+    dispatch(actions.requestReembed(reembedParams,parentName, embName, selectedGenesLassoIndices));
     this.setState({
       setReembedDialogActive: false,
       embName: ""
@@ -90,6 +91,7 @@ class Reembedding extends React.PureComponent {
   render() {
     const { setReembedDialogActive, embName, reembeddingPanel } = this.state;
     const { dispatch, cxgMode, reembedController, idhash, annoMatrix, obsCrossfilter, preprocessController, reembedParams, userLoggedIn, hostedMode } = this.props;
+    const cOrG = cxgMode === "OBS" ? "cell" : "gene";
     const loading = !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const tipContent =
       "Click to perform preprocessing and dimensionality reduction on the currently selected cells.";
@@ -97,7 +99,7 @@ class Reembedding extends React.PureComponent {
     
     const runDisabled = (cS > 50000) && hostedMode;
     
-    const title = `${reembeddingPanel ? "Reembedding" : "Preprocessing"} on ${cS}/${annoMatrix.schema.dataframe.nObs} cells.`;
+    const title = `${reembeddingPanel ? "Reembedding" : "Preprocessing"} on ${cS}/${annoMatrix.schema.dataframe.nObs} ${cOrG}s.`;
     return (
       <div>
         <Dialog

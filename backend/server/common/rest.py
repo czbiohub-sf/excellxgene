@@ -911,7 +911,7 @@ def switch_cxg_mode(request,data_adaptor):
                 
             gene_sets[key.split('DEG_')[-1]+suffix] = d
 
-
+            pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
         elif _can_cast_to_float32(dtype,obs[key]) or _can_cast_to_int32(dtype,obs[key]) or flag:
             pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
     pickle_dumper(name,f"{pathNew}/var/name_0.p")

@@ -45,7 +45,8 @@ const HEIGHT_MINI = 15 - MARGIN_MINI.TOP - MARGIN_MINI.BOTTOM;
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr,
     scaleExpr: state.reembedParameters.scaleExpr,
-    chromeKeyContinuous: state.controls.chromeKeyContinuous
+    chromeKeyContinuous: state.controls.chromeKeyContinuous,
+    cxgMode: state.controls.cxgMode
   };
 })
 class HistogramBrush extends React.PureComponent {
@@ -371,7 +372,8 @@ class HistogramBrush extends React.PureComponent {
       dataLayerExpr,
       logScaleExpr,
       scaleExpr,
-      chromeKeyContinuous
+      chromeKeyContinuous,
+      cxgMode
     } = this.props;
     let { width } = this.props;
     if (!width) {
@@ -439,6 +441,7 @@ class HistogramBrush extends React.PureComponent {
                     rangeMax={asyncProps.unclippedRange[1]}
                     rangeColorMin={asyncProps.unclippedRangeColor[0]}
                     rangeColorMax={asyncProps.unclippedRangeColor[1]}
+                    cxgMode={cxgMode}
                   />
                 )}
               </div>

@@ -31,7 +31,8 @@ const GeneSets = (
     genesets: {},
     diffExpListsLists: [],
     diffExpListsNames: [],
-    selectedGenesLasso: []
+    selectedGenesLasso: [],
+    selectedGenesLassoIndices: []
   },
   action
 ) => {
@@ -273,7 +274,8 @@ const GeneSets = (
     } case "set other mode selection": {
       return {
         ...state,
-        selectedGenesLasso: action.selected
+        selectedGenesLasso: action.selected,
+        selectedGenesLassoIndices: action.selectedIndices
       }
     }
     /**

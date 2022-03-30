@@ -75,7 +75,7 @@ async function doReembedFetch(dispatch, getState, reembedParams,parentName,embNa
 /*
 functions below are dispatch-able
 */
-export function requestReembed(reembedParams,parentName,embName) {
+export function requestReembed(reembedParams,parentName,embName,otherSelector) {
   return async (dispatch, getState) => {
     try {
       await dispatch(subsetAction());
@@ -85,7 +85,6 @@ export function requestReembed(reembedParams,parentName,embName) {
 
       let cells = state.annoMatrix.rowIndex.labels();
       cells = Array.isArray(cells) ? cells : Array.from(cells);
-
       wsReembedding.send(JSON.stringify({
         method: "umap",
         filter: { obs: { index: cells } },
@@ -93,6 +92,7 @@ export function requestReembed(reembedParams,parentName,embName) {
         parentName: (parentName === "") ? layoutChoice.current : parentName,
         currentLayout: layoutChoice.current,
         embName: embName,
+        otherSelector: otherSelector
       }))
       dispatch({
         type: "reembed: request start"

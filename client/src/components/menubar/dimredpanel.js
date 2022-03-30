@@ -15,6 +15,17 @@ import * as globals from "../../globals";
 import ParameterInput from "./parameterinput";
 import BatchPanel from "./batchpanel";
 
+function writableAnnotationsObs(annoMatrix) {
+  return annoMatrix.schema.annotations.obs.columns
+    .filter((s) => s.writable)
+    .map((s) => s.name);
+}
+function writableAnnotationsVar(annoMatrix) {
+  return annoMatrix.schema.annotations.var.columns
+    .filter((s) => s.writable)
+    .map((s) => s.name);
+}
+
 @connect((state) => ({
   reembedParams: state.reembedParameters,
   annoMatrix: state.annoMatrix,
@@ -104,6 +115,7 @@ class DimredPanel extends React.PureComponent {
     } = this.state;
     const { reembedParams, annoMatrix, dispatch, cxgMode, embName, onChange, currentLayout } = this.props;
     const lS = annoMatrix.schema.latent_spaces;
+    const dsampleOptions = cxgMode === "VAR" ? writableAnnotationsVar(annoMatrix) : writableAnnotationsObs(annoMatrix)
     const latentSpaces = [];
     lS.forEach((item)=>{
       if (item.includes(`;;${currentLayout}`) && !item.includes(`;;${currentLayout};;`)){
@@ -144,6 +156,7 @@ class DimredPanel extends React.PureComponent {
       </div>
       <hr/>
       <div style={{"margin":"auto 0", paddingTop: "10px"}}>
+      <ControlGroup fill={true} vertical={false}>    
       <RadioGroup
           label={<b>Select embedding mode</b>}
           onChange={(item)=>{
@@ -220,7 +233,17 @@ class DimredPanel extends React.PureComponent {
                   Cell and gene embedding
                 </Tooltip>    
               } value="Cell and gene embedding"/>             
-        </RadioGroup>
+          </RadioGroup>    
+          {(cxgMode === "VAR" && annoMatrix.nVar > 50000 &&
+        (reembedParams.embeddingMode==="Preprocess and run" || reembedParams.embeddingMode==="Cell and gene embedding")
+       ) &&        
+        <ParameterInput
+            label="Downsample cells by"
+            param="dsampleKey"
+            tooltipContent={"Select labels to uniformly downsample cells from."}
+            options={["None",...dsampleOptions]}
+          />}                        
+        </ControlGroup>        
       </div>  
       <div style={{paddingTop: "30px"}}>
         <Button

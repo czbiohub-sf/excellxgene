@@ -31,7 +31,8 @@ import LabelInput from "../labelInput";
     annoMatrix: state.annoMatrix,
     reembedParams: state.reembedParameters,
     userLoggedIn: state.controls.userInfo ? true : false,
-    outputController: state.outputController
+    outputController: state.outputController,
+    cxgMode: state.controls.cxgMode
   };
 })
 class GeneExpression extends React.Component {
@@ -200,20 +201,22 @@ class GeneExpression extends React.Component {
 
   renderGeneSets = (isGenes=false) => {
     if (isGenes) {
-      const { allGenes, rightWidth } = this.props;
+      const { allGenes, rightWidth, cxgMode } = this.props;
+      const name = cxgMode==="OBS" ? `All genes` : `All cells`
       return (
         <GeneSet
-          key={"All genes"}
+          key={name}
           setGenes={allGenes}
-          displayLabel={"All genes"}
-          setName={"All genes"}
+          displayLabel={name}
+          setName={name}
           allGenes
           rightWidth={rightWidth}
         />
       );  
     }
-    const { dispatch, genesets, rightWidth } = this.props;    
-    
+    const { dispatch, genesets, rightWidth, cxgMode } = this.props;    
+    const cOrG = cxgMode==="OBS" ? `gene` : `cell`    
+
     const nogroups = [];
     if ("" in genesets) {
       for (const name in genesets[""]) {
@@ -290,7 +293,7 @@ class GeneExpression extends React.Component {
               rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
             />  
             <Tooltip
-            content="Edit geneset group name"
+            content={`Edit ${cOrG} set group name`}
             position="top"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}            
             >             
@@ -304,7 +307,7 @@ class GeneExpression extends React.Component {
               />  
             </Tooltip>                 
             <Tooltip
-            content="Delete geneset group"
+            content={`Delete ${cOrG} set group`}
             position="top"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}            
             >
@@ -355,7 +358,7 @@ class GeneExpression extends React.Component {
               rightIcon={(this.state[groupName]??false) ? "chevron-down" : "chevron-right"} small
             />  
             <Tooltip
-            content="Edit geneset group name"
+            content={`Edit ${cOrG} set group name`}
             position="top"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}            
             >             
@@ -369,7 +372,7 @@ class GeneExpression extends React.Component {
               />  
             </Tooltip>                 
             <Tooltip
-            content="Delete geneset group"
+            content={`Delete ${cOrG} set group`}
             position="top"
             hoverOpenDelay={globals.tooltipHoverOpenDelay}            
             >
@@ -415,10 +418,11 @@ class GeneExpression extends React.Component {
   };
 
   render() {
-    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, outputController } = this.props;
+    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, outputController, cxgMode } = this.props;
     const { geneSetsExpanded, isEditingSetName, newNameText, nameBeingEdited, varMetadata, uploadMetadataOpen, fileName, uploadMetadataOpen2, fileName2 } = this.state;
     const [nogroupElements,genesetElements,diffExpElements]=this.renderGeneSets();
     const saveLoading = !!outputController?.pendingFetch;
+    const cOrG = cxgMode === "OBS" ? "gene" : "cell";
     return (
       <div>
        {userLoggedIn ?  <GenesetHotkeys
@@ -570,7 +574,7 @@ class GeneExpression extends React.Component {
               }}
               onClick={this.handleExpandGeneSets}
             >
-              Gene Sets{" "}
+              {`${cOrG[0].toUpperCase() + cOrG.slice(1)} Sets `}
               {geneSetsExpanded ? (
                 <Icon icon={IconNames.CHEVRON_DOWN} />
               ) : (
@@ -589,7 +593,7 @@ class GeneExpression extends React.Component {
                 }}>
                             
                   {userLoggedIn && <Tooltip
-                    content="Save gene sets a `.csv` file."
+                    content={`Save ${cOrG} sets a \`.csv\` file.`}
                     position="bottom"
                     hoverOpenDelay={globals.tooltipHoverOpenDelay}
                   >                                              
@@ -602,7 +606,7 @@ class GeneExpression extends React.Component {
                       /> 
                     </Tooltip> }
                 <Tooltip
-                content="Upload genesets from a `.csv`, comma-delimited file."
+                content={`Upload ${cOrG} sets from a \`.csv\`, comma-delimited file.`}
                 position="bottom"
                 hoverOpenDelay={globals.tooltipHoverOpenDelay}
               >                                              
@@ -616,7 +620,7 @@ class GeneExpression extends React.Component {
                   /> 
                 </Tooltip>                 
                   <Dialog
-                    title="Upload genesets file (comma-delimited .csv)"
+                    title={`Upload ${cOrG} sets file (comma-delimited .csv)`}
                     isOpen={uploadMetadataOpen}
                     onOpened={()=>this.setupFileInput()}
                     onClose={()=>{
@@ -654,15 +658,15 @@ class GeneExpression extends React.Component {
           { 
             geneSetsExpanded && <div>
               {(nogroupElements.length > 0) && <div style={{paddingBottom: "5px"}}>
-                <b>Ungrouped genesets</b>
+                <b>Ungrouped {cOrG} sets</b>
               </div>}              
               {nogroupElements}
               {(genesetElements.length > 0) && <div style={{paddingBottom: "5px"}}>
-                <b>Grouped genesets</b>
+                <b>Grouped {cOrG} sets</b>
               </div> }                         
               {genesetElements}
               {(diffExpElements.length > 0) && <div style={{paddingBottom: "5px",paddingTop: "5px"}}>
-                <b>Differential expression genesets</b>
+                <b>Differential expression {cOrG} sets</b>
               </div> }                         
               {diffExpElements}              
               </div>
@@ -679,10 +683,10 @@ class GeneExpression extends React.Component {
           primaryButtonProps={{
             "data-testid": `submit-set-name-edit`,
           }}
-          title="Edit geneset group name"
-          instruction={"Choose a new geneset group name"}
+          title={`Edit ${cOrG} set group name`}
+          instruction={`Choose a new ${cOrG} set group name`}
           cancelTooltipContent="Close this dialog without editing the name."
-          primaryButtonText="Edit geneset group name"
+          primaryButtonText={`Edit ${cOrG} set group name`}
           text={newNameText}
           handleSubmit={this.handleEditName}
           handleCancel={this.disableEditNameMode}

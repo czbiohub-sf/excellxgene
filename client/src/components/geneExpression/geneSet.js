@@ -22,7 +22,8 @@ import { resetSubsetAction } from "../../actions/viewStack";
     layoutChoice: state.layoutChoice,
     varRefresher: state.controls.varRefresher,
     currentSelectionDEG: state.controls.currentSelectionDEG,
-    volcanoAccessor: state.controls.volcanoAccessor
+    volcanoAccessor: state.controls.volcanoAccessor,
+    cxgMode: state.controls.cxgMode
   };
 })
 class GeneSet extends React.Component {
@@ -227,7 +228,16 @@ class GeneSet extends React.Component {
       isSelected: true
     }) 
   }  
-  
+
+
+  writeSort = () => {
+    const { genesetDescription: group, setName: geneset, dispatch } = this.props;
+    const { setGenesSorted } = this.state;
+    dispatch(actions.genesetDeleteGenes(group, geneset, setGenesSorted));
+    dispatch(actions.genesetAddGenes(group, geneset, setGenesSorted));   
+    this.onSortGenesReset(true)
+  }
+
   selectCellsFromGroup = () => {
     const { dispatch, genesetDescription, setName, currentSelectionDEG } = this.props;
     const name = `${genesetDescription?.split('//;;//').at(0)}::${setName}`
@@ -284,9 +294,9 @@ class GeneSet extends React.Component {
   }
 
   render() {
-    const { dispatch, setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn, currentSelectionDEG, volcanoAccessor } = this.props;
+    const { dispatch, setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn, currentSelectionDEG, volcanoAccessor, cxgMode } = this.props;
     const diffExp = genesetDescription?.includes("//;;//")
-
+    const cOrG = cxgMode === "OBS" ? "genes" : "cells";
     const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
 
     const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene, sortDirection, isSelected } = this.state;
@@ -393,7 +403,7 @@ class GeneSet extends React.Component {
         </Tooltip>}            
           {diffExp && <Tooltip
           content={
-            "Click to select the cells associated with this DEG group."
+            `Click to select the ${cOrG} associated with this DEG group.`
           }
           position={Position.RIGHT}
           hoverOpenDelay={globals.tooltipHoverOpenDelay}
@@ -411,7 +421,7 @@ class GeneSet extends React.Component {
         </Tooltip>}              
           <Tooltip
             content={
-              "Click to sort genes by the chosen var metadata."
+              `Click to sort ${cOrG} by the chosen var metadata.`
             }
             position={Position.RIGHT}
             hoverOpenDelay={globals.tooltipHoverOpenDelay}
@@ -441,6 +451,8 @@ class GeneSet extends React.Component {
               genesetsEditable 
               geneset={setName} 
               disableToggle={false} 
+              writeSort={this.writeSort}
+              disableWriteSort={!sortDirection}
               histToggler={()=>{
                 this.setState({...this.state,removeHistZeros: !removeHistZeros})
                 }
@@ -474,7 +486,7 @@ class GeneSet extends React.Component {
         <div style={{
           textAlign: "right"
         }}>
-          {`Showing genes ${genePage*10+1}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
+          {`Showing ${cOrG} ${genePage*10+1}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
           <AnchorButton
             type="button"
             icon="double-chevron-left"

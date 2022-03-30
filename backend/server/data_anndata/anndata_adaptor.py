@@ -595,7 +595,10 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
     mode = userID.split("/")[-1].split("\\")[-1]
     ID = userID.split("/")[0].split("\\")[0]
     
-    obs_mask = AnnDataDict['obs_mask']    
+    obs_mask = AnnDataDict['obs_mask']
+    obs_mask2 = AnnDataDict['obs_mask2']    
+
+
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
     otherMode = "OBS" if mode == "VAR" else "VAR"
     X_full = None
@@ -605,43 +608,71 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
     if not np.all(obs_mask):
         name = f"{parentName};;{embName}"
     else:
-        name = embName    
+        name = embName 
     
     if exists(f"{userID}/emb/{name}.p"):
         name = f"{name}_{str(hex(int(time.time())))[2:]}"
     paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
+    
+    pairedMode = currentLayout in paired_embeddings
+    
+    if currentLayout not in paired_embeddings:
+        obs_mask2[:] = True
+
     if embeddingMode == "Cell and gene embedding":
-        if exists(f"{ID}/{otherMode}/emb/{name}.p"):
-            name2 = f"{name}_{str(hex(int(time.time())))[2:]}"        
+        if pairedMode:
+            if not np.all(obs_mask):
+                name2 = f"{paired_embeddings[parentName]};;{embName}"
+            else:
+                name2 = embName    
         else:
             name2 = name
-        name2 = name2.split(';;')[-1]
+
+        if exists(f"{ID}/{otherMode}/emb/{name2}.p"):
+            name2 = f"{name2}_{str(hex(int(time.time())))[2:]}"
+
 
         paired_embeddings[name] = name2
         paired_embeddings[name2]= name
 
         pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")
+        
+        dsampleKey = reembedParams.get("dsampleKey","None")
+        if mode == "VAR": #if mode is #VAR, obs_mask2 is for cells
+            if dsampleKey!="None" and obs_mask2.sum() > 50000:
+                cl = np.array(list(AnnDataDict['var'][dsampleKey]))[obs_mask2]
+                clu,cluc = np.unique(cl,return_counts=True)
+                cluc2 = cluc/cluc.sum()
+                for c,cc,ccf in zip(clu,cluc,cluc2):
+                    sub = np.where(cl==c)[0]
+                    filt[np.random.choice(sub,size=max(min(int(ccf*50000),cc),min(cc,10)),replace=False)] = True
+                temp = obs_mask2.copy()
+                obs_mask2[:] = False
+                obs_mask2[temp] = filt
+            elif obs_mask2.sum() > 50000:
+                # random sampling
+                filt = np.random.choice(np.where(obs_mask2)[0],size=50000,replace=False)
+                obs_mask2[:] = False
+                obs_mask2[filt] = True
 
-        if mode == "VAR": #if mode is #VAR
-            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": np.array([True]*AnnDataDict['var'].shape[0])}
-            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #cells
-            adata = adata[:,obs_mask]
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
+            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #subset cells
+            adata = adata[:,obs_mask] # subset genes
             
-            adata2 = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR") #genes
+            adata2 = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR")[:,obs_mask2] # subset genes x subset cells
+            X_full = adata2.X #sg x sc
+        elif mode == "OBS": #obs_mask2 is for genes
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "OBS")[:,obs_mask2] #cells
 
-            X_full = adata2.X
-        elif mode == "OBS":
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "OBS") #cells
-
-            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": np.array([True]*AnnDataDict['var'].shape[0])}
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
             adata2 = compute_preprocess(AnnDataDict2, reembedParams, userID, "VAR", other=True) #genes
             adata2 = adata2[:,obs_mask]
 
-            X_full = adata.X
+            X_full = adata.X # sc x sg
         
-        nnm1, pca1, sam1 = embed(adata,reembedParams, umap=False, nobatch=True)
+        nnm1, pca1, sam1 = embed(adata,reembedParams, umap=False, nobatch=mode=="VAR")
         
-        cl=SAM().leiden_clustering(X=nnm1,res=10)
+        cl=SAM().leiden_clustering(X=nnm1,res=5)
         clu = np.unique(cl)
         avgs = []
         for c in clu:                
@@ -649,7 +680,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         avgs = np.array(avgs)
         pca_obj = PCA(n_components = None)
         pca_obj.fit(avgs)
-        pca2 = pca_obj.components_.T
+        pca2 = pca_obj.components_.T*pca_obj.explained_variance_**0.5
         nnm2 = ut.calc_nnm(pca2,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
         nnm2.data[:] = 1
         if reembedParams.get("kernelPca",False):
@@ -709,9 +740,17 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             nnm = nnm1
 
             ID = userID.split('/')[0].split('\\')[0]+'/VAR'
+            Xu2 = np.full((obs_mask2.shape[0], X_umap2.shape[1]), np.NaN)
+            Xu2[obs_mask2] = X_umap2
+            pc2 = np.full((obs_mask2.shape[0], pca2.shape[1]), np.NaN)
+            pc2[obs_mask2] = pca2   
+            IXer = pd.Series(index =np.arange(nnm2.shape[0]), data = np.where(obs_mask2.flatten())[0])
+            x,y = nnm2.nonzero()
+            d = nnm2.data
+            nnm2 = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(obs_mask2.size,)*2).tocsr()
             pickle_dumper(nnm2, f"{ID}/nnm/{name2}.p") 
-            pickle_dumper(X_umap2, f"{ID}/emb/{name2}.p")
-            pickle_dumper(pca2, f"{ID}/pca/pca;;{name2}.p")
+            pickle_dumper(Xu2, f"{ID}/emb/{name2}.p")
+            pickle_dumper(pc2, f"{ID}/pca/pca;;{name2}.p")
 
         else:
             X_umap = np.full((obs_mask.shape[0], X_umap2.shape[1]), np.NaN)
@@ -723,19 +762,43 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             nnm = nnm2
 
             ID = userID.split('/')[0].split('\\')[0]+'/OBS'
+            
+            Xu1 = np.full((obs_mask2.shape[0], X_umap1.shape[1]), np.NaN)
+            Xu1[obs_mask2] = X_umap1
+            pc1 = np.full((obs_mask2.shape[0], pca1.shape[1]), np.NaN)
+            pc1[obs_mask2] = pca1   
+            IXer = pd.Series(index =np.arange(nnm1.shape[0]), data = np.where(obs_mask2.flatten())[0])
+            x,y = nnm1.nonzero()
+            d = nnm1.data
+            nnm1 = sp.sparse.coo_matrix((d,(IXer[x].values,IXer[y].values)),shape=(obs_mask2.size,)*2).tocsr()            
             pickle_dumper(nnm1, f"{ID}/nnm/{name2}.p") 
-            pickle_dumper(X_umap1, f"{ID}/emb/{name2}.p")
-            pickle_dumper(pca1, f"{ID}/pca/pca;;{name2}.p")
-           
-
-        
+            pickle_dumper(Xu1, f"{ID}/emb/{name2}.p")
+            pickle_dumper(pc1, f"{ID}/pca/pca;;{name2}.p")
     
     elif embeddingMode == "Preprocess and run":
+        dsampleKey = reembedParams.get("dsampleKey","None")
         if mode == "VAR":
-            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": np.array([True]*AnnDataDict['var'].shape[0])}
+            if dsampleKey!="None" and obs_mask2.sum() > 50000:
+                cl = np.array(list(AnnDataDict['var'][dsampleKey]))[obs_mask2]
+                clu,cluc = np.unique(cl,return_counts=True)
+                cluc2 = cluc/cluc.sum()
+                for c,cc,ccf in zip(clu,cluc,cluc2):
+                    sub = np.where(cl==c)[0]
+                    filt[np.random.choice(sub,size=max(min(int(ccf*50000),cc),min(cc,10)),replace=False)] = True
+                temp = obs_mask2.copy()
+                obs_mask2[:] = False
+                obs_mask2[temp] = filt
+            elif obs_mask2.sum() > 50000:
+                # random sampling
+                filt = np.random.choice(np.where(obs_mask2)[0],size=50000,replace=False)
+                obs_mask2[:] = False
+                obs_mask2[filt] = True
+
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
             adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #cells
             adata = adata[:,obs_mask]
             nnm, pca, _ = embed(adata,reembedParams, umap=False, nobatch=True)
+
             cl=SAM().leiden_clustering(X=nnm,res=10)
             clu = np.unique(cl)
             avgs = []
@@ -744,7 +807,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             avgs = np.array(avgs)
             pca_obj = PCA(n_components = None)
             pca_obj.fit(avgs)
-            obsm = pca_obj.components_.T
+            obsm = pca_obj.components_.T*pca_obj.explained_variance_**0.5
             nnm = ut.calc_nnm(obsm,reembedParams.get("neighborsKnn",20),reembedParams.get("distanceMetric",'correlation'))
             nnm.data[:] = 1
             if reembedParams.get("kernelPca",False):
@@ -777,6 +840,53 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                     
     elif embeddingMode == "Create embedding from subset":
          #direc    
+        if pairedMode:
+            ID = userID.split("/")[0].split("\\")[0]
+
+            if not np.all(obs_mask):
+                name2 = f"{paired_embeddings[parentName]};;{embName}"
+            else:
+                name2 = embName    
+
+            if exists(f"{ID}/{otherMode}/emb/{name2}.p"):
+                name2 = f"{name2}_{str(hex(int(time.time())))[2:]}"
+
+            paired_embeddings[name] = name2
+            paired_embeddings[name2]= name
+            pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")
+
+            #otherMode
+            cL = paired_embeddings[currentLayout]
+            umap = pickle_loader(f"{ID}/{otherMode}/emb/{cL}.p")                     
+            result = np.full((obs_mask2.shape[0], umap.shape[1]), np.NaN)
+            result[obs_mask2] = umap[obs_mask2] 
+            X_umap = result  
+
+            try:
+                nnm = pickle_loader(f"{ID}/{otherMode}/nnm/{cL}.p")
+            except:
+                nnm = None
+
+            try:
+                obsm = pickle_loader(f"{ID}/{otherMode}/pca/pca;;{cL}.p")
+            except:
+                try:
+                    obsm = pickle_loader(f"{ID}/{otherMode}/pca/pca.p")
+                except:
+                    obsm = None
+            if obsm is None:
+                pca = obsm
+            else:
+                pca = np.full((obs_mask2.shape[0], obsm.shape[1]), np.NaN)
+                pca[obs_mask2] = obsm[obs_mask2]  
+            
+            if nnm is not None:
+                pickle_dumper(nnm, f"{ID}/{otherMode}/nnm/{name2}.p") 
+            if pca is not None:
+                pickle_dumper(pca, f"{ID}/{otherMode}/pca/pca;;{name2}.p")                                   
+            pickle_dumper(X_umap, f"{ID}/{otherMode}/emb/{name2}.p")
+
+
         umap = pickle_loader(f"{userID}/emb/{currentLayout}.p")                     
         result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
         result[obs_mask] = umap[obs_mask] 
@@ -885,6 +995,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         if reembedParams.get("calculateSamWeights",False) and not reembedParams.get("doSAM",False):
             var = dispersion_ranking_NN(X_full,nnm_sub)
             for k in var.keys():
+                x = var[k]
+                y = np.zeros(obs_mask2.size,dtype=x.dtype)
+                y[obs_mask2]=x
+                var[k] = y
+
+            for k in var.keys():
                 fn = "{}/var/{};;{}.p".format(userID,k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
@@ -892,6 +1008,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         elif reembedParams.get("doSAM",False) and sam is not None:
             keys = ['weights','spatial_dispersions']
             for k in keys:
+                x = sam.adata.var[k]
+                y = np.zeros(obs_mask2.size,dtype=x.dtype)
+                y[obs_mask2]=x
+                sam.adata.var[k] = y
+                            
+            for k in keys:                
                 fn = "{}/var/{};;{}.p".format(userID,"sam_"+k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn.split(';;')[0]+'.p')
@@ -1461,6 +1583,7 @@ def initialize_socket(da):
                     parentName = data["parentName"] if data else ""
                     embName = data["embName"] if data else None
                     currentLayout = data["currentLayout"]
+                    otherSelector = data["otherSelector"]
         
                     annotations = da.dataset_config.user_annotations        
                     userID = f"{annotations._get_userdata_idhash(da)}"  
@@ -1509,14 +1632,19 @@ def initialize_socket(da):
                         if parentName == tlay:
                             l = pickle_loader(f"{userID}/var/{n}.p")
                             if n != "name_0":
-                                var[n] = pd.Series(l)
+                                var[n] = l
                     var.index = pd.Index(np.arange(var.shape[0]))
-
+                    obs_mask2 = np.zeros(var.shape[0],dtype='bool')
+                    if len(otherSelector)==0:
+                        obs_mask2[:]=True
+                    else:
+                        obs_mask2[otherSelector] = True
                     AnnDataDict = {
                         "Xs": layers,
                         "obs": obs,
                         "var": var,
-                        "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], obs.shape[0])
+                        "obs_mask": da._axis_filter_to_mask(Axis.OBS, filter["obs"], obs.shape[0]),
+                        "obs_mask2": obs_mask2
                     }
 
                     def post_processing(res):
@@ -1551,7 +1679,7 @@ def initialize_socket(da):
                     if name == tlay:
                         l = pickle_loader(f"{userID}/var/{n}.p")
                         if n != "name_0":
-                            var[n] = pd.Series(l)
+                            var[n] = l
                 del var['name_0']
                                                               
                 obs_mask = da._axis_filter_to_mask(Axis.OBS, filter["obs"], da.get_shape()[0])
@@ -2031,7 +2159,7 @@ class AnndataAdaptor(DataAdaptor):
                 self.tMeanSqs["OBS"][k] = meansq
                 adata.var['mean'] = mean
                 adata.var['variance'] = v
-                
+
                 mean,v = sf.mean_variance_axis(adata.layers[k],axis=1)
                 meansq = v-mean**2
                 self.tMeans["VAR"][k] = mean

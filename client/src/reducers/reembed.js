@@ -98,6 +98,7 @@ const defaultDimredParams = {
   logScaleExpr: false,
   scaleExpr: false,
   embeddingMode: "Preprocess and run",
+  dsampleKey: "None",
   latentSpace: "",
   calculateSamWeights: false
 };

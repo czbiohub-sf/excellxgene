@@ -17,7 +17,8 @@ import actions from "../../../actions";
   genesets: state.genesets.genesets,
   genesetsUI: state.genesetsUI,
   selectedGenesLasso: state.genesets.selectedGenesLasso,
-  geneSelection: Object.keys(state.geneSelection)
+  geneSelection: Object.keys(state.geneSelection),
+  cOrG: state.controls.cxgMode === "OBS" ? "gene" : "cell"
 }))
 class CreateGenesetDialogue extends React.PureComponent {
   constructor(props) {
@@ -111,7 +112,7 @@ class CreateGenesetDialogue extends React.PureComponent {
       error,
       this.validate(genesetDescription, genesetName, genesets)
       ? "Gene set name must be unique."
-      : "New, unique gene set name",
+      : `New, unique ${this.props.cOrG} set name`,
       ":"
     );    
   };
@@ -122,7 +123,7 @@ class CreateGenesetDialogue extends React.PureComponent {
     }
     return labelPrompt(
       error,
-      `Optionally add a group name for this gene set`,
+      `Optionally add a group name for this ${this.props.cOrG} set`,
       ":"
     );    
   };
@@ -155,7 +156,7 @@ class CreateGenesetDialogue extends React.PureComponent {
       <>
         <Dialog
           icon="tag"
-          title="Create gene set"
+          title={`Create ${this.props.cOrG} set`}
           isOpen={genesetsUI.createGenesetModeActive}
           onClose={this.disableCreateGenesetMode}
         >
@@ -175,7 +176,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: true,
                   }}
-                  newLabelMessage="Create gene set"
+                  newLabelMessage={`Create ${this.props.cOrG} set`}
                 />
                 <p
                   style={{
@@ -198,13 +199,13 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: false,
                   }}
-                  newLabelMessage="Add geneset group name"
+                  newLabelMessage={`Add ${this.props.cOrG} set group name`}
                 />
 
                 <p style={{ marginTop: 20 }}>
                   Optionally add a list of comma separated{" "}
-                  <span style={{ fontWeight: 700 }}>genes</span> to populate the
-                  gene set
+                  <span style={{ fontWeight: 700 }}>{this.props.cOrG}s</span> to populate the
+                   {" "}{this.props.cOrG} set
                 </p>
                 <LabelInput
                   onChange={this.handleGenesetInputChange}
@@ -213,17 +214,17 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: false,
                   }}
-                  newLabelMessage="populate geneset with genes"
+                  newLabelMessage={`populate ${this.props.cOrG} set with ${this.props.cOrG}s`}
                 />
                 <p style={{ marginTop: 20 }}>
                 <span style={{ fontWeight: 700 }}>OR</span>{" "} leave empty to populate the
-                geneset with the currently selected genes.
+                {" "}{this.props.cOrG} set with the currently selected {this.props.cOrG}s.
                 </p>                
               </div>
             </div>
             <div className={Classes.DIALOG_FOOTER}>
               <div className={Classes.DIALOG_FOOTER_ACTIONS}>
-                <Tooltip2 content="Close this dialog without creating a new gene set.">
+                <Tooltip2 content={`Close this dialog without creating a new ${this.props.cOrG} set.`}>
                   <Button onClick={this.disableCreateGenesetMode}>
                     Cancel
                   </Button>
@@ -237,7 +238,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                   intent="primary"
                   type="submit"
                 >
-                  Create gene set
+                  Create {this.props.cOrG} set
                 </Button>
               </div>
             </div>

@@ -119,7 +119,8 @@ function createModelTF() {
   chromeKeyContinuous: state.controls.chromeKeyContinuous,
   chromeKeyCategorical: state.controls.chromeKeyCategorical,
   cxgMode: state.controls.cxgMode,
-  allGenes: state.controls.allGenes.__columns[0]
+  allGenes: state.controls.allGenes.__columns[0],
+  cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene"
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -281,7 +282,7 @@ class Graph extends React.Component {
       projectionTF: createProjectionTF(viewport.width, viewport.height),
       renderedMetadata: (
         <Card interactive elevation={Elevation.TWO}>
-          {`No cells in range.`}
+          {`No ${props.cOrG}s in range.`}
         </Card>
       ),
       // regl state
@@ -325,7 +326,8 @@ class Graph extends React.Component {
       dataLayerExpr,
       logScaleExpr,
       scaleExpr,
-      pointScaler
+      pointScaler,
+      layoutChoice
     } = this.props;
     const { toolSVG, viewport, regl } = this.state;
     const hasResized =
@@ -365,6 +367,9 @@ class Graph extends React.Component {
         stateChanges.tool ? stateChanges.tool : tool,
         stateChanges.container ? stateChanges.container : container
       );
+    }
+    if (layoutChoice.current !== prevProps.layoutChoice.current) {
+      stateChanges = {...stateChanges, selectedOther: []}
     }
     if (Object.keys(stateChanges).length > 0) {
       // eslint-disable-next-line react/no-did-update-set-state --- Preventing update loop via stateChanges and diff checks
@@ -445,7 +450,7 @@ class Graph extends React.Component {
       this.setState((state) => {
         return { ...state, lidarFocused: false, renderedMetadata: (
           <Card interactive elevation={Elevation.TWO}>
-            {`No cells in range.`}
+            {`No ${this.props.cOrG}s in range.`}
           </Card>
         )};
       });
@@ -567,7 +572,7 @@ class Graph extends React.Component {
     } else {
       this.setState({selectedOther: I})
     }
-    dispatch({type: "set other mode selection", selected: I.map((item)=>allGenes[item])})        
+    dispatch({type: "set other mode selection", selectedIndices: I, selected: I.map((item)=>allGenes[item])})        
   }
 
   // when a lasso is completed, filter to the points within the lasso polygon
@@ -582,7 +587,7 @@ class Graph extends React.Component {
       // if less than three points, or super small area, treat as a clear selection.
       dispatch(actions.graphLassoDeselectAction(layoutChoice.current));
       this.setState({selectedOther: []})
-      dispatch({type: "set other mode selection", selected: []})    
+      dispatch({type: "set other mode selection", selectedIndices: this.state.defaultSelectedOther ?? [], selected: []})    
     } else {
         if (positions) {
           this.selectWithinPolygon(polygon.map((xy) => this.mapScreenToPoint(xy)), multiselect)
@@ -712,11 +717,15 @@ class Graph extends React.Component {
         colorsProp,
         pointDilation
       );
+      
+      if (this.props.layoutChoice.current !== layoutChoice.current) {
+        return this.cachedAsyncProps;
+      }
+      
       const { currentDimNames } = layoutChoice;
       const X = layoutDf.col(currentDimNames[0]).asArray();
       const Y = layoutDf.col(currentDimNames[1]).asArray();
       let positions = this.computePointPositions(X, Y, modelTF);
-
       const colorTable = this.updateColorTable(colorsProp, colorDf);
       let colors = this.computePointColors(colorTable.rgb, annoMatrix.nObs);
 
@@ -745,6 +754,10 @@ class Graph extends React.Component {
       if (layoutDf2.__columns.length > 0) {
         const X2 = layoutDf2.col(currentDimNames[0]).asArray();
         const Y2 = layoutDf2.col(currentDimNames[1]).asArray();
+        const def = [];
+        X2.forEach((item,ix)=>{
+          if (item) def.push(ix)
+        })
         const positions2 = this.computePointPositions(X2, Y2, modelTF);
         this.setState({...this.state, positions2: [X2,Y2]})
         positions = Float32Concat(positions,positions2);
@@ -752,11 +765,10 @@ class Graph extends React.Component {
         const flags2 = new Float32Array(layoutDf2.length)
         flags2.forEach((_item,index)=>{
           if (selectedOther.length === 0) {
-            flags2[index] = flagHalfSelected;
+            flags2[index] = colorsProp.colorAccessor ? null : flagHalfSelected;
           } else {
             flags2[index] = null;
           }
-          
         })
         selectedOther.forEach((item)=>{
           flags2[item] = flagHalfSelected
@@ -781,6 +793,7 @@ class Graph extends React.Component {
         }
         colors = Float32Concat(colors,colors2) 
         nPoints = nPoints + annoMatrix.nVar;       
+        this.setState({defaultSelectedOther: def})
       }
       this.setState((state) => {
         return { ...state, colorState: { colors, colorDf, colorTable }, nPoints: nPoints };
@@ -830,7 +843,6 @@ class Graph extends React.Component {
     } else {
       promises.push(Promise.resolve(null));
     }
-
     return Promise.all(promises);
   }
 
@@ -1096,7 +1108,7 @@ class Graph extends React.Component {
   }
 
   renderMetadata() {
-    const { annoMatrix, colors } = this.props;
+    const { annoMatrix, colors, cOrG } = this.props;
     const { colorState, lidarCrossfilter, numCellsInLidar } = this.state;
     
     if (colors.colorMode && colorState.colorDf) {
@@ -1111,7 +1123,7 @@ class Graph extends React.Component {
         } catch (e) {
           return (
             <Card interactive elevation={Elevation.TWO}>
-              {`Hovering over ${numCellsInLidar ?? 0} cells.`}
+              {`Hovering over ${numCellsInLidar ?? 0} ${cOrG}s.`}
             </Card>
           );
         }
@@ -1181,7 +1193,7 @@ class Graph extends React.Component {
 
         return (
           <Card interactive elevation={Elevation.TWO}>
-            {els ?? `No cells in range`}
+            {els ?? `No ${this.props.cOrG}s in range`}
           </Card>
         );
       }
@@ -1242,7 +1254,7 @@ class Graph extends React.Component {
     }
     return (
       <Card interactive elevation={Elevation.TWO}>
-        {`Hovering over ${numCellsInLidar ?? 0} cells.`}
+        {`Hovering over ${numCellsInLidar ?? 0} ${this.props.cOrG}s.`}
       </Card>
     );
   }
@@ -1258,7 +1270,7 @@ class Graph extends React.Component {
     screenCap,
     nPoints
   ) {
-    const { annoMatrix, dispatch, layoutChoice, pointScaler } = this.props;
+    const { annoMatrix, dispatch, layoutChoice, pointScaler, allGenes } = this.props;
     if (!this.reglCanvas || !annoMatrix) return;
 
     const cameraTF = camera.view();
@@ -1298,7 +1310,11 @@ class Graph extends React.Component {
 
     if (nPoints <= annoMatrix.nObs) {
       this.setState({...this.state,positions2: null, selectedOther: []})
-      dispatch({type: "set other mode selection", selected: []})  
+      dispatch({type: "set other mode selection", selectedIndices: [], selected: []})  
+    } else {
+      if (this.state.selectedOther.length === 0) { // revert indices to default selection.
+        dispatch({type: "set other mode selection", selectedIndices: this.state.defaultSelectedOther ?? [], selected: this.state.selectedOther.map((item)=>allGenes[item]) ?? []})  
+      }
     }
   }
 
