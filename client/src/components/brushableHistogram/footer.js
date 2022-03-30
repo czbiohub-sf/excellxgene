@@ -10,6 +10,7 @@ const HistogramFooter = React.memo(
     rangeColorMax,
     isObs,
     isGeneSetSummary,
+    cxgMode
   }) => {
     /*
     Footer of each histogram.  Will render range and title.
@@ -20,6 +21,7 @@ const HistogramFooter = React.memo(
       * range - length two array, [min, max], containing the range values to display
       * rangeColor - length two array, [mincolor, maxcolor], each a CSS color
     */
+   const cOrG = cxgMode === "OBS" ? "gene" : "cell";
     return (
       <div>
         <div
@@ -41,7 +43,7 @@ const HistogramFooter = React.memo(
             style={{ fontStyle: "italic" }}
           >
             {isObs && displayName}
-            {isGeneSetSummary && "gene set mean expression"}
+            {isGeneSetSummary && `${cOrG} set mean expression`}
           </span>
           <div style={{ display: hideRanges ? "block" : "none" }}>
             : {rangeMin}

@@ -69,6 +69,7 @@ class Category extends React.PureComponent {
       removeHistZeros: false,
       indexOfSankeyCategory: -1,
       filterValue: "",
+      shouldPersist: false
     }
   }
   static getSelectionState(
@@ -149,7 +150,12 @@ class Category extends React.PureComponent {
       colorModePrev === "color by continuous metadata" || 
       colorModePrev === "color by geneset mean expression" || 
       colorModePrev =="color by expression"
-    )        
+    )  
+    
+    if (this.state.shouldPersist) {
+      this.setState({...this.state, shouldPersist: false})
+    }      
+
     if (continuousColoring !== continuousColoringPrev && continuousColoringPrev) {
       this.setState({
         ...this.state,
@@ -195,6 +201,9 @@ class Category extends React.PureComponent {
         indexOfSankeyCategory: selectedCategories.indexOf(metadataField)
       })
     }
+    if (continuousColoring) {
+      this.setState({...this.state, shouldPersist: true})
+    }    
     
   }
   handleColorChange = () => {
@@ -251,7 +260,6 @@ class Category extends React.PureComponent {
       ...this.state,
       categorySummary: categorySummary
     })
-
     return {
       chromeKeyCategorical,
       categoryData,
@@ -364,7 +372,7 @@ class Category extends React.PureComponent {
     const continuousColoring = (colorMode === "color by continuous metadata" || colorMode === "color by geneset mean expression" || colorMode =="color by expression")
     const checkboxID = `category-select-${metadataField}`;
     const sankeyCheckboxID = `sankey-select-${metadataField}`;
-    const { sortDirection, continuousAverages, removeHistZeros, indexOfSankeyCategory, filterValue } = this.state;
+    const { shouldPersist, sortDirection, continuousAverages, removeHistZeros, indexOfSankeyCategory, filterValue } = this.state;
     return (
       <CategoryCrossfilterContext.Provider value={crossfilter}>
         <Async
@@ -375,7 +383,7 @@ class Category extends React.PureComponent {
             metadataField,
             annoMatrix,
             categoricalSelection,
-            colors,
+            colors
           }}
         >
           <Async.Pending initial>
@@ -389,7 +397,7 @@ class Category extends React.PureComponent {
               <ErrorLoading metadataField={metadataField} error={error} />
             )}
           </Async.Rejected>
-          <Async.Fulfilled>
+          <Async.Fulfilled persist={shouldPersist}>
             {(asyncProps) => {
               const {
                 colorAccessor,
@@ -402,7 +410,7 @@ class Category extends React.PureComponent {
               } = asyncProps;
               const isTruncated = !!categorySummary?.isTruncated;
               const categorySummary = this.state?.categorySummary ?? categorySummaryOrig
-              const selectionState = this.getSelectionState(categorySummary);              
+              const selectionState = this.getSelectionState(categorySummary);  
               return (
                 <CategoryRender
                   metadataField={metadataField}

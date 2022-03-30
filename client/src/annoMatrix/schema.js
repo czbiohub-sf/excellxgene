@@ -19,6 +19,10 @@ export function _getColumnSchema(schema, field, col) {
       if (typeof col === "object")
         throw new Error("unable to get column schema by query");
       return schema.layout.obsByName[col];
+    case "jemb":
+      if (typeof col === "object")
+        throw new Error("unable to get column schema by query");
+      return schema.layout.obsByName[col];      
     case "X":
       return schema.dataframe;
     default:

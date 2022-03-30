@@ -44,7 +44,9 @@ const HEIGHT_MINI = 15 - MARGIN_MINI.TOP - MARGIN_MINI.BOTTOM;
     isColorAccessor: state.colors.colorAccessor === field,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr,
-    chromeKeyContinuous: state.controls.chromeKeyContinuous
+    scaleExpr: state.reembedParameters.scaleExpr,
+    chromeKeyContinuous: state.controls.chromeKeyContinuous,
+    cxgMode: state.controls.cxgMode
   };
 })
 class HistogramBrush extends React.PureComponent {
@@ -369,7 +371,9 @@ class HistogramBrush extends React.PureComponent {
       onRemoveClick,
       dataLayerExpr,
       logScaleExpr,
-      chromeKeyContinuous
+      scaleExpr,
+      chromeKeyContinuous,
+      cxgMode
     } = this.props;
     let { width } = this.props;
     if (!width) {
@@ -384,7 +388,7 @@ class HistogramBrush extends React.PureComponent {
       <Async
         watchFn={HistogramBrush.watchAsync}
         promiseFn={this.fetchAsyncProps}
-        watchProps={{ annoMatrix, setGenes, removeHistZeros, dataLayerExpr, logScaleExpr }}
+        watchProps={{ annoMatrix, setGenes, removeHistZeros, dataLayerExpr, logScaleExpr, scaleExpr }}
       >
         <Async.Pending initial>
           <StillLoading displayName={field} zebra={zebra} />
@@ -437,6 +441,7 @@ class HistogramBrush extends React.PureComponent {
                     rangeMax={asyncProps.unclippedRange[1]}
                     rangeColorMin={asyncProps.unclippedRangeColor[0]}
                     rangeColorMax={asyncProps.unclippedRangeColor[1]}
+                    cxgMode={cxgMode}
                   />
                 )}
               </div>

@@ -12,8 +12,10 @@ from werkzeug.urls import url_unquote
 from anndata import AnnData
 import pickle
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
+from backend.common.utils.data_locator import DataLocator
 from backend.server.common.config.client_config import get_client_config, get_client_userinfo
 from backend.common.constants import Axis, DiffExpMode, JSON_NaN_to_num_warning_msg
+from backend.common.genesets import read_gene_sets_tidycsv
 from backend.common.errors import (
     FilterError,
     JSONEncodingValueError,
@@ -128,11 +130,12 @@ def schema_get_helper(data_adaptor, userID = None):
     for f in fns:
         latent_spaces.append(f.split('/')[-1].split('\\')[-1][:-2])
 
+    mode = userID.split("/")[-1].split("\\")[-1]
     schema = {
-        "dataframe": {"nObs": data_adaptor.cell_count, "nVar": data_adaptor.gene_count, "type": str(data_adaptor.data.X.dtype)},
+        "dataframe": {"nObs": data_adaptor.NAME[mode]["obs"].size, "nVar": data_adaptor.NAME[mode]["var"].size, "type": str(data_adaptor.data.X.dtype)},
         "annotations": {
-            "obs": {"index": data_adaptor.parameters.get("obs_names"), "columns": []},
-            "var": {"index": data_adaptor.parameters.get("var_names"), "columns": []},
+            "obs": {"index": "name_0", "columns": []},
+            "var": {"index": "name_0", "columns": []},
         },
         "layout": {"obs": []},
         "layers": layers,
@@ -148,16 +151,18 @@ def schema_get_helper(data_adaptor, userID = None):
                 ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
                 if ann != "name_0":
                     x = pickle_loader(f"{userID}/var/{ann}.p")
-                    ann_schema = {"name": ann, "writable": True}
+                    a,c = np.unique(x,return_counts=True)
+                    if a.size > 2000 or c.max() < 5:
+                        ann_schema = {"name": ann, "writable": False}
+                    else:
+                        ann_schema = {"name": ann, "writable": True}
                     ann_schema.update(get_schema_type_hint_of_array(x))
                     schema["annotations"]["var"]["columns"].append(ann_schema)
             
             ann = "name_0"
-            curr_axis = data_adaptor.data.var
-            ann_schema = {"name": ann, "writable": True}
-            ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-            if ann_schema['type']!='categorical':
-                ann_schema['writable']=False
+            x = pickle_loader(f"{userID}/var/{ann}.p") 
+            ann_schema = {"name": ann, "writable": False}
+            ann_schema.update(get_schema_type_hint_of_array(x))
             schema["annotations"][ax]["columns"].append(ann_schema)
             
         elif str(ax) == "obs":
@@ -166,18 +171,19 @@ def schema_get_helper(data_adaptor, userID = None):
                 ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
                 if ann != "name_0":
                     x = pickle_loader(f"{userID}/obs/{ann}.p")
-                    ann_schema = {"name": ann, "writable": True}
+                    a,c = np.unique(x,return_counts=True)
+                    if a.size > 2000 or c.max() < 5:
+                        ann_schema = {"name": ann, "writable": False}
+                    else:
+                        ann_schema = {"name": ann, "writable": True}
                     ann_schema.update(get_schema_type_hint_of_array(x))
                     schema["annotations"][ax]["columns"].append(ann_schema)
             
             ann = "name_0"
-            curr_axis = data_adaptor.data.obs
-            ann_schema = {"name": ann, "writable": True}
-            ann_schema.update(get_schema_type_hint_of_array(curr_axis[ann]))
-            if ann_schema['type']!='categorical':
-                ann_schema['writable']=False
+            x = pickle_loader(f"{userID}/obs/{ann}.p") 
+            ann_schema = {"name": ann, "writable": False}
+            ann_schema.update(get_schema_type_hint_of_array(x))
             schema["annotations"][ax]["columns"].append(ann_schema)
-
 
     for layout in [x.split('/')[-1].split('\\')[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
         layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
@@ -193,14 +199,14 @@ def gene_info_get(request,data_adaptor):
     varM = request.args.get("varM", None)    
     name = request.args.get("embName",None)
     userID = _get_user_id(data_adaptor)
-    direc = pathlib.Path().absolute()    
+     #direc    
 
     if varM is not None and gene is not None:
         try:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM};;{name}.p")
+            X = pickle_loader(f"{userID}/var/{varM};;{name}.p")
         except:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM}.p")
-        n = pickle_loader(f"{direc}/{userID}/var/name_0.p")                    
+            X = pickle_loader(f"{userID}/var/{varM}.p")
+        n = pickle_loader(f"{userID}/var/name_0.p")                    
         return make_response(jsonify({"response": X[n==gene]}), HTTPStatus.OK)
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
@@ -224,14 +230,14 @@ def gene_info_bulk_put(request,data_adaptor):
     varM = args['varMetadata']
     name = args.get("embName",None)
     userID = _get_user_id(data_adaptor)
-    direc = pathlib.Path().absolute()  
+     #direc  
 
     if varM != "":
         try:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM};;{name}.p")
+            X = pickle_loader(f"{userID}/var/{varM};;{name}.p")
         except:
-            X = pickle_loader(f"{direc}/{userID}/var/{varM}.p")
-        n = pickle_loader(f"{direc}/{userID}/var/name_0.p")   
+            X = pickle_loader(f"{userID}/var/{varM}.p")
+        n = pickle_loader(f"{userID}/var/name_0.p")   
 
         return make_response(jsonify({"response": list(pd.Series(data=X,index=n)[geneSet].values)}), HTTPStatus.OK)
     else:
@@ -247,24 +253,35 @@ def userinfo_get(app_config, data_adaptor):
     return make_response(jsonify(config), HTTPStatus.OK)
 
 
+def _get_obs_keys(data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    fns = glob(f"{userID}/obs/*.p")
+    return [ann.split('.p')[0].split('/')[-1].split('\\')[-1] for ann in fns]
+
+def _get_var_keys(data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    fns = glob(f"{userID}/var/*.p")
+    return [ann.split('.p')[0].split('/')[-1].split('\\')[-1] for ann in fns]
+
 def annotations_obs_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
-    num_columns_requested = len(data_adaptor.get_obs_keys()) if len(fields) == 0 else len(fields)
+    num_columns_requested = len(_get_obs_keys(data_adaptor)) if len(fields) == 0 else len(fields)
     if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
         return abort(HTTPStatus.BAD_REQUEST)
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
-
+    
     try:
         labels = None
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
+            name_0 = pickle_loader(f"{userID}/obs/name_0.p")
             labels=pd.DataFrame()
             for f in fields:
                 labels[f] = pickle_loader(f"{userID}/obs/{f}.p")
-            labels.index = pd.Index(np.array(list(data_adaptor.data.obs['name_0']),dtype='object'))
+            labels.index = pd.Index(name_0,dtype='object')
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.OBS, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
@@ -273,7 +290,8 @@ def annotations_obs_get(request, data_adaptor):
 def annotations_var_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
     name = request.args.get("embName", None)
-    num_columns_requested = len(data_adaptor.get_var_keys()) if len(fields) == 0 else len(fields)
+
+    num_columns_requested = len(_get_var_keys(data_adaptor)) if len(fields) == 0 else len(fields)
     if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
         return abort(HTTPStatus.BAD_REQUEST)
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
@@ -285,13 +303,14 @@ def annotations_var_get(request, data_adaptor):
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
+            name_0 = pickle_loader(f"{userID}/var/name_0.p")
             labels=pd.DataFrame()
             for f in fields:
                 try:
                     labels[f] = pickle_loader(f"{userID}/var/{f};;{name}.p")
                 except:
                     labels[f] = pickle_loader(f"{userID}/var/{f}.p")
-            labels.index = pd.Index(np.array(list(data_adaptor.data.var['name_0']),dtype='object'))
+            labels.index = pd.Index(name_0,dtype='object')
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.VAR, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
@@ -341,11 +360,10 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
             vals = np.array(list(new_label_df[col]))
-            print(col,vals.dtype)
             if isinstance(vals[0],np.integer):
                 if (len(set(vals))<500):
                     vals = vals.astype('str')            
-            pickle_dumper(vals,"{}/obs/{}.p".format(userID,col.replace('/',':')))
+            pickle_dumper(vals,"{}/obs/{}.p".format(userID,col.replace('/','_')))
 
 def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     """helper function to write annotations from fbs"""
@@ -359,7 +377,7 @@ def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
-            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/var/{};;{}.p".format(userID,col.replace('/',':'),name))
+            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/var/{};;{}.p".format(userID,col.replace('/','_'),name))
 
 def check_new_labels_var(self, labels_df):
     """Check the new annotations labels, then set the labels_df index"""
@@ -431,9 +449,13 @@ def data_var_put(request, data_adaptor):
     filter = args.get("filter",None)
     layer = args.get("layer","X")
     logscale = args.get("logscale","false")=="true"
+    scale = args.get("scale","false")=="true"
+
+    userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
+    mode=pickle.load(open(f"{userID}/mode.p",'rb'))
     try:
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale,scale=scale,mode=mode),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -445,16 +467,21 @@ def data_var_get(request, data_adaptor):
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
-
+    
+    userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
+    mode=pickle.load(open(f"{userID}/mode.p",'rb'))
+    
     try:
         layer = request.values.get("layer", default="X")
         logscale = request.values.get("logscale", default="false") == "true"
+        scale = request.values.get("scale", default="false") == "true"
         args_filter_only = request.args.copy()
         args_filter_only.poplist("layer")  
-        args_filter_only.poplist("logscale")        
+        args_filter_only.poplist("logscale")     
+        args_filter_only.poplist("scale")        
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale),
+            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale, scale=scale, mode=mode),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -555,13 +582,13 @@ def sankey_data_put(request, data_adaptor):
 
 def upload_var_metadata_post(request, data_adaptor):
     file = request.files['file']
-    direc = pathlib.Path().absolute()
+     #direc
     userID = _get_user_id(data_adaptor)         
     filename = file.filename.split('/')[-1].split('\\')[-1]
-    file.save(f"{direc}/{userID}/{filename}")
-    A = pd.read_csv(f"{direc}/{userID}/{filename}",sep='\t',index_col=0)
+    file.save(f"{userID}/{filename}")
+    A = pd.read_csv(f"{userID}/{filename}",sep='\t',index_col=0)
     v1 = np.array(list(A.index))    
-    v2 = np.array(list(pickle_loader(f"{direc}/{userID}/var/name_0.p")))
+    v2 = np.array(list(pickle_loader(f"{userID}/var/name_0.p")))
     filt = np.in1d(v1,v2)
     v1 = v1[filt]    
     assert v1.size > 0
@@ -576,12 +603,12 @@ def upload_var_metadata_post(request, data_adaptor):
         valsrev = np.zeros(v2rev.size,dtype='object')
         valsrev[:] = filler
         vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
-        pickle_dumper(vals,"{}/{}/var/{}.p".format(direc,userID,k.replace('/',':')))
+        pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{direc}/{userID}/{filename}")
+            os.remove(f"{userID}/{filename}")
         except Exception as error:
             print(error)
         return response    
@@ -592,11 +619,11 @@ def save_var_metadata_put(request, data_adaptor):
     args = request.get_json()
     embName = args['embName']
 
-    direc = pathlib.Path().absolute()
+     #direc
     userID = _get_user_id(data_adaptor)        
 
-    fnames = glob(f"{direc}/{userID}/var/*.p")
-    v = pickle_loader(f"{direc}/{userID}/var/name_0.p")
+    fnames = glob(f"{userID}/var/*.p")
+    v = pickle_loader(f"{userID}/var/name_0.p")
     var=pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
     for f in fnames:
         n = f.split('/')[-1].split('\\')[-1][:-2]
@@ -605,7 +632,7 @@ def save_var_metadata_put(request, data_adaptor):
         else:
             tlay = ""
         if embName == tlay:
-            l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+            l = pickle_loader(f"{userID}/var/{n}.p")
             if n != "name_0":
                 var[n.split(';;')[0]] = pd.Series(data=l,index=v)  
 
@@ -614,23 +641,23 @@ def save_var_metadata_put(request, data_adaptor):
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' not in n:
             if n not in vkeys:
-                l = pickle_loader(f"{direc}/{userID}/var/{n}.p")
+                l = pickle_loader(f"{userID}/var/{n}.p")
                 if n != "name_0":
                     var[n] = pd.Series(data=l,index=v)                   
     del var['name_0']    
-    var.to_csv(f"{userID}/{userID}_var.txt",sep='\t')
+    var.to_csv(f"{userID}/output/var.txt",sep='\t')
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{userID}/{userID}_var.txt")
+            os.remove(f"{userID}/output/var.txt")
         except Exception as error:
             print(error)
         return response
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/{userID}_var.txt",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/var.txt",as_attachment=True)
 
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -655,21 +682,22 @@ def save_metadata_put(request, data_adaptor):
     for k in labelNames:
         labels[k] = pickle_loader(f"{userID}/obs/{k}.p")
     
-    labels.index = pd.Index(np.array(list(data_adaptor.data.obs['name_0']),dtype='object'))
+    mode=userID.split('/')[-1].split('\\')[-1]
+    labels.index = pd.Index(data_adaptor.NAME[mode]["obs"])
     labels = labels[obs_mask]
-    labels.to_csv(f"{userID}/{userID}_obs.txt",sep='\t')
+    labels.to_csv(f"{userID}/output/obs.txt",sep='\t')
 
     @after_this_request
     def remove_file(response):
         try:
-            os.remove(f"{userID}/{userID}_obs.txt")
+            os.remove(f"{userID}/output/obs.txt")
         except Exception as error:
             print(error)
         return response
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/{userID}_obs.txt",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/obs.txt",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -696,7 +724,21 @@ def delete_obsm_put(request, data_adaptor):
     embNames = args.get("embNames",None)
     fail=False
     userID = _get_user_id(data_adaptor)
+    ID = userID.split('/')[0].split('\\')[0]
+    paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
+
     if embNames is not None:
+        for embName in embNames:
+            if embName in paired_embeddings:
+                k1 = paired_embeddings[embName]
+                k2 = embName
+                del paired_embeddings[k1]
+                try:
+                    del paired_embeddings[k2]
+                except:
+                    pass
+                pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")                
+
         for embName in embNames:
             if os.path.exists(f"{userID}/emb/{embName}.p"):
                 os.remove(f"{userID}/emb/{embName}.p")
@@ -752,14 +794,223 @@ def rename_obs_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
 
+
+def _can_cast_to_float32(dtype, array_values):
+    """
+    Optimistically returns True signifying that a type downcast to float32 is possible whenever the incoming type is
+    a float.
+
+    We also handle a special case here where the array is a Series object with integer categorical values AND NaNs.
+    Since NaNs are floating points in numpy, we upcast the integer array to float32 and return True.
+    """
+
+    if dtype.kind == "f":
+        return True
+
+    if dtype.kind == "O" and pd.Series(array_values).hasnans:
+        return True
+
+    return False
+
+def _can_cast_to_int32(dtype, array_values=None):
+    if pd.Series(array_values).hasnans:
+        return False
+
+    ordered_array_values = array_values
+    if array_values.dtype.name == "category" and not array_values.cat.ordered:
+        ordered_array_values = array_values.cat.as_ordered()
+
+    if dtype.kind in ["i", "u"]:
+        if np.can_cast(dtype, np.int32):
+            return True
+        ii32 = np.iinfo(np.int32)
+        if (
+            not pd.Series(ordered_array_values).empty
+            and (ordered_array_values.min() >= ii32.min and ordered_array_values.max() <= ii32.max)
+            or pd.Series(ordered_array_values).empty
+        ):
+            return True
+    return False
+
+def switch_cxg_mode(request,data_adaptor):
+    embName = request.values.get("embName", default=None)
+
+    userID = _get_user_id(data_adaptor)
+    mode = userID.split("/")[-1].split("\\")[-1]
+    ID = userID.split("/")[0].split("\\")[0]
+    if mode == "OBS":
+        if not os.path.exists(f"{ID}/VAR"):
+            os.makedirs(f"{ID}/VAR/nnm/")
+            os.makedirs(f"{ID}/VAR/emb/")
+            os.makedirs(f"{ID}/VAR/params/")
+            os.makedirs(f"{ID}/VAR/pca/")
+            os.makedirs(f"{ID}/VAR/obs/")
+            os.makedirs(f"{ID}/VAR/var/")
+            os.makedirs(f"{ID}/VAR/diff/")   
+            os.makedirs(f"{ID}/VAR/output/")  
+            
+        newMode = "VAR"
+    else:
+        newMode = "OBS"
+
+    if len(glob(f"{ID}/VAR/emb/*.p")) == 0:
+        pickle_dumper(np.zeros((data_adaptor.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
+    if len(glob(f"{ID}/OBS/emb/*.p")) == 0:
+        pickle_dumper(np.zeros((data_adaptor.data.shape[0],2)),f"{ID}/OBS/emb/root.p")
+
+    pathOld = userID
+    pathNew = ID+"/"+newMode
+    
+    # convert obs cat to gene sets and var metadata
+    fns = glob(f"{pathOld}/obs/*.p")
+    obs = {}
+    for ann in fns:
+        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+        obs[ann] = pickle_loader(f"{pathOld}/obs/{ann}.p")
+
+    if os.path.exists(f"{pathNew}/gene-sets.csv"):
+        gene_sets = read_gene_sets_tidycsv(DataLocator(f"{pathNew}/gene-sets.csv"))
+    else:
+        gene_sets = {}
+    
+    name = obs['name_0']
+    del obs["name_0"]
+    for key in obs:
+        dtype = obs[key].dtype
+        dtype_name = dtype.name
+        dtype_kind = dtype.kind
+        a,c = np.unique(obs[key],return_counts=True)
+        flag =  a.size > 2000 or c.max() < 5
+        if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
+            suffix = "//;;//" if key.startswith("DEG_") else ""
+            a = []
+            b = []
+            for i,k in enumerate(obs[key]):
+                m = k.split('.')
+                a.extend(m)
+                b.extend(len(m)*[name[i]])
+            a = np.array(a)
+            b = np.array(b)
+            d = _df_to_dict(a,b)
+            try:
+                del d['unassigned']
+            except:
+                pass            
+            if suffix != "":
+                n = key.split('DEG_')[-1]
+                for dkey in d:
+                    if dkey != "unassigned":
+                        fnn = f"{pathNew}/diff/{n}/{dkey}_output.p"
+                        try:
+                            sname = name[np.vstack(pickle_loader(fnn))[:,0].astype('int')]
+                        except:
+                            suffix = ""
+                            break
+                        sname = sname[np.in1d(sname,d[dkey])]
+                        d[dkey] = list(sname)
+                
+            gene_sets[key.split('DEG_')[-1]+suffix] = d
+
+            pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
+        elif _can_cast_to_float32(dtype,obs[key]) or _can_cast_to_int32(dtype,obs[key]) or flag:
+            pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
+    pickle_dumper(name,f"{pathNew}/var/name_0.p")
+
+    annotations = data_adaptor.dataset_config.user_annotations  
+    with open(f"{pathNew}/gene-sets.csv", "w", newline="") as f:
+        f.write(annotations.gene_sets_to_csv(gene_sets))    
+
+    # convert genesets to obs
+    v = pickle_loader(f"{pathOld}/var/name_0.p")
+    genesets, _ = annotations.read_gene_sets(data_adaptor)
+
+    newObs = {}
+    for key1 in genesets:
+        if key1 != "":
+            C = []
+            O = []
+            for key2 in genesets[key1]:
+                o = genesets[key1][key2]
+                O.extend(o)
+                C.extend([key2]*len(o))
+            C = np.array(C)
+            O = np.array(O)
+            d = _df_to_dict(O,C)
+
+            for kk in d.keys():
+                if len(d[kk])>1:
+                    d[kk] = d[kk][np.argmin(np.array([np.where(np.array(genesets[key1][mm])==kk)[0][0] for  mm in d[kk]]))]
+                else:
+                    d[kk] = d[kk][0]
+            C = np.array(list(d.values()))
+            O = np.array(list(d.keys()))
+            
+            f = np.in1d(v,O,invert=True)
+            vnot = v[f] 
+            C = np.append(C,["unassigned"]*len(vnot)) 
+            O = np.append(O,vnot) 
+            newObs[key1] = pd.Series(data=C,index=O)[v].values.flatten()
+    
+    for key in newObs:
+        prefix = "DEG_" if "//;;//" in key else ""
+        pickle_dumper(newObs[key],f"{pathNew}/obs/{prefix}{key.split('//;;//')[0]}.p")
+
+    pickle_dumper(v,f"{pathNew}/obs/name_0.p")        
+    
+
+    # convert var metadata to obs
+    fns = glob(f"{pathOld}/var/*.p")
+    var = {}
+    if embName is not None:
+        for ann in fns:
+            ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+            if ';;' in ann:
+                tlay = ann.split(';;')[-1]
+            else:
+                tlay = ""
+            if embName == tlay:
+                ann = ann.split(';;')[0]
+                var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
+    
+    for ann in fns:
+        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1].split(';;')[0]
+        if ';;' not in ann:
+            if ann not in var:
+                if ann != "name_0":
+                    var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")    
+
+    for key in var:
+        pickle_dumper(var[key],f"{pathNew}/obs/{key}.p")
+
+    pickle.dump(newMode, open(f"{ID}/mode.p",'wb'))
+
+    try:
+        return make_response(jsonify({"success": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def _df_to_dict(a,b):
+    idx = np.argsort(a)
+    a = a[idx]
+    b = b[idx]
+    bounds = np.where(a[:-1] != a[1:])[0] + 1
+    bounds = np.append(np.append(0, bounds), a.size)
+    bounds_left = bounds[:-1]
+    bounds_right = bounds[1:]
+    slists = [b[bounds_left[i] : bounds_right[i]] for i in range(bounds_left.size)]
+    d = dict(zip(np.unique(a), [list(x) for x in slists]))
+    return d
+
 def rename_diff_put(request, data_adaptor):
     args = request.get_json()
     oldName = args.get("oldName",None)
     newName = args.get("newName",None)
     userID = _get_user_id(data_adaptor)
     
-    if os.path.exists(f"{userID}/diff/{oldName.replace('/',':')}"):
-        os.rename(f"{userID}/diff/{oldName.replace('/',':')}",f"{userID}/diff/{newName.replace('/',':')}")
+    if os.path.exists(f"{userID}/diff/{oldName.replace('/','_')}"):
+        os.rename(f"{userID}/diff/{oldName.replace('/','_')}",f"{userID}/diff/{newName.replace('/','_')}")
     
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
@@ -774,11 +1025,11 @@ def delete_diff_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     
     try:
-        if os.path.exists(f"{userID}/diff/{name.replace('/',':')}"):
-            fs = glob(f"{userID}/diff/{name.replace('/',':')}/*")
+        if os.path.exists(f"{userID}/diff/{name.replace('/','_')}"):
+            fs = glob(f"{userID}/diff/{name.replace('/','_')}/*")
             for f in fs:
                 os.remove(f)
-            os.rmdir(f"{userID}/diff/{name.replace('/',':')}")
+            os.rmdir(f"{userID}/diff/{name.replace('/','_')}")
     except: 
         pass
     
@@ -794,7 +1045,7 @@ def diff_group_get(request,data_adaptor):
     pop = request.args.get("pop",None)
     userID = _get_user_id(data_adaptor)
     try:
-        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}.p")
+        x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}.p")
         return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -806,7 +1057,7 @@ def diff_stats_get(request,data_adaptor):
     pop = request.args.get("pop",None)
     userID = _get_user_id(data_adaptor)
     try:
-        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_output.p")
+        x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_output.p")
         return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -818,7 +1069,7 @@ def diff_genes_get(request,data_adaptor):
     pop = request.args.get("pop",None)
     userID = _get_user_id(data_adaptor)
     try:
-        x = pickle_loader(f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_sg.p")
+        x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
         return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -832,7 +1083,7 @@ def diff_genes_put(request,data_adaptor):
     sg = args['selectedGenes']
     userID = _get_user_id(data_adaptor)
     try:
-        pickle_dumper(sg,f"{userID}/diff/{name.replace('/',':')}/{pop.replace('/',':')}_sg.p")
+        pickle_dumper(sg,f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
         return make_response(jsonify({"ok": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -875,11 +1126,25 @@ def rename_obsm_put(request, data_adaptor):
     oldName = args.get("oldName",None)
     newName = args.get("newName",None)
     userID = _get_user_id(data_adaptor)
+    ID = userID.split('/')[0].split('\\')[0]
+    paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
 
-    
     if embNames is not None and oldName is not None and newName is not None:
         for embName in embNames:
-            newItem = rename_wrapper(embName,oldName,newName)            
+            newItem = rename_wrapper(embName,oldName,newName)                        
+            if embName in paired_embeddings:
+                k1 = paired_embeddings[embName]
+                k2 = embName
+                del paired_embeddings[k1]; 
+                try:
+                    del paired_embeddings[k2]
+                except:
+                    pass
+                paired_embeddings[newItem] = k1
+                paired_embeddings[k1] = newItem
+                pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")                                          
+        
+            newItem = rename_wrapper(embName,oldName,newName)                        
             if os.path.exists(f"{userID}/emb/{embName}.p"):
                 os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{newItem}.p")
             if os.path.exists(f"{userID}/nnm/{embName}.p"):
@@ -1124,21 +1389,20 @@ def summarize_var_helper(request, data_adaptor, key, raw_query):
     args_filter_only.poplist("key")
     args_filter_only.poplist("layer")
     args_filter_only.poplist("logscale")
+    args_filter_only.poplist("scale")
 
     try:
         layer = request.values.get("layer", default="X")  
         logscale = request.values.get("logscale", default="false")=="true"        
+        scale = request.values.get("scale", default="false")=="true"  
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.summarize_var(summary_method, filter, query_hash, layer, logscale),
+            data_adaptor.summarize_var(summary_method, filter, query_hash, layer, logscale, scale),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
     except (ValueError) as e:
         return abort(HTTPStatus.NOT_FOUND, description=str(e))
-    except (UnsupportedSummaryMethod, FilterError) as e:
-        return abort(HTTPStatus.BAD_REQUEST, description=str(e))
-
 
 def summarize_var_get(request, data_adaptor):
     return summarize_var_helper(request, data_adaptor, None, request.query_string)

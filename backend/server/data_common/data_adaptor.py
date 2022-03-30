@@ -87,34 +87,9 @@ class DataAdaptor(metaclass=ABCMeta):
     def get_shape(self):
         pass
 
-    @abstractmethod
-    def query_var_array(self, term_var):
-        pass
-
-    @abstractmethod
-    def query_obs_array(self, term_var):
-        pass
 
     @abstractmethod
     def get_colors(self):
-        pass
-
-    @abstractmethod
-    def get_obs_index(self):
-        pass
-
-    @abstractmethod
-    def get_obs_columns(self):
-        pass
-
-    @abstractmethod
-    def get_obs_keys(self):
-        # return list of keys
-        pass
-
-    @abstractmethod
-    def get_var_keys(self):
-        # return list of keys
         pass
 
     @abstractmethod
@@ -177,9 +152,9 @@ class DataAdaptor(metaclass=ABCMeta):
         for v in filter:
             name = v["name"]
             if axis == Axis.VAR:
-                anno_data = self.query_var_array(name)
+                anno_data = self.NAME[self.mode_getter()]["var"]
             elif axis == Axis.OBS:
-                anno_data = self.query_obs_array(name)
+                anno_data = self.NAME[self.mode_getter()]["obs"]
 
             if anno_data.dtype.name in ["boolean", "category", "object"]:
                 values = v.get("values", [])
@@ -220,7 +195,7 @@ class DataAdaptor(metaclass=ABCMeta):
         if labels_df is None or labels_df.empty:
             return
 
-        labels_df.index = self.get_obs_index()
+        labels_df.index = self.NAME[self.mode_getter()]["obs"]
         if labels_df.index.name is None:
             labels_df.index.name = "index"
 
@@ -252,10 +227,10 @@ class DataAdaptor(metaclass=ABCMeta):
         return labels_df
 
     def check_new_gene_sets(self, genesets, context=None):
-        var_names = set(self.query_var_array(self.parameters.get("var_names")))
+        var_names = set(self.NAME[self.mode_getter()]["var"])
         return validate_gene_sets(genesets, var_names)
 
-    def data_frame_to_fbs_matrix(self, filter, axis, layer="X", logscale=False):
+    def data_frame_to_fbs_matrix(self, filter, axis, layer="X", logscale=False, scale=False, mode="OBS"):
         """
         Retrieves data 'X' and returns in a flatbuffer Matrix.
         :param filter: filter: dictionary with filter params
@@ -266,18 +241,22 @@ class DataAdaptor(metaclass=ABCMeta):
         * currently only supports access on VAR axis
         * currently only supports filtering on VAR axis
         """
+        
+        
         if axis != Axis.VAR:
             raise ValueError("Only VAR dimension access is supported")
         try:
             d = filter['var']['annotation_value'][0]
-            col = d['name']
+            col = self.NAME[mode]["var"]
             vals = d['values']
-            var_selector = np.in1d(np.array(list(self.data.var[col])),vals)
+            var_selector = np.in1d(col,vals)
+            
         except (KeyError, IndexError, TypeError, AttributeError):
             raise FilterError("Error parsing filter")
 
         col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
-        X = self.get_X_array(col_idx,layer=layer,logscale=logscale)
+        X = self.get_X_array(col_idx,layer=layer,logscale=logscale, scale=scale)
+        
         return encode_matrix_fbs(X, col_idx=col_idx, row_idx=None)
 
     def diffexp_topN(self, obsFilterA, obsFilterB, top_n=None):
@@ -389,19 +368,19 @@ class DataAdaptor(metaclass=ABCMeta):
             lastmod = None
         return lastmod
 
-    def summarize_var(self, method, filter, query_hash,layer="X",logscale=False):
+    def summarize_var(self, method, filter, query_hash,layer="X",logscale=False, scale=False):
         if method != "mean":
             raise UnsupportedSummaryMethod("Unknown gene set summary method.")
 
         d = filter['var']['annotation_value'][0]
-        col = d['name']
+        col = self.NAME[self.mode_getter()]["var"]    
         vals = d['values']
-        var_selector = np.in1d(np.array(list(self.data.var[col])),vals)
+        var_selector = np.in1d(col,vals)
         if var_selector is None or np.count_nonzero(var_selector) == 0:
             mean = np.zeros((self.get_shape()[0], 1), dtype=np.float32)
         else:
             col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
-            X = self.get_X_array(col_idx,layer=layer,logscale=logscale)
+            X = self.get_X_array(col_idx,layer=layer,logscale=logscale, scale=scale)
             if sparse.issparse(X):
                 mean = X.mean(axis=1)
             else:

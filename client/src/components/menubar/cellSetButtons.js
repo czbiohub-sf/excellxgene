@@ -6,6 +6,7 @@ import actions from "../../actions";
 
 @connect((state) => ({
   differential: state.differential,
+  cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene"
 }))
 class CellSetButton extends React.PureComponent {
   set() {
@@ -15,7 +16,7 @@ class CellSetButton extends React.PureComponent {
   }
 
   render() {
-    const { differential, eitherCellSetOneOrTwo } = this.props;
+    const { differential, eitherCellSetOneOrTwo, cOrG } = this.props;
     const cellListName = `celllist${eitherCellSetOneOrTwo}`;
     const cellsSelected = differential[cellListName]
       ? differential[cellListName].length
@@ -38,7 +39,7 @@ class CellSetButton extends React.PureComponent {
           <span data-testid={`cellset-count-${eitherCellSetOneOrTwo}`}>
             {cellsSelected}
           </span>
-          {" cells"}
+          {` ${cOrG}s`}
         </AnchorButton>
       </Tooltip>
     );

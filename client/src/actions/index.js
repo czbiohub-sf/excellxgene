@@ -447,7 +447,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       const { annoMatrix, genesets, differential } = getState();
       const { diffExpListsLists, diffExpListsNames } = genesets;
       const varIndexName = annoMatrix.schema.annotations.var.index;
-
+      
       annoMatrix.fetch("var", varIndexName).then((varIndex)=>{
         const diffexpLists = { negative: [], positive: [] };
         for (const polarity of Object.keys(diffexpLists)) {
@@ -503,6 +503,10 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         obsCrossfilter: prevCrossfilter,
         layoutChoice,
       } = getState();
+      let flag = false;
+      if (layoutChoice.available.length === 1 && layoutChoice.available[0] === "root") {
+        flag = true;
+      }
       const base = prevAnnoMatrix.base().addEmbedding(schema);
 
       await base.updateSchema(fullSchema)  
@@ -525,7 +529,12 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
         obsCrossfilter,
       });
       dispatch({type: "refresh var metadata"})      
-      
+      if (flag) {
+        dispatch({type: "reembed: delete reembedding", embName: "root"})
+        const newAnnoMatrix = annoMatrix.dropObsmLayout("root")
+        dispatch({type: "", annoMatrix: newAnnoMatrix})
+        dispatch(embActions.requestDeleteEmbedding(["root"]))     
+      }
       postAsyncSuccessToast("Re-embedding has completed.");
 
     } else if (data.cfn === "sankey"){
@@ -729,12 +738,13 @@ const doInitialDataLoad = () =>
       reembedParamsFetch(dispatch);
 
       const { response: userInfo } = res;
-      const { response: hostedMode } = res2;
+      const { response: hostedMode, cxgMode } = res2;
       if ( hostedMode ) {
         dispatch({type: "set user info", userInfo})
       } else {
         dispatch({type: "set user info", userInfo: {desktopMode: true}})
       }
+      dispatch({type: "set cxg mode", cxgMode})
       dispatch({type: "set hosted mode", hostedMode})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;  
 
@@ -962,7 +972,8 @@ const requestDifferentialExpression = (set1, set2, num_genes = 100) => async (
       set2: { filter: { obs: { index: set2 } } },
       multiplex: false,
       layer: annoMatrix.layer,
-      groupName: new Date().toLocaleString()
+      scale: annoMatrix.scale,
+      groupName: new Date().toLocaleString().replace(/\//g,"_")
 
     }))
   } catch (error) {
@@ -1001,7 +1012,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     const ix = annoMatrix.rowIndex.labels()
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     let z = 0;
-    const dateString = new Date().toLocaleString();
+    const dateString = new Date().toLocaleString().replace(/\//g,'_');
     for ( const cat of allCategories ) {
       if (cat !== "unassigned"){
         let set1 = []
@@ -1027,6 +1038,7 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
             dateString: dateString,
             nameList: allCategories,
             layer: annoMatrix.layer,
+            scale: annoMatrix.scale,            
             category: cat,
             num: z,
             groupName: `${categoryName} (${dateString})`

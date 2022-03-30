@@ -74,7 +74,7 @@ Private
 */
 
 function dropGenesetSummaryDimension(obsCrossfilter, state, genesetDescription, genesetName) {
-  const { annoMatrix, genesets } = state;
+  const { genesets, annoMatrix } = state;
   const varIndex = annoMatrix.schema.annotations?.var?.index;
   const gs = genesets?.genesets?.[genesetDescription] ?? {};
   const genes = gs?.[genesetName] ?? [];

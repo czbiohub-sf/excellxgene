@@ -5,6 +5,8 @@ import { connect } from "react-redux";
 import { Button, Dialog, Classes, Colors } from "@blueprintjs/core";
 import { Tooltip2 } from "@blueprintjs/popover2";
 import LabelInput from "../../labelInput";
+import { AnnotationsHelpers } from "../../../util/stateManager";
+import { labelPrompt } from "../../categorical/labelUtil";
 import actions from "../../../actions";
 
 @connect((state) => ({
@@ -14,7 +16,9 @@ import actions from "../../../actions";
   obsCrossfilter: state.obsCrossfilter,
   genesets: state.genesets.genesets,
   genesetsUI: state.genesetsUI,
-  geneSelection: Object.keys(state.geneSelection)
+  selectedGenesLasso: state.genesets.selectedGenesLasso,
+  geneSelection: Object.keys(state.geneSelection),
+  cOrG: state.controls.cxgMode === "OBS" ? "gene" : "cell"
 }))
 class CreateGenesetDialogue extends React.PureComponent {
   constructor(props) {
@@ -40,7 +44,9 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   createGeneset = (e) => {
-    const { dispatch , geneSelection} = this.props;
+    const { dispatch , geneSelection, selectedGenesLasso} = this.props;
+    const selectedGenes = [...new Set([...geneSelection,...selectedGenesLasso])];
+
     const {
       genesetName,
       genesToPopulateGeneset,
@@ -68,7 +74,7 @@ class CreateGenesetDialogue extends React.PureComponent {
       dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
     } else {
       const genesTmpHardcodedFormat = [];
-      geneSelection.forEach((_gene) => {
+      selectedGenes.forEach((_gene) => {
         genesTmpHardcodedFormat.push(_gene);
       });
       dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
@@ -101,11 +107,26 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   instruction = (genesetDescription, genesetName, genesets) => {
-    return this.validate(genesetDescription, genesetName, genesets)
+    const error = AnnotationsHelpers.annotationNameIsErroneous(genesetName);
+    return labelPrompt(
+      error,
+      this.validate(genesetDescription, genesetName, genesets)
       ? "Gene set name must be unique."
-      : "New, unique gene set name";
+      : `New, unique ${this.props.cOrG} set name`,
+      ":"
+    );    
   };
-
+  instruction2 = (genesetDescription) => {
+    let error = AnnotationsHelpers.annotationNameIsErroneous(genesetDescription);
+    if (error === "empty-string") {
+      error = false;
+    }
+    return labelPrompt(
+      error,
+      `Optionally add a group name for this ${this.props.cOrG} set`,
+      ":"
+    );    
+  };
   validate = (genesetDescription, genesetName, genesets) => {
     if (genesetDescription in genesets) {
       if (genesetName in genesets[genesetDescription]) {
@@ -115,6 +136,18 @@ class CreateGenesetDialogue extends React.PureComponent {
     return false;
   };
 
+  validate1 = (genesetName) => {
+    return AnnotationsHelpers.annotationNameIsErroneous(genesetName)
+  }
+
+  validate2 = (genesetDescription) => {
+    let error = AnnotationsHelpers.annotationNameIsErroneous(genesetDescription);
+    if (error === "empty-string") {
+      error = false;
+    }
+    return error;
+  }
+
   render() {
     const { genesetDescription, genesetName } = this.state;
     const { metadataField, genesetsUI, genesets } = this.props;
@@ -123,7 +156,7 @@ class CreateGenesetDialogue extends React.PureComponent {
       <>
         <Dialog
           icon="tag"
-          title="Create gene set"
+          title={`Create ${this.props.cOrG} set`}
           isOpen={genesetsUI.createGenesetModeActive}
           onClose={this.disableCreateGenesetMode}
         >
@@ -143,7 +176,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: true,
                   }}
-                  newLabelMessage="Create gene set"
+                  newLabelMessage={`Create ${this.props.cOrG} set`}
                 />
                 <p
                   style={{
@@ -157,9 +190,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                   {this.genesetNameError()}
                 </p>
                 <p style={{ marginTop: 20 }}>
-                  Optionally add a{" "}
-                  <span style={{ fontWeight: 700 }}>group name</span> for this
-                  gene set
+                  {this.instruction2(genesetDescription)}
                 </p>
                 <LabelInput
                   onChange={this.handleDescriptionInputChange}
@@ -168,13 +199,13 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: false,
                   }}
-                  newLabelMessage="Add geneset group name"
+                  newLabelMessage={`Add ${this.props.cOrG} set group name`}
                 />
 
                 <p style={{ marginTop: 20 }}>
                   Optionally add a list of comma separated{" "}
-                  <span style={{ fontWeight: 700 }}>genes</span> to populate the
-                  gene set
+                  <span style={{ fontWeight: 700 }}>{this.props.cOrG}s</span> to populate the
+                   {" "}{this.props.cOrG} set
                 </p>
                 <LabelInput
                   onChange={this.handleGenesetInputChange}
@@ -183,17 +214,17 @@ class CreateGenesetDialogue extends React.PureComponent {
                     intent: "none",
                     autoFocus: false,
                   }}
-                  newLabelMessage="populate geneset with genes"
+                  newLabelMessage={`populate ${this.props.cOrG} set with ${this.props.cOrG}s`}
                 />
                 <p style={{ marginTop: 20 }}>
                 <span style={{ fontWeight: 700 }}>OR</span>{" "} leave empty to populate the
-                geneset with the currently selected genes.
+                {" "}{this.props.cOrG} set with the currently selected {this.props.cOrG}s.
                 </p>                
               </div>
             </div>
             <div className={Classes.DIALOG_FOOTER}>
               <div className={Classes.DIALOG_FOOTER_ACTIONS}>
-                <Tooltip2 content="Close this dialog without creating a new gene set.">
+                <Tooltip2 content={`Close this dialog without creating a new ${this.props.cOrG} set.`}>
                   <Button onClick={this.disableCreateGenesetMode}>
                     Cancel
                   </Button>
@@ -202,12 +233,12 @@ class CreateGenesetDialogue extends React.PureComponent {
                   data-testid={`${metadataField}:submit-geneset`}
                   onClick={this.createGeneset}
                   disabled={
-                    !genesetName || this.validate(genesetDescription, genesetName, genesets)
+                    !genesetName || this.validate(genesetDescription, genesetName, genesets) || this.validate1(genesetName) || this.validate2(genesetDescription)
                   }
                   intent="primary"
                   type="submit"
                 >
-                  Create gene set
+                  Create {this.props.cOrG} set
                 </Button>
               </div>
             </div>

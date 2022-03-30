@@ -62,7 +62,7 @@ export const defaultPrepParams = {
   minCellsGF: 0,
   maxCellsGF: 100,
   minCountsGF: 0,
-  nTopGenesHVG: 2000,
+  nTopGenesHVG: 3000,
   nBinsHVG: 20,
   doBatchPrep: false,
   batchPrepKey: "",
@@ -82,7 +82,8 @@ const defaultBatchParams = {
   bbknnNeighborsWithinBatch: 3,
 };
 const defaultDimredParams = {
-  numPCs: 150,
+  numPCs: 50,
+  kernelPca: false,
   pcaSolver: "randomized",
   neighborsKnn: 20,
   neighborsMethod: "umap",
@@ -95,7 +96,9 @@ const defaultDimredParams = {
   umapMinDist: 0.1,
   dataLayerExpr: "X",
   logScaleExpr: false,
+  scaleExpr: false,
   embeddingMode: "Preprocess and run",
+  dsampleKey: "None",
   latentSpace: "",
   calculateSamWeights: false
 };
@@ -108,10 +111,10 @@ export const defaultReembedParams = {
 export const reembedParameters = (state = defaultReembedParams, action) => {
   switch (action.type) {
     case "reembed: load": {
-      const { dataLayerExpr: layerExpr, logScaleExpr: logExpr } = state;
+      const { dataLayerExpr: layerExpr, logScaleExpr: logExpr, scaleExpr: scExpr } = state;
       const { params } = action;
-      const {dataLayerExpr: a, logScaleExpr: b, ...newParams} = params;
-      return {...newParams, dataLayerExpr: layerExpr, logScaleExpr: logExpr};
+      const {dataLayerExpr: a, logScaleExpr: b, scaleExpr: c, ...newParams} = params;
+      return {...newParams, dataLayerExpr: layerExpr, logScaleExpr: logExpr, scaleExpr: scExpr};
     }
     case "reembed: set parameter": {
       const { batchPrepParams, batchPrepKey, batchPrepLabel } = state;

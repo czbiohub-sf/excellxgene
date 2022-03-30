@@ -20,7 +20,10 @@ import {
   _urlEncodeComplexQuery,
   _hashStringValues,
 } from "./query";
-
+import {
+  Dataframe,
+  IdentityInt32Index,
+} from "../util/dataframe";
 const promiseThrottle = new PromiseLimit(5);
 
 export default class AnnoMatrixLoader extends AnnoMatrix {
@@ -239,7 +242,7 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
   /**
    ** Private below
    **/
-  async _doLoad(field, query, layer="X", logscale=false) {
+  async _doLoad(field, query, layer="X", logscale=false, scale=false) {
     /*
     _doLoad - evaluates the query against the field. Returns:
       * whereCache update: column query map mapping the query to the column labels
@@ -254,7 +257,7 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
         break;
       }
       case "X": {
-        doRequest = _XLoader(this.baseURL, field, query, layer, logscale);
+        doRequest = _XLoader(this.baseURL, field, query, layer, logscale, scale);
         break;
       }
       case "emb": {
@@ -262,14 +265,26 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
         priority = 0; // high prio load for embeddings
         break;
       }
+      case "jemb": {
+        doRequest = _embLoader(this.baseURL, field, query);
+        priority = 0; // high prio load for embeddings
+        break;
+      }      
       default:
         throw new Error("Unknown field name");
     }
 
     const buffer = await promiseThrottle.priorityAdd(priority, doRequest);
-    const result = matrixFBSToDataframe(buffer);    
+    let result = matrixFBSToDataframe(buffer);    
     if (!result || result.isEmpty()) throw Error("Unknown field/col");
-
+    if (field==="emb" && result.length > this.schema.dataframe.nObs) {
+      result = result.isubset([...Array(this.schema.dataframe.nObs).keys()]) 
+    }
+    if (field==="jemb" && result.length > this.schema.dataframe.nObs) {
+      result = result.isubset([...Array.from({length: (result.length - this.schema.dataframe.nObs)}, (_, i) => i + this.schema.dataframe.nObs)])    
+    } else if (field === "jemb"){
+      result = Dataframe.empty(new IdentityInt32Index(this.schema.dataframe.nVar))      
+    }
     const whereCacheUpdate = _whereCacheCreate(
       field,
       query,
@@ -323,12 +338,12 @@ function _obsOrVarLoader(baseURL, field, query) {
   return () => doBinaryRequest(url);
 }
 
-function _XLoader(baseURL, field, query, layer, logscale) {
+function _XLoader(baseURL, field, query, layer, logscale, scale) {
   _expectComplexQuery(query);
   if (query.where) {
     const urlBase = `${baseURL}data/var`;
     const urlQuery = _urlEncodeComplexQuery(query);
-    const url = `${urlBase}?${urlQuery}&layer=${layer}&logscale=${logscale}`;
+    const url = `${urlBase}?${urlQuery}&layer=${layer}&logscale=${logscale}&scale=${scale}`;
     return () => doBinaryRequest(url);
   }
 
@@ -337,7 +352,7 @@ function _XLoader(baseURL, field, query, layer, logscale) {
     const urlQuery = _urlEncodeComplexQuery(query);
 
     if (urlBase.length + urlQuery.length < 2000) {
-      const url = `${urlBase}?${urlQuery}&layer=${layer}&logscale=${logscale}`;
+      const url = `${urlBase}?${urlQuery}&layer=${layer}&logscale=${logscale}&scale=${scale}`;
       return () => doBinaryRequest(url);
     }
 

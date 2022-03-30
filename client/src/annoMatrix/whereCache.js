@@ -57,7 +57,6 @@ export function _whereCacheGet(whereCache, schema, field, query) {
 
 	Return array of column labels or undefined.
 	*/
-
   if (typeof query === "object") {
     if (query.where) {
       const {

@@ -35,6 +35,7 @@ export function createColorQuery(colorMode, colorByAccessor, schema, genesets) {
       ];
     }
     case "color by geneset mean expression": {
+      
       const varIndex = schema?.annotations?.var?.index;
 
       if (!varIndex) return null;
@@ -219,7 +220,7 @@ function _createColorsByContinuousMetadata(data, min, max, chromeKeyContinuous) 
   const rgb = new Array(data.length);
   for (let i = 0, len = data.length; i < len; i += 1) {
     const val = data[i];
-    if (val === 0){
+    if (val <= 0){
       rgb[i] = [0.5,0.5,0.5];
     } else if (Number.isFinite(val)) {
       const c = scale(val);

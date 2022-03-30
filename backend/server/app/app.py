@@ -201,8 +201,22 @@ class UserInfoAuth0API(Resource):
 
 class HostedModeAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
-    def get(self):
-        return make_response(jsonify({"response": current_app.hosted_mode}), HTTPStatus.OK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        def _get_user_id(data_adaptor):
+            annotations = data_adaptor.dataset_config.user_annotations        
+            userID = f"{annotations._get_userdata_idhash(data_adaptor)}"       
+            return userID        
+        return make_response(jsonify({"response": current_app.hosted_mode,
+                                      "cxgMode": _get_user_id(data_adaptor).split('/')[-1].split('\\')[-1]}),
+                                      HTTPStatus.OK)
+
+class SwitchCxgModeAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.switch_cxg_mode(request, data_adaptor)
+
 
 class SendFileAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
@@ -517,6 +531,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(GeneInfoBulkAPI, "/geneInfoBulk")
     add_resource(ResetToRootFolder,"/resetToRoot")
     add_resource(AdminRestartMP, "/adminRestart")
+    add_resource(SwitchCxgModeAPI,"/switchCxgMode")
     add_resource(UploadVarMetadata, "/uploadVarMetadata")    
     # Data routes
     add_resource(AnnotationsObsAPI, "/annotations/obs")

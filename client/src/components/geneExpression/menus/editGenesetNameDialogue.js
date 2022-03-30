@@ -9,6 +9,7 @@ import LabelInput from "../../labelInput";
   ontology: state.ontology,
   obsCrossfilter: state.obsCrossfilter,
   genesetsUI: state.genesetsUI,
+  cxgMode: state.controls.cxgMode
 }))
 class RenameGeneset extends React.PureComponent {
   constructor(props) {
@@ -64,7 +65,8 @@ class RenameGeneset extends React.PureComponent {
 
   render() {
     const { newGenesetName, newGenesetDescription } = this.state;
-    const { genesetsUI, parentGeneset, parentGenesetDescription } = this.props;
+    const { genesetsUI, parentGeneset, parentGenesetDescription, cxgMode } = this.props;
+    const cOrG = cxgMode === "OBS" ? "gene" : "cell";
     let name = "";
     if (genesetsUI.isEditingGenesetName) {
       name = genesetsUI.isEditingGenesetName;
@@ -80,10 +82,10 @@ class RenameGeneset extends React.PureComponent {
           primaryButtonProps={{
             "data-testid": `${genesetsUI.isEditingGenesetName}:submit-geneset`,
           }}
-          title={gname.includes('//;;//') ? "Edit gene set name" : "Edit gene set name and grouping"}
+          title={gname.includes('//;;//') ? `Edit ${cOrG} set name` : `Edit ${cOrG} set name and grouping`}
           instruction={`Rename ${name}`}
-          cancelTooltipContent="Close this dialog without renaming the gene set."
-          primaryButtonText={gname.includes('//;;//') ? "Edit gene set name" : "Edit gene set name and grouping"}
+          cancelTooltipContent={`Close this dialog without renaming the ${cOrG} set.`}
+          primaryButtonText={gname.includes('//;;//') ? `Edit ${cOrG} set name` : `Edit ${cOrG} set name and grouping`}
           text={newGenesetName}
           secondaryText={newGenesetDescription}
           validationError={
@@ -102,7 +104,7 @@ class RenameGeneset extends React.PureComponent {
               }}
             />
           }
-          secondaryInstructions={gname.includes('//;;//') ? null : "Edit geneset group name"}
+          secondaryInstructions={gname.includes('//;;//') ? null : `Edit ${cOrG} group name`}
           secondaryInput={
             gname.includes('//;;//') ? null : <LabelInput
               label={newGenesetDescription}

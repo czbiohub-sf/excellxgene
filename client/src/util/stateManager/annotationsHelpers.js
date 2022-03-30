@@ -62,7 +62,7 @@ export function allHaveLabelByMask(df, colName, label, mask) {
   return true;
 }
 
-const legalCharacters = /^(\w|[ .()-])+$/;
+const legalCharacters = /^[-_+()\w\s]*$/;
 export function annotationNameIsErroneous(name) {
   /*
 	Validate the name - return:

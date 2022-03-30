@@ -241,13 +241,29 @@ export const selectCellsFromArray = (array, name) => async (
   dispatch,
   getState
 ) => {
-
-  let { annoMatrix, obsCrossfilter} = getState();
-  [annoMatrix, obsCrossfilter] = dispatch(resetSubsetAction({annoMatrix}))
   
+  let { annoMatrix, obsCrossfilter} = getState();
+  
+  [annoMatrix, obsCrossfilter] = dispatch(resetSubsetAction({annoMatrix}))
+
+  let array2;
+  if (annoMatrix.rowIndex.rindex?.length) {
+    const v = [...Array(annoMatrix.rowIndex.rindex.length).keys()]
+    const map = new Map();
+    v.forEach((item)=>{
+      map.set(annoMatrix.rowIndex.rindex[item],item)
+    })
+    array2 = [];
+    array.forEach((item)=>{
+      array2.push(map.get(item))
+    })
+  } else {
+    array2 = array;
+  }
+
   const nameDf = await annoMatrix.fetch("obs", "name_0");
   const rowNames = nameDf.__columns[0];
-  const values = array.map((index) => rowNames[index]);
+  const values = array2.map((index) => rowNames[index]);
 
   const selection = {
     mode: "exact",

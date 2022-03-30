@@ -21,6 +21,7 @@ import AddGeneToGenesetDialogue from "./addGeneToGenesetDialogue";
   return {
     genesetsUI: state.genesetsUI,
     colorAccessor: state.colors.colorAccessor,
+    cxgMode: state.controls.cxgMode
   };
 })
 class GenesetMenus extends React.PureComponent {
@@ -64,8 +65,9 @@ class GenesetMenus extends React.PureComponent {
   };
 
   render() {
-    const { group, geneset, genesetsEditable, createText, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros } = this.props;
+    const { group, geneset, genesetsEditable, createText, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros, writeSort, disableWriteSort, cxgMode } = this.props;
     const isColorBy = `${group}::${geneset}` === colorAccessor;
+    const cOrG = cxgMode === "OBS" ? "gene" : "cell";
     return (
       <>
         {genesetsEditable && (
@@ -97,8 +99,16 @@ class GenesetMenus extends React.PureComponent {
                     data-testclass="activateEditGenesetNameMode"
                     data-testid={`${group}-${geneset}:edit-genesetName-mode`}
                     onClick={this.activateEditGenesetNameMode}
-                    text={"Edit gene set name and grouping"}
+                    text={`Edit ${cOrG} set name and grouping`}
                   />}
+                  <MenuItem
+                    icon={"filter-keep"}
+                    data-testclass="write-sorting"
+                    data-testid={`${group}-${geneset}:write-sorting`}
+                    onClick={writeSort}
+                    text={"Set default ordering"}
+                    disabled={disableWriteSort}
+                  />                    
                   <MenuItem
                     icon={"vertical-bar-chart-desc"}
                     data-testclass="handleToggleHistZeros"

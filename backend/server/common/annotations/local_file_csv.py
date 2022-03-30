@@ -5,7 +5,7 @@ import threading
 from datetime import datetime
 from hashlib import blake2b
 import json
-
+import pickle
 import pandas as pd
 from flask import session, has_request_context, current_app, request
 
@@ -197,7 +197,9 @@ class AnnotationsLocalFile(Annotations):
             uid = session['excxg_profile']['sub']
             id = (uid + data_adaptor.get_location()).encode()
             idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
-        return idhash
+        
+        mode = pickle.load(open(f"{idhash}/mode.p","rb"))
+        return idhash+"/"+mode
 
     def _get_output_dir(self):
         if self.output_dir:

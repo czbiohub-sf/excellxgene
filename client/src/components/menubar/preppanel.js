@@ -12,6 +12,7 @@ import { ControlsHelpers } from "../../util/stateManager";
 @connect((state) => ({
   reembedParams: state.reembedParameters,
   annoMatrix: state.annoMatrix,
+  cxgMode: state.controls.cxgMode
 }))
 class PrepPanel extends React.PureComponent {
   constructor(props) {
@@ -39,7 +40,7 @@ class PrepPanel extends React.PureComponent {
     const {
       cfshown, gfshown, hvgshown, trshown
     } = this.state;
-    const { reembedParams, annoMatrix, dispatch} = this.props;
+    const { reembedParams, annoMatrix, cxgMode} = this.props;
     const allCategoryNames = ControlsHelpers.selectableCategoryNames(
       annoMatrix.schema
     ).sort();
@@ -61,7 +62,7 @@ class PrepPanel extends React.PureComponent {
     allBatchPrepLabels = allBatchPrepLabels ?? [""]
     return (
       <div>
-      <ControlGroup fill={true} vertical={false}>     
+      {cxgMode === "OBS" && <ControlGroup fill={true} vertical={false}>     
         <ParameterInput 
           label="Batch preprocess?"
           param="doBatchPrep"
@@ -81,7 +82,7 @@ class PrepPanel extends React.PureComponent {
           options={allBatchPrepLabels}
           tooltipContent={"The batch for which the parameters will be set."}
         />              
-      </ControlGroup>        
+      </ControlGroup>}      
       <ControlGroup fill={true} vertical={false}>
         <ParameterInput 
           label="Preprocess?"
