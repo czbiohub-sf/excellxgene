@@ -2,7 +2,7 @@ import React from "react";
 import { connect } from "react-redux";
 import AnnoDialog from "../../annoDialog";
 import LabelInput from "../../labelInput";
-
+import actions from "../../../actions";
 @connect((state) => ({
   annotations: state.annotations,
   schema: state.annoMatrix?.schema,
@@ -45,6 +45,7 @@ class RenameGeneset extends React.PureComponent {
         genesetDescription: newGenesetDescription,
       },
     });
+    dispatch(actions.requestGeneSetRename(genesetsUI.isEditingGenesetGroup,newGenesetDescription,genesetsUI.isEditingGenesetName, newGenesetName));
     dispatch({
       type: "geneset: disable rename geneset mode",
     });

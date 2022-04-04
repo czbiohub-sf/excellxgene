@@ -214,6 +214,7 @@ class HostedModeAPI(Resource):
 class SwitchCxgModeAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
+    @auth0_token_required
     def get(self, data_adaptor):
         return common_rest.switch_cxg_mode(request, data_adaptor)
 
@@ -295,6 +296,12 @@ class LayoutObsAPI(Resource):
     def get(self, data_adaptor):
         return common_rest.layout_obs_get(request, data_adaptor)
 
+class LayoutObsJointAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):
+        return common_rest.layout_obs_get_joint(request, data_adaptor)
+
 class SankeyPlotAPI(Resource):
     @cache_control(no_store=True)
     @rest_get_data_adaptor
@@ -359,6 +366,34 @@ class DeleteDiffAPI(Resource):
     @auth0_token_required
     def put(self, data_adaptor):
         return common_rest.delete_diff_put(request, data_adaptor)
+
+class RenameSetAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.rename_set_put(request, data_adaptor)
+
+class DeleteSetAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.delete_set_put(request, data_adaptor)
+
+class RenameGeneSetAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.rename_geneset_put(request, data_adaptor)
+
+class DeleteGeneSetAPI(Resource):
+    @cache_control(no_store=True)
+    @rest_get_data_adaptor
+    @auth0_token_required
+    def put(self, data_adaptor):
+        return common_rest.delete_geneset_put(request, data_adaptor)        
 
 class DeleteObsmAPI(Resource):
     @cache_control(no_store=True)
@@ -557,6 +592,10 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(RenameObsAPI, "/annotations/rename")
     add_resource(RenameDiffAPI, "/renameDiffExp")  
     add_resource(DeleteDiffAPI, "/deleteDiffExp") 
+    add_resource(RenameSetAPI, "/renameSet")  
+    add_resource(DeleteSetAPI, "/deleteSet") 
+    add_resource(RenameGeneSetAPI, "/renameGeneSet")  
+    add_resource(DeleteGeneSetAPI, "/deleteGeneSet")         
     add_resource(DiffGroupInfo, "/diffExpPops") 
     add_resource(DiffStatsInfo, "/diffExpStats")   
     add_resource(DiffGenesInfo, "/diffExpGenes")  
@@ -567,6 +606,7 @@ def get_api_dataroot_resources(bp_dataroot):
     # Computation routes
     #add_resource(DiffExpObsAPI, "/diffexp/obs")
     add_resource(LayoutObsAPI, "/layout/obs")
+    add_resource(LayoutObsJointAPI, "/layout/jemb")
     return api
 
 

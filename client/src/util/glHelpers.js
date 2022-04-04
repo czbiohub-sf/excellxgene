@@ -21,6 +21,7 @@ export const flagSelected = 1;
 export const flagBackground = 2;
 export const flagHighlight = 4;
 export const flagHalfSelected = 8;
+export const flagInvisible = 16;
 
 // for GLSL
 export const glPointFlags = `
@@ -29,6 +30,7 @@ export const glPointFlags = `
   const float flagBackground = 2.;
   const float flagHighlight = 4.;
   const float flagHalfSelected = 8.;  
+  const float flagInvisible = 16.;  
 
   bool isLowBitSet(float f) {
     f = mod(f, 2.);
@@ -43,14 +45,17 @@ export const glPointFlags = `
                 out bool isBackground,
                 out bool isSelected,
                 out bool isHighlight,
-                out bool isHalfSelected) {
+                out bool isHalfSelected,
+                out bool isInvisible) {
     isSelected = isLowBitSet(flag);
     flag = shiftRightOne(flag);
     isBackground = isLowBitSet(flag);
     flag = shiftRightOne(flag);
     isHighlight = isLowBitSet(flag);
     flag = shiftRightOne(flag);
-    isHalfSelected = isLowBitSet(flag);    
+    isHalfSelected = isLowBitSet(flag);   
+    flag = shiftRightOne(flag);
+    isInvisible = isLowBitSet(flag); 
   }
 
 `;
@@ -78,7 +83,7 @@ const scale = (range[1] - range[0]) / (domain[1] - domain[0]);
 const offset = scale * -domain[0] + range[0];
 
 export const glPointSize = `
-  float pointSize(float nPoints, float minViewportDimension, bool isSelected, bool isHighlight, bool isHalfSelected) {
+  float pointSize(float nPoints, float minViewportDimension, bool isSelected, bool isHighlight, bool isHalfSelected, bool isInvisible) {
     float density = nPoints / (minViewportDimension * minViewportDimension);
     float pointSize = (${scale.toFixed(4)}*density) + ${offset.toFixed(4)};
     pointSize = clamp(pointSize, 

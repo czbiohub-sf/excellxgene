@@ -207,7 +207,7 @@ class Sankey extends React.Component {
                      .nodeId(d => d.id)
                      .nodeWidth(nodeWidth)
                      .nodePadding(nodePadding)
-                     //.nodeAlign((n,tn)=>map.get(parseInt(n.id.split('_').at(0).slice(-1))));
+                     .nodeAlign((n,tn)=>map.get(parseInt(n.id.split('_').at(0).slice(-1))));
 
     let graph = sankey(data);
     

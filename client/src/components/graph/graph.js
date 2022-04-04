@@ -25,7 +25,8 @@ import {
   flagBackground,
   flagSelected,
   flagHighlight,
-  flagHalfSelected
+  flagHalfSelected,
+  flagInvisible
 } from "../../util/glHelpers";
 
 function withinPolygon(polygon, x, y) {
@@ -120,7 +121,8 @@ function createModelTF() {
   chromeKeyCategorical: state.controls.chromeKeyCategorical,
   cxgMode: state.controls.cxgMode,
   allGenes: state.controls.allGenes.__columns[0],
-  cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene"
+  cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene",
+  jointEmbeddingFlag: state.controls.jointEmbeddingFlag
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -706,11 +708,11 @@ class Graph extends React.Component {
       pointScaler,
       chromeKeyCategorical,
       chromeKeyContinuous,
-      selectedOther
+      selectedOther,
+      jointEmbeddingFlag
     } = props.watchProps;
     if (!(modifyingLayouts)){
       const { modelTF } = this.state;
-
       const [layoutDf, layoutDf2, colorDf, pointDilationDf] = await this.fetchData(
         annoMatrix,
         layoutChoice,
@@ -718,6 +720,9 @@ class Graph extends React.Component {
         pointDilation
       );
       
+      const doJointLayout = !(layoutDf2.__columns[0][0]===0.5 && layoutDf2.__columns[0][1]===0.5 &&
+          layoutDf2.__columns[1][0]===0.5 && layoutDf2.__columns[1][1]===0.5);
+
       if (this.props.layoutChoice.current !== layoutChoice.current) {
         return this.cachedAsyncProps;
       }
@@ -751,7 +756,7 @@ class Graph extends React.Component {
 
       const { width, height } = viewport;
       let nPoints = annoMatrix.nObs;
-      if (layoutDf2.__columns.length > 0) {
+      if (doJointLayout) {
         const X2 = layoutDf2.col(currentDimNames[0]).asArray();
         const Y2 = layoutDf2.col(currentDimNames[1]).asArray();
         const def = [];
@@ -769,9 +774,15 @@ class Graph extends React.Component {
           } else {
             flags2[index] = null;
           }
+          if (!jointEmbeddingFlag) {
+            flags2[index] = flagInvisible;
+          }
         })
         selectedOther.forEach((item)=>{
           flags2[item] = flagHalfSelected
+          if (!jointEmbeddingFlag) {
+            flags2[item] = flagInvisible;
+          }          
         })
         flags = Float32Concat(flags,flags2)
         
@@ -809,6 +820,7 @@ class Graph extends React.Component {
         pointScaler,
         chromeKeyCategorical,
         chromeKeyContinuous,
+        jointEmbeddingFlag,
         layoutChoice
       };
     } else {
@@ -1035,7 +1047,7 @@ class Graph extends React.Component {
   });
 
   updateReglAndRender(asyncProps, prevAsyncProps) {
-    const { positions, colors, flags, height, width, screenCap, pointScaler, chromeKeyCategorical, chromeKeyContinuous } = asyncProps;
+    const { positions, colors, flags, height, width, screenCap, pointScaler, chromeKeyCategorical, chromeKeyContinuous, jointEmbeddingFlag } = asyncProps;
     this.cachedAsyncProps = asyncProps;
 
     const { pointBuffer, colorBuffer, flagBuffer } = this.state;
@@ -1068,6 +1080,9 @@ class Graph extends React.Component {
     if (chromeKeyContinuous !== prevAsyncProps?.chromeKeyContinuous) {
       needToRenderCanvas = true;
     }    
+    if (jointEmbeddingFlag !== prevAsyncProps?.jointEmbeddingFlag) {
+      needToRenderCanvas = true;
+    }        
     if (needToRenderCanvas) this.renderCanvas();
   }
 
@@ -1334,7 +1349,8 @@ class Graph extends React.Component {
       scaleExpr,
       pointScaler,
       chromeKeyCategorical,
-      chromeKeyContinuous
+      chromeKeyContinuous,
+      jointEmbeddingFlag
     } = this.props;
     const {
       modelTF,
@@ -1470,7 +1486,8 @@ class Graph extends React.Component {
             pointScaler,
             chromeKeyCategorical,
             chromeKeyContinuous,
-            selectedOther
+            selectedOther,
+            jointEmbeddingFlag
           }}
         >
           <Async.Pending initial>

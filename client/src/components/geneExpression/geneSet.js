@@ -128,11 +128,6 @@ class GeneSet extends React.Component {
   }
 
   onSortGenesDescending = (sortD=false) => {
-    const dsu = (arr1, arr2) => arr1
-    .map((item, index) => [arr2[index], item]) 
-    .sort(([arg1], [arg2]) => arg2 - arg1) 
-    .map(([, item]) => item); 
-
     const { setGenes } = this.props;
     const { geneMetadatas, sortDirection } = this.state;
     
@@ -142,17 +137,25 @@ class GeneSet extends React.Component {
     
     const isString = typeof geneMetadatas[0] === "string";
     if (!isString) {
+      const dsu = (arr1, arr2) => arr1
+      .map((item, index) => [arr2[index], item]) 
+      .sort(([arg1], [arg2]) => arg2 - arg1) 
+      .map(([, item]) => item); 
+
       setGenesSorted = dsu(setGenes, geneMetadatas);
       geneMetadatasSorted = geneMetadatas.slice().sort(function(a, b) {
         return Number(a) - Number(b);
       }).reverse();  
     } else {
-      const map = Object.fromEntries(geneMetadatas.map((k, i) => [k, setGenes[i]]));
-      geneMetadatasSorted = geneMetadatas.slice().sort().reverse();  
-      setGenesSorted = [];
-      geneMetadatasSorted.forEach((item)=>{
-        setGenesSorted.push(map[item]);
-      })
+      const dsu = (arr1, arr2) => arr1
+      .map((item, index) => [arr2[index], item]) 
+      .sort(([arg1], [arg2]) => arg2.charCodeAt(0) - arg1.charCodeAt(0)) 
+      .map(([, item]) => item); 
+            
+      setGenesSorted = dsu(setGenes, geneMetadatas);
+      geneMetadatasSorted = geneMetadatas.slice().sort(function(a, b) {
+        return a.charCodeAt(0) - b.charCodeAt(0);
+      }).reverse();  
     }
 
     this.setState({
@@ -164,11 +167,6 @@ class GeneSet extends React.Component {
   }  
 
   onSortGenesAscending = (sortD=false) => {
-    const dsu = (arr1, arr2) => arr1
-    .map((item, index) => [arr2[index], item]) 
-    .sort(([arg1], [arg2]) => arg2 - arg1) 
-    .map(([, item]) => item); 
-
     const { setGenes } = this.props;
     const { geneMetadatas, sortDirection } = this.state;
     let setGenesSorted = setGenes;
@@ -176,17 +174,25 @@ class GeneSet extends React.Component {
 
     const isString = typeof geneMetadatas[0] === "string";
     if (!isString) {
+      const dsu = (arr1, arr2) => arr1
+      .map((item, index) => [arr2[index], item]) 
+      .sort(([arg1], [arg2]) => arg2 - arg1) 
+      .map(([, item]) => item); 
+
       setGenesSorted = dsu(setGenes, geneMetadatas).reverse();
       geneMetadatasSorted = geneMetadatas.slice(function(a, b) {
         return Number(a) - Number(b);
       }).sort();  
     } else {
-      const map = Object.fromEntries(geneMetadatas.map((k, i) => [k, setGenes[i]]));
-      geneMetadatasSorted = geneMetadatas.slice().sort();  
-      setGenesSorted = [];
-      geneMetadatasSorted.forEach((item)=>{
-        setGenesSorted.push(map[item]);
-      })
+      const dsu = (arr1, arr2) => arr1
+      .map((item, index) => [arr2[index], item]) 
+      .sort(([arg1], [arg2]) => arg2.charCodeAt(0) - arg1.charCodeAt(0)) 
+      .map(([, item]) => item); 
+            
+      setGenesSorted = dsu(setGenes, geneMetadatas).reverse();
+      geneMetadatasSorted = geneMetadatas.slice(function(a, b) {
+        return a.charCodeAt(0) - b.charCodeAt(0);
+      }).sort();  
     }
 
     this.setState({

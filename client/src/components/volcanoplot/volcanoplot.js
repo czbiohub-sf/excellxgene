@@ -677,11 +677,6 @@ class Volcanoplot extends React.PureComponent {
     dispatch(actions.genesetAddGenes(group, geneset, gA));
   };
 
-  handleDeleteGeneFromSet = () => {
-    const { dispatch, group, gene, geneset } = this.props;
-    dispatch(actions.genesetDeleteGenes(group, geneset, [gene]));
-  };
-
   render() {
     const {
       dispatch,

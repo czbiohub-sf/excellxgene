@@ -9,6 +9,7 @@ import numpy as np
 from glob import glob
 from flask import make_response, jsonify, current_app, abort, send_file, after_this_request, session
 from werkzeug.urls import url_unquote
+import shutil
 from anndata import AnnData
 import pickle
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
@@ -124,7 +125,7 @@ def schema_get_helper(data_adaptor, userID = None):
     initial_embeddings = []
     for k in data_adaptor._obsm_init.keys():
         initial_embeddings.append(k if k[:2]!="X_" else k[2:])
-    
+
     latent_spaces = []
     fns = glob(f"{userID}/pca/*.p")
     for f in fns:
@@ -347,7 +348,7 @@ def pickle_loader(fn):
         x = pickle.load(f)
     return x
 
-def annotations_put_fbs_helper(data_adaptor, fbs):
+def annotations_put_fbs_helper(data_adaptor, fbs): 
     """helper function to write annotations from fbs"""
     annotations = data_adaptor.dataset_config.user_annotations
     if not annotations.user_annotations_enabled():
@@ -357,13 +358,47 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
     if not new_label_df.empty:
         new_label_df = data_adaptor.check_new_labels(new_label_df)
     if not new_label_df.empty:
+        annotations_put_worker(data_adaptor,new_label_df)
+
+def annotations_put_worker(data_adaptor, new_label_df, userID=None, initVar = False):
+    if userID is None:
         userID = _get_user_id(data_adaptor)
-        for col in new_label_df:
-            vals = np.array(list(new_label_df[col]))
-            if isinstance(vals[0],np.integer):
-                if (len(set(vals))<500):
-                    vals = vals.astype('str')            
-            pickle_dumper(vals,"{}/obs/{}.p".format(userID,col.replace('/','_')))
+    ID = userID.split('/')[0].split('\\')[0]
+    mode = userID.split('/')[-1].split('\\')[-1]
+    otherMode = "OBS" if mode == "VAR" else "VAR"
+    pathNew = ID+"/"+otherMode
+    for col in new_label_df:
+        vals = np.array(list(new_label_df[col]))
+        if isinstance(vals[0],np.integer):
+            if (len(set(vals))<500):
+                vals = vals.astype('str')            
+        src = "{}/obs/{}.p".format(userID,col.replace('/','_'))
+        tgt = "{}/var/{}.p".format(pathNew,col.replace('/','_'))
+        pickle_dumper(vals,src)
+
+        #jointmode flag here
+        if initVar:
+            pickle_dumper(vals,tgt)
+
+        name = data_adaptor.NAME[mode]["obs"]
+        
+        dtype = vals.dtype
+        dtype_name = dtype.name
+        dtype_kind = dtype.kind
+        a,c = np.unique(vals,return_counts=True)
+        flag =  a.size > 2000 or c.max() < 5
+        if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
+            d = _df_to_dict(vals,name)
+            try:
+                del d['unassigned']
+            except:
+                pass            
+            
+            if os.path.exists(f"{pathNew}/set/{col}/"):
+                shutil.rmtree(f"{pathNew}/set/{col}/")            
+            os.makedirs(f"{pathNew}/set/{col}/")
+            for dkey in d:
+                pickle_dumper(d[dkey],f"{pathNew}/set/{col}/{dkey}.p")    
 
 def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     """helper function to write annotations from fbs"""
@@ -558,6 +593,30 @@ def layout_obs_get(request, data_adaptor):
             include_exc_info=True,
         )
 
+def layout_obs_get_joint(request, data_adaptor):
+    fields = request.args.getlist("layout-name", None)
+    num_columns_requested = len(data_adaptor.get_embedding_names()) if len(fields) == 0 else len(fields)
+    if data_adaptor.server_config.exceeds_limit("column_request_max", num_columns_requested):
+        return abort(HTTPStatus.BAD_REQUEST)
+
+    preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
+    if preferred_mimetype != "application/octet-stream":
+        return abort(HTTPStatus.NOT_ACCEPTABLE)
+
+    try:
+        return make_response(
+            data_adaptor.layout_to_fbs_matrix_joint(fields), HTTPStatus.OK, {"Content-Type": "application/octet-stream"}
+        )
+    except (KeyError, DatasetAccessError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+    except PrepareError:
+        return abort_and_log(
+            HTTPStatus.NOT_IMPLEMENTED,
+            f"No embedding available {request.path}",
+            loglevel=logging.ERROR,
+            include_exc_info=True,
+        )
+
 def sankey_data_put(request, data_adaptor):
     args = request.get_json()
     labels = args.get("labels", None)
@@ -592,7 +651,10 @@ def upload_var_metadata_post(request, data_adaptor):
     filt = np.in1d(v1,v2)
     v1 = v1[filt]    
     assert v1.size > 0
-
+    mode = userID.split('/')[-1].split('\\')[-1]
+    ID = userID.split('/')[0].split('\\')[0]
+    otherMode = "VAR" if mode == "OBS" else "OBS"
+    ID+="/"+otherMode
     v2rev = v2[np.in1d(v2,v1,invert=True)]
     for k in A.columns:
         vals = np.array(list(A[k]))[filt].astype('object')
@@ -604,6 +666,7 @@ def upload_var_metadata_post(request, data_adaptor):
         valsrev[:] = filler
         vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
         pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
+        pickle_dumper(vals,"{}/obs/{}.p".format(ID,k.replace('/','_')))
 
     @after_this_request
     def remove_file(response):
@@ -705,9 +768,30 @@ def save_metadata_put(request, data_adaptor):
 
 def save_genedata_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)        
+    genesets = {}
+    for k in glob(f"{userID}/set/*"):
+        kn = k.split('/')[-1].split('\\')[-1]
+        kn = "" if kn == "__blank__" else kn
+        genesets[kn] = {}
+        for k2 in glob(f"{userID}/set/{kn}/*.p"):
+            kn2 = k2.split('/')[-1].split('\\')[-1].split('.p')[0]
+            genesets[kn][kn2] = pickle_loader(k2)
+    
+    annotations = data_adaptor.dataset_config.user_annotations  
+    with open(f"{userID}/output/gene-sets.csv", "w", newline="") as f:
+        f.write(annotations.gene_sets_to_csv(genesets)) 
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(f"{userID}/output/gene-sets.csv")
+        except Exception as error:
+            print(error)
+        return response
+    
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/gene-sets.csv",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/gene-sets.csv",as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -768,9 +852,16 @@ def delete_obs_put(request, data_adaptor):
     name = args.get("name",None)
     fail=False
     userID = _get_user_id(data_adaptor)
+    mode = userID.split('/')[-1].split('\\')[-1]
+    otherMode = "OBS" if mode == "VAR" else "VAR"
+    ID = userID.split('/')[0].split('\\')[0]+'/'+ otherMode
 
     if os.path.exists(f"{userID}/obs/{name}.p"):
         os.remove(f"{userID}/obs/{name}.p")
+    if os.path.exists(f"{ID}/var/{name}.p"):
+        os.remove(f"{ID}/var/{name}.p")
+    if os.path.exists(f"{ID}/set/{name}/"):
+        shutil.rmtree(f"{ID}/set/{name}/")                
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
@@ -783,10 +874,21 @@ def rename_obs_put(request, data_adaptor):
     oldName = args.get("oldName",None)
     newName = args.get("newName",None)
     userID = _get_user_id(data_adaptor)
+    mode = userID.split('/')[-1].split('\\')[-1]
+    otherMode = "OBS" if mode == "VAR" else "VAR"
+    ID = userID.split('/')[0].split('\\')[0]+'/'+ otherMode
     
     if os.path.exists(f"{userID}/obs/{oldName}.p"):
         os.rename(f"{userID}/obs/{oldName}.p",f"{userID}/obs/{newName}.p")
-    
+
+        try:
+            os.rename(f"{ID}/var/{oldName}.p",f"{ID}/var/{newName}.p")
+        except:
+            pass
+        try:
+            shutil.rmtree(f"{ID}/set/{oldName}/")
+        except:
+            pass    
     try:
         return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
@@ -833,155 +935,10 @@ def _can_cast_to_int32(dtype, array_values=None):
     return False
 
 def switch_cxg_mode(request,data_adaptor):
-    embName = request.values.get("embName", default=None)
-
     userID = _get_user_id(data_adaptor)
     mode = userID.split("/")[-1].split("\\")[-1]
     ID = userID.split("/")[0].split("\\")[0]
-    if mode == "OBS":
-        if not os.path.exists(f"{ID}/VAR"):
-            os.makedirs(f"{ID}/VAR/nnm/")
-            os.makedirs(f"{ID}/VAR/emb/")
-            os.makedirs(f"{ID}/VAR/params/")
-            os.makedirs(f"{ID}/VAR/pca/")
-            os.makedirs(f"{ID}/VAR/obs/")
-            os.makedirs(f"{ID}/VAR/var/")
-            os.makedirs(f"{ID}/VAR/diff/")   
-            os.makedirs(f"{ID}/VAR/output/")  
-            
-        newMode = "VAR"
-    else:
-        newMode = "OBS"
-
-    if len(glob(f"{ID}/VAR/emb/*.p")) == 0:
-        pickle_dumper(np.zeros((data_adaptor.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
-    if len(glob(f"{ID}/OBS/emb/*.p")) == 0:
-        pickle_dumper(np.zeros((data_adaptor.data.shape[0],2)),f"{ID}/OBS/emb/root.p")
-
-    pathOld = userID
-    pathNew = ID+"/"+newMode
-    
-    # convert obs cat to gene sets and var metadata
-    fns = glob(f"{pathOld}/obs/*.p")
-    obs = {}
-    for ann in fns:
-        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
-        obs[ann] = pickle_loader(f"{pathOld}/obs/{ann}.p")
-
-    if os.path.exists(f"{pathNew}/gene-sets.csv"):
-        gene_sets = read_gene_sets_tidycsv(DataLocator(f"{pathNew}/gene-sets.csv"))
-    else:
-        gene_sets = {}
-    
-    name = obs['name_0']
-    del obs["name_0"]
-    for key in obs:
-        dtype = obs[key].dtype
-        dtype_name = dtype.name
-        dtype_kind = dtype.kind
-        a,c = np.unique(obs[key],return_counts=True)
-        flag =  a.size > 2000 or c.max() < 5
-        if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
-            suffix = "//;;//" if key.startswith("DEG_") else ""
-            a = []
-            b = []
-            for i,k in enumerate(obs[key]):
-                m = k.split('.')
-                a.extend(m)
-                b.extend(len(m)*[name[i]])
-            a = np.array(a)
-            b = np.array(b)
-            d = _df_to_dict(a,b)
-            try:
-                del d['unassigned']
-            except:
-                pass            
-            if suffix != "":
-                n = key.split('DEG_')[-1]
-                for dkey in d:
-                    if dkey != "unassigned":
-                        fnn = f"{pathNew}/diff/{n}/{dkey}_output.p"
-                        try:
-                            sname = name[np.vstack(pickle_loader(fnn))[:,0].astype('int')]
-                        except:
-                            suffix = ""
-                            break
-                        sname = sname[np.in1d(sname,d[dkey])]
-                        d[dkey] = list(sname)
-                
-            gene_sets[key.split('DEG_')[-1]+suffix] = d
-
-            pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
-        elif _can_cast_to_float32(dtype,obs[key]) or _can_cast_to_int32(dtype,obs[key]) or flag:
-            pickle_dumper(obs[key],f"{pathNew}/var/{key}.p")
-    pickle_dumper(name,f"{pathNew}/var/name_0.p")
-
-    annotations = data_adaptor.dataset_config.user_annotations  
-    with open(f"{pathNew}/gene-sets.csv", "w", newline="") as f:
-        f.write(annotations.gene_sets_to_csv(gene_sets))    
-
-    # convert genesets to obs
-    v = pickle_loader(f"{pathOld}/var/name_0.p")
-    genesets, _ = annotations.read_gene_sets(data_adaptor)
-
-    newObs = {}
-    for key1 in genesets:
-        if key1 != "":
-            C = []
-            O = []
-            for key2 in genesets[key1]:
-                o = genesets[key1][key2]
-                O.extend(o)
-                C.extend([key2]*len(o))
-            C = np.array(C)
-            O = np.array(O)
-            d = _df_to_dict(O,C)
-
-            for kk in d.keys():
-                if len(d[kk])>1:
-                    d[kk] = d[kk][np.argmin(np.array([np.where(np.array(genesets[key1][mm])==kk)[0][0] for  mm in d[kk]]))]
-                else:
-                    d[kk] = d[kk][0]
-            C = np.array(list(d.values()))
-            O = np.array(list(d.keys()))
-            
-            f = np.in1d(v,O,invert=True)
-            vnot = v[f] 
-            C = np.append(C,["unassigned"]*len(vnot)) 
-            O = np.append(O,vnot) 
-            newObs[key1] = pd.Series(data=C,index=O)[v].values.flatten()
-    
-    for key in newObs:
-        prefix = "DEG_" if "//;;//" in key else ""
-        pickle_dumper(newObs[key],f"{pathNew}/obs/{prefix}{key.split('//;;//')[0]}.p")
-
-    pickle_dumper(v,f"{pathNew}/obs/name_0.p")        
-    
-
-    # convert var metadata to obs
-    fns = glob(f"{pathOld}/var/*.p")
-    var = {}
-    if embName is not None:
-        for ann in fns:
-            ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
-            if ';;' in ann:
-                tlay = ann.split(';;')[-1]
-            else:
-                tlay = ""
-            if embName == tlay:
-                ann = ann.split(';;')[0]
-                var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")
-    
-    for ann in fns:
-        ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1].split(';;')[0]
-        if ';;' not in ann:
-            if ann not in var:
-                if ann != "name_0":
-                    var[ann] = pickle_loader(f"{pathOld}/var/{ann}.p")    
-
-    for key in var:
-        pickle_dumper(var[key],f"{pathNew}/obs/{key}.p")
-
+    newMode = "OBS" if mode == "VAR" else "VAR"    
     pickle.dump(newMode, open(f"{ID}/mode.p",'wb'))
 
     try:
@@ -1002,6 +959,84 @@ def _df_to_dict(a,b):
     slists = [b[bounds_left[i] : bounds_right[i]] for i in range(bounds_left.size)]
     d = dict(zip(np.unique(a), [list(x) for x in slists]))
     return d
+
+def rename_set_put(request, data_adaptor):
+    args = request.get_json()
+    oldName = args.get("oldName",None)
+    newName = args.get("newName",None)
+    if '//;;//' in oldName and '//;;//' not in newName:
+        newName+='//;;//'
+    oldName = oldName.replace('//;;//','__DEG__')
+    newName = newName.replace('//;;//','__DEG__')
+
+    userID = _get_user_id(data_adaptor)
+    
+    if os.path.exists(f"{userID}/set/{oldName.replace('/','_')}"):
+        os.rename(f"{userID}/set/{oldName.replace('/','_')}",f"{userID}/set/{newName.replace('/','_')}")
+    
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def delete_set_put(request, data_adaptor):
+    args = request.get_json()
+    name = args.get("name",None)
+    name = name.replace('//;;//','__DEG__')
+    userID = _get_user_id(data_adaptor)
+
+    if os.path.exists(f"{userID}/set/{name.replace('/','_')}"):
+        shutil.rmtree(f"{userID}/set/{name.replace('/','_')}")
+        
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def rename_geneset_put(request, data_adaptor):
+    args = request.get_json()
+    set = args.get("set",None)
+    set = "__blank__" if set == "" else set
+    newSet = args.get("newSet",None)
+    oldName = args.get("oldName",None)
+    newName = args.get("newName",None)
+    userID = _get_user_id(data_adaptor)
+    src = f"{userID}/set/{set.replace('/','_')}/{oldName.replace('/','_')}.p"
+    tgtFolder = f"{userID}/set/{newSet.replace('/','_')}/"
+    if not os.path.exists(tgtFolder):
+        os.makedirs(tgtFolder)
+    tgt = f"{tgtFolder}/{newName.replace('/','_')}.p"
+    if os.path.exists(src):
+        os.rename(src,tgt)
+
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+
+def delete_geneset_put(request, data_adaptor):
+    args = request.get_json()
+    set = args.get("set",None)
+    set = "__blank__" if set == "" else set
+    name = args.get("name",None)
+    userID = _get_user_id(data_adaptor)
+    src = f"{userID}/set/{set.replace('/','_')}/{name.replace('/','_')}.p"    
+
+    if os.path.exists(src):
+        os.remove(src)
+
+    try:
+        return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
+    except NotImplementedError as e:
+        return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
+    except (ValueError, DisabledFeatureError, FilterError) as e:
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
 
 def rename_diff_put(request, data_adaptor):
     args = request.get_json()
@@ -1278,33 +1313,6 @@ def reembed_parameters_obsm_put(request, data_adaptor):
     except (ValueError, KeyError, AnnotationsError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e))
 
-def genesets_get(request, data_adaptor):
-    preferred_mimetype = request.accept_mimetypes.best_match(["application/json", "text/csv"])
-    if preferred_mimetype not in ("application/json", "text/csv"):
-        return abort(HTTPStatus.NOT_ACCEPTABLE)
-
-    annotations = data_adaptor.dataset_config.user_annotations
-    (genesets, tid) = annotations.read_gene_sets(data_adaptor)
-    
-    for k in list(genesets.keys()):
-        if len(genesets[k])==0:
-            del genesets[k]
-    
-    if preferred_mimetype == "text/csv":
-        return make_response(
-            annotations.gene_sets_to_csv(genesets),
-            HTTPStatus.OK,
-            {
-                "Content-Type": "text/csv",
-                "Content-Disposition": "attachment; filename=genesets.csv",
-            },
-        )
-    else:
-        return make_response(
-            jsonify({"genesets": genesets, "tid": tid}), HTTPStatus.OK
-        )
-
-
 def reembed_parameters_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
 
@@ -1327,25 +1335,71 @@ def reembed_parameters_put(request, data_adaptor):
     except (ObsoleteRequest, TypeError) as e:
         return abort(HTTPStatus.NOT_FOUND, description=str(e))
 
+def genesets_get(request, data_adaptor):
+    userID = _get_user_id(data_adaptor)
+    genesets = {}
+    for k in glob(f"{userID}/set/*"):
+        k = k.split('/')[-1].split('\\')[-1]
+        set = "" if k == "__blank__" else k
+        set = set.replace('__DEG__','//;;//') if set.endswith('__DEG__') else set
+        genesets[set] = {}
+        for k2 in glob(f"{userID}/set/{k}/*.p"):
+            kn2 = k2.split('/')[-1].split('\\')[-1].split('.p')[0]
+            genesets[set][kn2] = pickle_loader(k2)
+
+    return make_response(
+        jsonify({"genesets": genesets}), HTTPStatus.OK
+    )
 
 def genesets_put(request, data_adaptor):
-    annotations = data_adaptor.dataset_config.user_annotations
-    if not annotations.gene_sets_save_enabled():
-        return abort(HTTPStatus.NOT_IMPLEMENTED)
+    userID = _get_user_id(data_adaptor)
+    genesets = request.get_json()
+    for set in genesets:
+        setn = "__blank__" if set == "" else set
+        setn = setn.replace('//;;//','__DEG__')
+        if not os.path.exists(f"{userID}/set/{setn}/"):
+            os.makedirs(f"{userID}/set/{setn}/")        
+        for name in genesets[set]:
+            pickle_dumper(genesets[set][name],f"{userID}/set/{setn}/{name}.p")
 
-    anno_collection = request.args.get("annotation-collection-name", default=None)
-    if anno_collection is not None:
-        if not annotations.is_safe_collection_name(anno_collection):
-            return abort(HTTPStatus.BAD_REQUEST, "Bad annotation collection name")
-        annotations.set_collection(anno_collection)
+        if '//;;//' not in set:
+            # convert genesets to obs
+            v = pickle_loader(f"{userID}/var/name_0.p")
+            ID = userID.split('/')[0].split('\\')[0]
+            mode = userID.split('/')[-1].split('\\')[-1]
+            otherMode = "OBS" if mode == "VAR" else "VAR"
+            genesets = {}
+            for k2 in glob(f"{userID}/set/{setn}/*.p"):
+                kn2 = k2.split('/')[-1].split('\\')[-1].split('.p')[0]
+                genesets[kn2] = pickle_loader(k2)
 
-    args = request.get_json()
-    genesets = args.get("genesets", None)
-    tid = args.get("tid", None)
-    if genesets is None:
-        abort(HTTPStatus.BAD_REQUEST)
+            if set != "":
+                C = []
+                O = []
+                for key2 in genesets:
+                    o = genesets[key2]
+                    O.extend(o)
+                    C.extend([key2]*len(o))
+                C = np.array(C)
+                O = np.array(O)
+                d = _df_to_dict(O,C)
 
-    annotations.write_gene_sets(genesets, tid, data_adaptor)
+                for kk in d.keys():
+                    if len(d[kk])>1:
+                        d[kk] = d[kk][np.argmin(np.array([np.where(np.array(genesets[mm])==kk)[0][0] for  mm in d[kk]]))]
+                    else:
+                        d[kk] = d[kk][0]
+                C = np.array(list(d.values()))
+                O = np.array(list(d.keys()))
+                
+                f = np.in1d(v,O,invert=True)
+                vnot = v[f] 
+                C = np.append(C,["unassigned"]*len(vnot)) 
+                O = np.append(O,vnot) 
+                vals = pd.Series(data=C,index=O)[v].values.flatten()
+
+                pickle_dumper(vals,f"{ID}/{otherMode}/obs/{set}.p")
+
     return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
    
 def genesets_rename_put(request, data_adaptor):
