@@ -4,6 +4,15 @@
 
 Video vignettes to come!
 
+## V2.6.1
+In the latest version, the internal file system used by excellxgene has been restructured. As a result, you will need to migrate your data to the new version. The easiest way to do this is with the following:
+
+1. Create a new conda environment (same instructions as in the installation section).
+2. Pip install `excellxgene==2.6.1`
+3. Copy/Move your h5ad to a NEW LOCATION.
+4. Launch the new version of excellxgene using the moved/copied data.
+5. Upload the metadata/genesets/etc downloaded from the old version of excellxgene to the new version.
+
 ### Installation
 
 1. Install miniconda if conda not available already:
