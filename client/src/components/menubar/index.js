@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, MenuItem } from "@blueprintjs/core";
+import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, Checkbox, MenuItem } from "@blueprintjs/core";
 import { Select } from "@blueprintjs/select"
 import * as globals from "../../globals";
 import styles from "./menubar.css";
@@ -122,7 +122,8 @@ const continuous = (selectorId, colorScale) => {
     pointScaler: state.controls.pointScaler,
     chromeKeyContinuous: state.controls.chromeKeyContinuous,
     chromeKeyCategorical: state.controls.chromeKeyCategorical,
-    chromeKeys: Object.keys(chromatic).filter((item)=>item.startsWith("interpolate")).map((item)=>item.replace("interpolate","")).sort()
+    chromeKeys: Object.keys(chromatic).filter((item)=>item.startsWith("interpolate")).map((item)=>item.replace("interpolate","")).sort(),
+    jointEmbeddingFlag: state.controls.jointEmbeddingFlag
   };
 })
 class MenuBar extends React.PureComponent {
@@ -423,7 +424,8 @@ class MenuBar extends React.PureComponent {
       pointScaler,
       chromeKeyContinuous,
       chromeKeyCategorical,
-      chromeKeys
+      chromeKeys,
+      jointEmbeddingFlag
     } = this.props;
     const { preferencesDialogOpen, pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
@@ -481,6 +483,18 @@ class MenuBar extends React.PureComponent {
             paddingTop: "10px",
             width: "90%"
           }}>
+            <ControlGroup fill={true} vertical={false}>
+              <Checkbox checked={jointEmbeddingFlag} label="Display joint embedding"
+                  onChange={() => {    
+                    dispatch({
+                      type: "set display joint embedding flag",
+                      value: !jointEmbeddingFlag
+                      })
+                    }
+                  } 
+              />               
+            </ControlGroup>
+
             <ControlGroup fill={true} vertical={false}>
               <span style={{width: "160px", paddingRight: "10px"}}>Point size scaler:</span>
               <Slider

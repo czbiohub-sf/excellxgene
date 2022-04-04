@@ -85,6 +85,8 @@ class GeneExpression extends React.Component {
       dispatch({type: "geneset: update",genesetDescription: oldName, update: {genesetDescription: newName}})
     }
     dispatch(actions.requestDiffRename(oldName.split('//;;//').at(0),newName.split('//;;//').at(0)))    
+    dispatch(actions.requestSetRename(oldName,newName)) 
+    dispatch({type: "track set", group: newName, set: null})   
     this.disableEditNameMode()
   }
   setupFileInput = () => {

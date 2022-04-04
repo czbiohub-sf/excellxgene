@@ -2,7 +2,8 @@ import pull from "lodash.pull";
 import uniq from "lodash.uniq";
 import React from "react";
 import { connect } from "react-redux";
-import { Button, Dialog, Classes, Colors } from "@blueprintjs/core";
+import { Button, Dialog, Classes, Colors, AnchorButton, MenuItem, ControlGroup, Checkbox } from "@blueprintjs/core";
+import { Select } from "@blueprintjs/select";
 import { Tooltip2 } from "@blueprintjs/popover2";
 import LabelInput from "../../labelInput";
 import { AnnotationsHelpers } from "../../../util/stateManager";
@@ -27,6 +28,9 @@ class CreateGenesetDialogue extends React.PureComponent {
       genesetName: "",
       genesToPopulateGeneset: "",
       genesetDescription: "",
+      initGroup: "",
+      initSet: "All genesets",
+      doInitialize: false
     };
   }
 
@@ -44,41 +48,64 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   createGeneset = (e) => {
-    const { dispatch , geneSelection, selectedGenesLasso} = this.props;
+    const { dispatch , geneSelection, selectedGenesLasso, genesets} = this.props;
     const selectedGenes = [...new Set([...geneSelection,...selectedGenesLasso])];
 
     const {
       genesetName,
       genesToPopulateGeneset,
       genesetDescription,
+      doInitialize,
+      initGroup,
+      initSet
     } = this.state;
 
-    dispatch({
-      type: "geneset: create",
-      genesetName,
-      genesetDescription,
-    });
-
-    if (genesToPopulateGeneset) {
-      const genesTmpHardcodedFormat = [];
-
-      const genesArrayFromString = pull(
-        uniq(genesToPopulateGeneset.split(/[ ,]+/)),
-        ""
-      );
-
-      genesArrayFromString.forEach((_gene) => {
-        genesTmpHardcodedFormat.push(_gene);
-      });
-
-      dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
+    if (!doInitialize) {
+      dispatch({
+        type: "geneset: create",
+        genesetName,
+        genesetDescription,
+      });      
+      if (genesToPopulateGeneset) {
+        const genesTmpHardcodedFormat = [];
+  
+        const genesArrayFromString = pull(
+          uniq(genesToPopulateGeneset.split(/[ ,]+/)),
+          ""
+        );
+  
+        genesArrayFromString.forEach((_gene) => {
+          genesTmpHardcodedFormat.push(_gene);
+        });
+  
+        dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
+      } else {
+        const genesTmpHardcodedFormat = [];
+        selectedGenes.forEach((_gene) => {
+          genesTmpHardcodedFormat.push(_gene);
+        });
+        dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
+      }
     } else {
-      const genesTmpHardcodedFormat = [];
-      selectedGenes.forEach((_gene) => {
-        genesTmpHardcodedFormat.push(_gene);
-      });
-      dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesTmpHardcodedFormat));
+      if (initSet === "All genesets"){
+        Object.keys(genesets[initGroup]).forEach((item)=>{
+          dispatch({
+            type: "geneset: create",
+            genesetName: item,
+            genesetDescription,
+          });          
+          dispatch(actions.genesetAddGenes(genesetDescription, item, genesets[initGroup][item]));
+        })
+      } else {
+        dispatch({
+          type: "geneset: create",
+          genesetName,
+          genesetDescription,
+        });        
+        dispatch(actions.genesetAddGenes(genesetDescription, genesetName, genesets[initGroup][initSet]));
+      }
     }
+
     dispatch({
       type: "geneset: disable create geneset mode",
     });
@@ -107,11 +134,15 @@ class CreateGenesetDialogue extends React.PureComponent {
   };
 
   instruction = (genesetDescription, genesetName, genesets) => {
-    const error = AnnotationsHelpers.annotationNameIsErroneous(genesetName);
+    const { doInitialize, initSet } = this.state;
+    let error = AnnotationsHelpers.annotationNameIsErroneous(genesetName);
+    if (doInitialize && initSet === "All genesets" && error === "empty-string") {
+      error = false;
+    }
     return labelPrompt(
       error,
       this.validate(genesetDescription, genesetName, genesets)
-      ? "Gene set name must be unique."
+      ? "Gene set name must be unique"
       : `New, unique ${this.props.cOrG} set name`,
       ":"
     );    
@@ -149,9 +180,9 @@ class CreateGenesetDialogue extends React.PureComponent {
   }
 
   render() {
-    const { genesetDescription, genesetName } = this.state;
+    const { genesetDescription, genesetName, initGroup, initSet, doInitialize } = this.state;
     const { metadataField, genesetsUI, genesets } = this.props;
-
+    const notReady = !doInitialize || Object.keys(genesets?.[initGroup] ?? {}).length === 0
     return (
       <>
         <Dialog
@@ -174,6 +205,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                     "data-testid": "create-geneset-modal",
                     leftIcon: "manually-entered-data",
                     intent: "none",
+                    disabled: (doInitialize && (initSet ?? "All genesets") === "All genesets"),
                     autoFocus: true,
                   }}
                   newLabelMessage={`Create ${this.props.cOrG} set`}
@@ -213,6 +245,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                     "data-testid": "add-genes",
                     intent: "none",
                     autoFocus: false,
+                    disabled: doInitialize
                   }}
                   newLabelMessage={`populate ${this.props.cOrG} set with ${this.props.cOrG}s`}
                 />
@@ -220,6 +253,74 @@ class CreateGenesetDialogue extends React.PureComponent {
                 <span style={{ fontWeight: 700 }}>OR</span>{" "} leave empty to populate the
                 {" "}{this.props.cOrG} set with the currently selected {this.props.cOrG}s.
                 </p>                
+                <p style={{ marginTop: 20 }}>
+                <span style={{ fontWeight: 700 }}>OR</span>{" "} initialize
+                {" "}{this.props.cOrG} set an existing set:
+                </p>    
+                <ControlGroup style={{columnGap: "20px"}}>
+                  <Checkbox style={{paddingTop: "5px"}} checked={doInitialize} label="Initialize from existing"
+                    onChange={() => {    
+                      this.setState({doInitialize: !doInitialize})
+                      }
+                    } 
+                  />                                            
+                  <Select
+                  style={{minWidth: "100px"}}                  
+                    disabled={!doInitialize}
+                    items={
+                      Object.keys(genesets)
+                    }
+                    filterable={false}
+                    itemRenderer={(d, { handleClick }) => {
+                      return (
+                        <MenuItem
+                          style={{minWidth: "100px"}}
+                          onClick={handleClick}
+                          key={d}
+                          text={d === "" ? "Ungrouped" : d.split('//;;//').at(0)}
+                        />
+                      );
+                    }}
+                    onItemSelect={(d) => {
+                      this.setState({initGroup: d, initSet: "All genesets"})
+                    }}
+                  >
+                    <AnchorButton
+                      disabled={!doInitialize}
+                      text={`${initGroup === "" ? "Ungrouped" : initGroup?.split("//;;//")?.at(0)}`}
+                      rightIcon="double-caret-vertical"
+                      style={{minWidth: "100px"}}
+                    />
+                  </Select>   
+                  <Select
+                    style={{minWidth: "100px"}}
+                    disabled={!doInitialize || Object.keys(genesets?.[initGroup] ?? {}).length === 0}
+                    items={
+                      ["All genesets"].concat(Object.keys(genesets?.[initGroup] ?? {}))
+                    }
+                    filterable={false}
+                    itemRenderer={(d, { handleClick }) => {
+                      return (
+                        <MenuItem
+                          style={{minWidth: "100px"}}
+                          onClick={handleClick}
+                          key={d}
+                          text={d}
+                        />
+                      );
+                    }}
+                    onItemSelect={(d) => {
+                      this.setState({initSet: d})
+                    }}
+                  >
+                    <AnchorButton
+                      disabled={notReady}
+                      text={`${initSet ?? "All genesets"}`}
+                      rightIcon="double-caret-vertical"
+                      style={{minWidth: "100px"}}
+                    />
+                  </Select> 
+              </ControlGroup>                                   
               </div>
             </div>
             <div className={Classes.DIALOG_FOOTER}>
@@ -233,7 +334,7 @@ class CreateGenesetDialogue extends React.PureComponent {
                   data-testid={`${metadataField}:submit-geneset`}
                   onClick={this.createGeneset}
                   disabled={
-                    !genesetName || this.validate(genesetDescription, genesetName, genesets) || this.validate1(genesetName) || this.validate2(genesetDescription)
+                    (doInitialize && notReady) || this.validate(genesetDescription, genesetName, genesets) || (!genesetName || this.validate1(genesetName)) && (!doInitialize || initSet !== "All genesets") || this.validate2(genesetDescription)
                   }
                   intent="primary"
                   type="submit"

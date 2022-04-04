@@ -26,16 +26,17 @@ export default function drawPointsRegl(regl) {
     ${glPointSize}
 
     void main() {
-      bool isBackground, isSelected, isHighlight, isHalfSelected;
-      getFlags(flag, isBackground, isSelected, isHighlight, isHalfSelected);
+      bool isBackground, isSelected, isHighlight, isHalfSelected, isInvisible;
+      getFlags(flag, isBackground, isSelected, isHighlight, isHalfSelected, isInvisible);
 
-      gl_PointSize = pointSize(nPoints, minViewportDimension, isSelected, isHighlight, isHalfSelected);
+      gl_PointSize = pointSize(nPoints, minViewportDimension, isSelected, isHighlight, isHalfSelected, isInvisible);
 
       float z = (isBackground || isHalfSelected) ? zBottom : (isHighlight ? zTop : zMiddle);
       vec3 xy = projection * vec3(position, 1.);
       gl_Position = vec4(xy.xy, z, 1.);
 
-      float alpha = (isBackground || isHalfSelected) ? 0.9 : 1.0;
+      float a = (isBackground || isHalfSelected) ? 0.9 : 1.0;
+      float alpha = isInvisible ? 0.0 : a;
       fragColor = vec4(color, alpha);
     }`,
 

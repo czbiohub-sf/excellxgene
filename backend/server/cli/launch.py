@@ -300,7 +300,14 @@ def launch_args(func):
         is_flag=True,
         show_default=True,
         help="Preprocesses the input data (library size normalization and log transformation). Assumes raw input data.",
-    )                                      
+    )          
+    @click.option(
+        "--sam_weights",
+        default=False,
+        is_flag=True,
+        show_default=True,
+        help="Calculates SAM weights (spatial dispersions) for each gene.",
+    )                                          
     @click.help_option("--help", "-h", help="Show this message and exit.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -385,7 +392,8 @@ def launch(
     hosted,
     root_embedding,
     auth_url,
-    preprocess
+    preprocess,
+    sam_weights
 ):
     """Launch the cellxgene data viewer.
     This web app lets you explore single-cell expression data.
@@ -412,6 +420,7 @@ def launch(
     app_config = AppConfig()
     app_config.root_embedding = root_embedding
     app_config.preprocess = preprocess
+    app_config.sam_weights = sam_weights
     app_config.hosted_mode = hosted
     server_config = app_config.server_config
 

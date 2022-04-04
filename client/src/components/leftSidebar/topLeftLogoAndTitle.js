@@ -80,10 +80,10 @@ class LeftSideBar extends React.Component {
               userSelect: "none",
             }}
           >
-            <span style={{color: cxgMode === "OBS" ? "blue" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
+            {userLoggedIn ? <span style={{color: cxgMode === "OBS" ? "blue" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
             cell
-            </span>
-            <AnchorButton 
+            </span> : "cell"}
+            {userLoggedIn ? <AnchorButton 
             loading={loading}
             style={{lineHeight: 0,
                     marginTop: "-5px",
@@ -110,11 +110,18 @@ class LeftSideBar extends React.Component {
             >
               ×
             </div>
-            </AnchorButton>
+            </AnchorButton> : <div
+              style={{
+                fontWeight: "bold",
+                fontSize: 28,
+              }}
+            >
+              ×
+            </div>}
 
-            <span style={{color: cxgMode === "VAR" ? "red" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
+            {userLoggedIn ? <span style={{color: cxgMode === "VAR" ? "red" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
             gene
-            </span>
+            </span> : "gene"}
           </span>
         </div>
         <div style={{ marginRight: 5, height: "100%" }}>

@@ -511,9 +511,7 @@ export default class AnnoMatrix {
             /* fetch, then index.  _doLoad is subclass interface */
             if (!this._cache[field].hasCol(_query)){
               const [whereCacheUpdate, df] = await this._doLoad(_field, _query, layer, logscale, scale);
-              
-              this._cache[_field] = this._cache[_field].withColsFrom(df);
-              
+              this._cache[_field] = this._cache[_field].withColsFrom(df);              
               this._whereCache = _whereCacheMerge(
                 this._whereCache,
                 whereCacheUpdate

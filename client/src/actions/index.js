@@ -29,6 +29,7 @@ import * as genesetActions from "./geneset";
 import { defaultReembedParams } from "../reducers/reembed";
 import { _switchEmbedding } from "./embedding";
 import { Dataframe } from "../util/dataframe";
+import { group } from "d3";
 
 /*
 return promise fetching user-configured colors
@@ -80,8 +81,7 @@ export async function userInfoFetch(dispatch) {
 async function genesetsFetch(dispatch, config) {
   /* request genesets ONLY if the backend supports the feature */
   const defaultResponse = {
-    genesets: {},
-    tid: 0,
+    genesets: {}
   };
   if (config?.parameters?.annotations_genesets ?? false) {
     fetchJson("genesets").then((response) => {
@@ -158,6 +158,7 @@ function prefetchEmbeddings(annoMatrix) {
   const { schema } = annoMatrix;
   const available = schema.layout.obs.map((v) => v.name);
   available.forEach((embName) => annoMatrix.prefetch("emb", embName));
+  available.forEach((embName) => annoMatrix.prefetch("jemb", embName));
 }
 
 function abortableFetch(request, opts, timeout = 0) {
@@ -462,6 +463,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
             data: diffexpLists,
             dateString: data.groupName
           });      
+          dispatch({type: "track set", group: `${data.groupName}//;;//`, set: null})
         } else if (data?.multiplex && data.num===differential.num) {
           diffExpListsLists.push(diffexpLists)
           diffExpListsNames.push(data.category)
@@ -483,8 +485,9 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
             nameList,
             dateString: data.dateString,
             grouping: data.grouping,
-          });    
+          });            
           dispatch({type: "request differential expression all completed"})      
+          dispatch({type: "track set", group: `${data.grouping} (${data.dateString})//;;//`, set: null})          
         } else {
           dispatch({
             type: "request differential expression push list",
@@ -747,7 +750,6 @@ const doInitialDataLoad = () =>
       dispatch({type: "set cxg mode", cxgMode})
       dispatch({type: "set hosted mode", hostedMode})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;  
-
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
       
       const obsCrossfilter = new AnnoMatrixObsCrossfilter(annoMatrix);
@@ -843,6 +845,105 @@ export function requestDiffRename(oldName,newName) {
     }
   }
 }
+
+export function requestSetRename(oldName,newName) {
+  return async (_dispatch, _getState) => {    
+    const res = await fetch(
+      `${API.prefix}${API.version}renameSet`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          oldName: oldName,
+          newName: newName
+        }),
+        credentials: "include",
+      }
+    );
+
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return res;
+    }
+  }
+}
+
+export function requestGeneSetRename(group, newGroup, oldName,newName) {
+  return async (_dispatch, _getState) => {    
+    const res = await fetch(
+      `${API.prefix}${API.version}renameGeneSet`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          set: group,
+          newSet: newGroup,
+          oldName: oldName,
+          newName: newName
+        }),
+        credentials: "include",
+      }
+    );
+
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return res;
+    }
+  }
+}
+
+
+export function requestSetDelete(name) {
+  return async (_dispatch, _getState) => {    
+    const res = await fetch(
+      `${API.prefix}${API.version}deleteSet`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          name: name
+        }),
+        credentials: "include",
+      }
+    );
+
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return res;
+    }
+  }
+}
+
+export function requestGeneSetDelete(group,name) {
+  return async (_dispatch, _getState) => {    
+    const res = await fetch(
+      `${API.prefix}${API.version}deleteGeneSet`,
+      {
+        method: "PUT",
+        headers: new Headers({
+          Accept: "application/octet-stream",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          set: group,
+          name: name
+        }),
+        credentials: "include",
+      }
+    );
+
+    if (res.ok && res.headers.get("Content-Type").includes("application/json")) {
+      return res;
+    }
+  }
+}
+
 
 export function requestDiffDelete(name) {
   return async (_dispatch, _getState) => {    
@@ -1013,7 +1114,10 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
     const allCategories = annoMatrix.schema.annotations.obsByName[categoryName].categories
     let z = 0;
     const dateString = new Date().toLocaleString().replace(/\//g,'_');
-    for ( const cat of allCategories ) {
+    for ( let cat of allCategories ) {
+      if (typeof cat === 'string' || cat instanceof String) {
+        cat = cat.replace(/\//g,"_");
+      }
       if (cat !== "unassigned"){
         let set1 = []
         let set2 = []
@@ -1034,14 +1138,14 @@ const requestDifferentialExpressionAll = (num_genes = 100) => async (
             set1: { filter: { obs: { index: set1 } } },
             set2: { filter: { obs: { index: set2 } } },
             multiplex: true,
-            grouping: categoryName,
+            grouping: categoryName.replace(/\//g,"_"),
             dateString: dateString,
             nameList: allCategories,
             layer: annoMatrix.layer,
             scale: annoMatrix.scale,            
             category: cat,
             num: z,
-            groupName: `${categoryName} (${dateString})`
+            groupName: `${categoryName} (${dateString})`.replace(/\//g,"_")
           }))
         }
       } 
@@ -1082,6 +1186,10 @@ export default {
   schemaFetch,
   requestDiffRename,
   requestDiffDelete,
+  requestSetRename,
+  requestSetDelete,
+  requestGeneSetRename,
+  requestGeneSetDelete,    
   fetchGeneInfo,
   fetchGeneInfoBulk,
   resetPools,

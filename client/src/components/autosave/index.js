@@ -1,7 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
 import actions from "../../actions";
-import FilenameDialog from "./filenameDialog";
 
 @connect((state) => ({
   annotations: state.annotations,
@@ -18,6 +17,7 @@ import FilenameDialog from "./filenameDialog";
   lastSavedAnnoMatrix: state.autosave?.lastSavedAnnoMatrix,
   lastSavedGenesets: state.autosave?.lastSavedGenesets,
   annoTracker: state.controls.annoTracker,
+  setTracker: state.controls.setTracker,
   undoed: state.controls.undoed
 }))
 class Autosave extends React.Component {
@@ -68,8 +68,8 @@ class Autosave extends React.Component {
 
   needToSaveGenesets = () => {
     /* return true if we need to save gene ses, false if we do not */
-    const { genesets, lastSavedGenesets } = this.props;
-    return genesets.initialized && genesets.genesets !== lastSavedGenesets;
+    const { genesets, setTracker, undoed } = this.props;
+    return genesets.initialized && (setTracker.length > 0 || undoed);
   };
 
   needToSave() {

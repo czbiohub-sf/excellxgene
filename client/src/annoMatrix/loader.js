@@ -266,7 +266,7 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
         break;
       }
       case "jemb": {
-        doRequest = _embLoader(this.baseURL, field, query);
+        doRequest = _jembLoader(this.baseURL, field, query);
         priority = 0; // high prio load for embeddings
         break;
       }      
@@ -277,14 +277,7 @@ export default class AnnoMatrixLoader extends AnnoMatrix {
     const buffer = await promiseThrottle.priorityAdd(priority, doRequest);
     let result = matrixFBSToDataframe(buffer);    
     if (!result || result.isEmpty()) throw Error("Unknown field/col");
-    if (field==="emb" && result.length > this.schema.dataframe.nObs) {
-      result = result.isubset([...Array(this.schema.dataframe.nObs).keys()]) 
-    }
-    if (field==="jemb" && result.length > this.schema.dataframe.nObs) {
-      result = result.isubset([...Array.from({length: (result.length - this.schema.dataframe.nObs)}, (_, i) => i + this.schema.dataframe.nObs)])    
-    } else if (field === "jemb"){
-      result = Dataframe.empty(new IdentityInt32Index(this.schema.dataframe.nVar))      
-    }
+
     const whereCacheUpdate = _whereCacheCreate(
       field,
       query,
@@ -323,6 +316,16 @@ function _embLoader(baseURL, _field, query) {
   _expectSimpleQuery(query);
 
   const urlBase = `${baseURL}layout/obs`;
+  const urlQuery = _urlEncodeLabelQuery("layout-name", query);
+  const url = `${urlBase}?${urlQuery}`;
+  const x = doBinaryRequest(url);
+  return () => x;
+}
+
+function _jembLoader(baseURL, _field, query) {
+  _expectSimpleQuery(query);
+
+  const urlBase = `${baseURL}layout/jemb`;
   const urlQuery = _urlEncodeLabelQuery("layout-name", query);
   const url = `${urlBase}?${urlQuery}`;
   const x = doBinaryRequest(url);

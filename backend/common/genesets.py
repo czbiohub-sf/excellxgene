@@ -144,21 +144,11 @@ def validate_gene_sets(genesets, var_names, context=None):
     if not isinstance(genesets, dict):
         raise ValueError("Gene sets must be a dict.")
 
-    # 0. check for uniqueness of geneset names
-    illegal_name = re.compile(r"^\s|  |[\u0000-\u001F\u007F-\uFFFF]|\s$")
     for k1 in genesets.keys():
         for name in genesets[k1].keys():
             if type(name) != str or len(name) == 0:
                 raise KeyError("Gene set names must be non-null string.")            
-            if illegal_name.search(name):
-                messagefn(
-                    "Error: "
-                    f"Gene set name {name} "
-                    "is not valid. Leading, trailing, and multiple spaces within a name are not allowed."
-                )
-                raise KeyError(
-                    "Gene set name is not valid. Leading, trailing, and multiple spaces within a name are not allowed."
-                )            
+         
 
     for k1 in genesets.keys():
         for k2 in genesets[k1].keys():

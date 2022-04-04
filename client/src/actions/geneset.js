@@ -1,3 +1,5 @@
+import actions from ".";
+
 export const genesetDelete = (genesetDescription, genesetName) => (dispatch, getState) => {
   const state = getState();
   const { genesets } = state;
@@ -14,6 +16,7 @@ export const genesetDelete = (genesetDescription, genesetName) => (dispatch, get
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
+  dispatch(actions.requestGeneSetDelete(genesetDescription,genesetName))
 };
 export const genesetDeleteGroup = (genesetGroup) => (dispatch, getState) => {
   const state = getState();
@@ -27,6 +30,7 @@ export const genesetDeleteGroup = (genesetGroup) => (dispatch, getState) => {
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
+  dispatch(actions.requestSetDelete(genesetGroup))
 };
 export const genesetAddGenes = (genesetDescription, genesetName, genes) => (dispatch, getState) => {
   const state = getState();
@@ -43,7 +47,7 @@ export const genesetAddGenes = (genesetDescription, genesetName, genes) => (disp
     continuousNamespace: { isGeneSetSummary: true },
     selection: `${genesetDescription}::${genesetName}`,
   });  
-  return dispatch({
+  const x = dispatch({
     type: "geneset: add genes",
     genesetDescription,
     genesetName,
@@ -51,6 +55,8 @@ export const genesetAddGenes = (genesetDescription, genesetName, genes) => (disp
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
+  dispatch({type: "track set", group: genesetDescription, set: genesetName})
+  return x;
 };
 
 export const genesetDeleteGenes = (genesetDescription, genesetName, geneSymbols) => (
@@ -59,7 +65,7 @@ export const genesetDeleteGenes = (genesetDescription, genesetName, geneSymbols)
 ) => {
   const state = getState();
   const obsCrossfilter = dropGeneset(dispatch, state, genesetDescription, genesetName, geneSymbols);
-  return dispatch({
+  const x =  dispatch({
     type: "geneset: delete genes",
     genesetDescription,
     genesetName,
@@ -67,6 +73,8 @@ export const genesetDeleteGenes = (genesetDescription, genesetName, geneSymbols)
     obsCrossfilter,
     annoMatrix: obsCrossfilter.annoMatrix,
   });
+  dispatch({type: "track set", group: genesetDescription, set: genesetName})
+  return x;
 };
 
 /*

@@ -1,5 +1,6 @@
 import uniq from "lodash.uniq";
 import filter from "lodash.filter";
+import { dispatch } from "d3";
 
 const Controls = (
   state = {
@@ -24,6 +25,7 @@ const Controls = (
     modifyingLayouts: false,
     screenCap: false,
     annoTracker: [],
+    setTracker: [],
     varMetadata: "",
     varRefresher: false,
     currentSelectionDEG: null,
@@ -34,7 +36,8 @@ const Controls = (
     pointScaler: 1.0,
     chromeKeyContinuous: "Spectral",
     chromeKeyCategorical: "Rainbow",
-    cxgMode: "OBS"
+    cxgMode: "OBS",
+    jointEmbeddingFlag: true
   },
   action
 ) => {
@@ -97,7 +100,21 @@ const Controls = (
         ...state,
         annoTracker
       };
-    }       
+    } 
+    case "track set": {
+      const { setTracker } = state;
+      setTracker.push([action.group,action.set]);
+      return {
+        ...state,
+        setTracker
+      };
+    }
+    case "autosave: genesets complete": {
+      return {
+        ...state,
+        setTracker: []
+      }
+    }          
     case "set var key": {
       return {
         ...state,
@@ -134,6 +151,12 @@ const Controls = (
         undoed: false
       }
     }         
+    case "set display joint embedding flag": {
+      return {
+        ...state,
+        jointEmbeddingFlag: action.value
+      }
+    }
     case "modifying layouts": {
       return {
         ...state,

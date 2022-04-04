@@ -130,6 +130,7 @@ export const annotationRenameCategoryAction = (
     oldCategoryName,
     newCategoryName
   })
+  dispatch({type: "track anno", anno: newCategoryName})
 };
 
 export function requestObsRename(oldCategoryName,newCategoryName) {
@@ -454,7 +455,6 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
     });
     return;
   }
-
   let df;
   if (needToSaveObsAnnotations(annoMatrix, lastSavedAnnoMatrix) && undoed) {
     df = await annoMatrix.fetch("obs", writableAnnotations(annoMatrix));
@@ -537,53 +537,50 @@ export const needToSaveObsAnnotations = (annoMatrix, lastSavedAnnoMatrix) => {
 
 
 export const saveGenesetsAction = () => async (dispatch, getState) => {
+  
   const state = getState();
+  const { controls } = state;
+  const { genesets } = state.genesets;
+  const { setTracker: sets, undoed } = controls;
+  
+  const { lastSavedGenesets, saveInProgress } = autosave;
+  if ((saveInProgress || genesets === lastSavedGenesets) && !undoed) return;
 
-  // bail if gene sets not available, or in readonly mode.
-  const { config } = state;
-  const { lastTid, genesets } = state.genesets;
-
-  const genesetsAreAvailable =
-    config?.parameters?.annotations_genesets ?? false;
-  const genesetsReadonly =
-    config?.parameters?.annotations_genesets_readonly ?? true;
-  if (!genesetsAreAvailable || genesetsReadonly) {
-    // our non-save was completed!
+  if (sets.length === 0 && !undoed) {
     return dispatch({
       type: "autosave: genesets complete",
       lastSavedGenesets: genesets,
     });
   }
 
+  let ota;
+  if (undoed) {
+    ota = genesets;
+    dispatch({type: "reset undo flag"})
+  } else {
+    ota = {};
+    sets.forEach((item)=>{
+      const [group, name] = item;
+      if (!(group in ota)){
+        ota[group] = {}
+      }
+      if (name) {
+        ota[group][name] = genesets[group][name];
+      } else {
+        Object.keys(genesets[group]).forEach((n)=>{
+          ota[group][n] = genesets[group][n];
+        })
+      }
+    })
+  }
   dispatch({
     type: "autosave: genesets started",
   });
 
-  /* Create the JSON OTA data structure */
-  const tid = (lastTid ?? 0) + 1;
-  //const gs = [];
-  //for (const key in genesets) {
-  //  gs.push({...genesets[key], genesetGroupID: key})
-  //}
-  const ota = {
-    tid,
-    genesets,
-  };
-
   /* Save to server */
   try {
-    const {
-      dataCollectionNameIsReadOnly,
-      dataCollectionName,
-    } = state.annotations;
-    const queryString =
-      !dataCollectionNameIsReadOnly && !!dataCollectionName
-        ? `?annotation-collection-name=${encodeURIComponent(
-            dataCollectionName
-          )}`
-        : "";
     const res = await fetch(
-      `${globals.API.prefix}${globals.API.version}genesets${queryString}`,
+      `${globals.API.prefix}${globals.API.version}genesets`,
       {
         method: "PUT",
         headers: new Headers({
@@ -605,11 +602,7 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
       dispatch({
         type: "autosave: genesets complete",
         lastSavedGenesets: genesets,
-      }),
-      dispatch({
-        type: "geneset: set tid",
-        tid,
-      }),
+      })
     ]);
   } catch (error) {
     return dispatch({

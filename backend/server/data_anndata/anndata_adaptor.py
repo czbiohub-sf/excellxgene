@@ -601,6 +601,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
 
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
     otherMode = "OBS" if mode == "VAR" else "VAR"
+    otherID = ID +"/" + otherMode
     X_full = None
     if embName == "":
         embName = f"umap_{str(hex(int(time.time())))[2:]}"
@@ -718,7 +719,8 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         distanceMetric = reembedParams.get("distanceMetric","cosine")
         print("Running UMAP...")
         X_umap = SAM().run_umap(X=Z,metric=distanceMetric,seed = 0,min_dist=umapMinDist)[0]
-        
+        X_umap = DataAdaptor.normalize_embedding(X_umap)
+
         print("Calculating new graphs from kPCA...")
         nnm1 = ut.calc_nnm(pca1,neighborsKnn,"cosine")
         nnm2 = ut.calc_nnm(pca2,neighborsKnn,"cosine")
@@ -729,6 +731,11 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
 
         X_umap1 = X_umap[:nnm1.shape[0]]
         X_umap2 = X_umap[nnm1.shape[0]:]
+        
+        fns_=glob(f"{otherID}/emb/*.p") #delete empty root embedding if it's the only one there in other mode
+        if len(fns_) > 0:
+            if len(fns_) == 1 and "root.p" in fns_[0]:
+                os.remove(fns_[0])        
         
         if mode == "OBS":
             X_umap = np.full((obs_mask.shape[0], X_umap1.shape[1]), np.NaN)
@@ -774,7 +781,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             pickle_dumper(nnm1, f"{ID}/nnm/{name2}.p") 
             pickle_dumper(Xu1, f"{ID}/emb/{name2}.p")
             pickle_dumper(pc1, f"{ID}/pca/pca;;{name2}.p")
-    
+
     elif embeddingMode == "Preprocess and run":
         dsampleKey = reembedParams.get("dsampleKey","None")
         if mode == "VAR":
@@ -837,7 +844,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             X_umap = result
             pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
             pca[obs_mask] = obsm    
-                    
+        X_umap = DataAdaptor.normalize_embedding(X_umap)
     elif embeddingMode == "Create embedding from subset":
          #direc    
         if pairedMode:
@@ -883,14 +890,24 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             if nnm is not None:
                 pickle_dumper(nnm, f"{ID}/{otherMode}/nnm/{name2}.p") 
             if pca is not None:
-                pickle_dumper(pca, f"{ID}/{otherMode}/pca/pca;;{name2}.p")                                   
-            pickle_dumper(X_umap, f"{ID}/{otherMode}/emb/{name2}.p")
+                pickle_dumper(pca, f"{ID}/{otherMode}/pca/pca;;{name2}.p") 
 
+            Xu2 = X_umap            
+            umap = pickle_loader(f"{userID}/emb/{currentLayout}.p")                     
+            result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
+            result[obs_mask] = umap[obs_mask] 
+            X_umap = result 
 
-        umap = pickle_loader(f"{userID}/emb/{currentLayout}.p")                     
-        result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
-        result[obs_mask] = umap[obs_mask] 
-        X_umap = result  
+            x = DataAdaptor.normalize_embedding(np.vstack((Xu2,X_umap)))
+            Xu2 = x[:Xu2.shape[0]]
+            pickle_dumper(Xu2, f"{ID}/{otherMode}/emb/{name2}.p")                                               
+
+            X_umap = x[Xu2.shape[0]:]
+        else:
+            umap = pickle_loader(f"{userID}/emb/{currentLayout}.p")                     
+            result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
+            result[obs_mask] = umap[obs_mask] 
+            X_umap = result  
 
         try:
             nnm = pickle_loader(f"{userID}/nnm/{currentLayout}.p")[obs_mask][:,obs_mask]
@@ -956,6 +973,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         obsm = adata.obsm['X_pca']
         pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
         pca[obs_mask] = obsm        
+        X_umap = DataAdaptor.normalize_embedding(X_umap)
         
 
     dims = [f"{name}_0", f"{name}_1"]
@@ -1002,9 +1020,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
 
             for k in var.keys():
                 fn = "{}/var/{};;{}.p".format(userID,k.replace('/','_'),name)
+                fn2 = "{}/obs/{};;{}.p".format(otherID,k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
+                    pickle_dumper(np.array(list(var[k])).astype('float'),fn2.split(';;')[0]+'.p')
                 pickle_dumper(np.array(list(var[k])).astype('float'),fn)
+                pickle_dumper(np.array(list(var[k])).astype('float'),fn2)
         elif reembedParams.get("doSAM",False) and sam is not None:
             keys = ['weights','spatial_dispersions']
             for k in keys:
@@ -1015,9 +1036,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                             
             for k in keys:                
                 fn = "{}/var/{};;{}.p".format(userID,"sam_"+k.replace('/','_'),name)
+                fn2 = "{}/obs/{};;{}.p".format(otherID,k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn.split(';;')[0]+'.p')
-                pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn)            
+                    pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn2.split(';;')[0]+'.p')
+                pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn)  
+                pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn2)            
         pickle_dumper(nnm, f"{userID}/nnm/{name}.p")
     
     pickle_dumper(X_umap, f"{userID}/emb/{name}.p")
@@ -1915,7 +1939,7 @@ class AnndataAdaptor(DataAdaptor):
         self.data = None
         self._hosted_mode = app_config.hosted_mode
 
-        self._load_data(data_locator, root_embedding=app_config.root_embedding, preprocess=app_config.preprocess)    
+        self._load_data(data_locator, root_embedding=app_config.root_embedding, sam_weights=app_config.sam_weights, preprocess=app_config.preprocess)    
         self._create_pool()
 
         print("Validating and initializing...")
@@ -2038,7 +2062,7 @@ class AnndataAdaptor(DataAdaptor):
                 # user specified a non-existent column name
                 raise KeyError(f"Annotation name {name}, specified in --{ax_name}-name does not exist.")
 
-    def _load_data(self, data_locator, preprocess=False, root_embedding = None):
+    def _load_data(self, data_locator, preprocess=False, sam_weights=False, root_embedding = None):
         with data_locator.local_handle() as lh:
             backed = "r" if self.server_config.adaptor__anndata_adaptor__backed else None
 
@@ -2129,7 +2153,7 @@ class AnndataAdaptor(DataAdaptor):
                 del adata.raw
                 gc.collect()
 
-            if 'connectivities' in adata.obsp.keys():
+            if 'connectivities' in adata.obsp.keys() and sam_weights:
                 print('Found connectivities adjacency matrix. Computing SAM gene weights...')
                 var = dispersion_ranking_NN(adata.X,adata.obsp['connectivities'])
                 for k in var.keys():
@@ -2206,6 +2230,7 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/obs/")
             os.makedirs(f"{userID}/var/")
             os.makedirs(f"{userID}/diff/")
+            os.makedirs(f"{userID}/set/")
             os.makedirs(f"{userID}/output/")
             pickle.dump("OBS",open(f"{self.guest_idhash}/mode.p","wb"))
 
@@ -2216,22 +2241,26 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{ID}/VAR/pca/")
             os.makedirs(f"{ID}/VAR/obs/")
             os.makedirs(f"{ID}/VAR/var/")
-            os.makedirs(f"{ID}/VAR/diff/")   
+            os.makedirs(f"{ID}/VAR/diff/") 
+            os.makedirs(f"{ID}/VAR/set/")   
             os.makedirs(f"{ID}/VAR/output/")
 
+            varm_flag = False
             for k in self._varm_init.keys():
-                k2 = "X_".join(k.split("X_")[1:])
-                pickle_dumper(self._varm_init[k],f"{ID}/VAR/emb/{k2}.p")
+                k2 = k[2:] if k.startswith("X_") else k
+                pickle_dumper(DataAdaptor.normalize_embedding(self._varm_init[k]),f"{ID}/VAR/emb/{k2}.p")
                 if self._varm_init[k].shape[1] > 2:
                     pickle_dumper(self._varm_init[k],f"{ID}/VAR/pca/{k2}.p")
-
+                
                 r = self._varp_init.get("N_"+k2,self._varp_init.get("connectivities",None))
+                if r is None and len(self._varp_init) > 0:
+                    r = list(self._varp_init.values())[0]
                 if r is not None:
                     pickle_dumper(r,f"{ID}/VAR/nnm/{k2}.p")
                     pickle_dumper({},f"{ID}/VAR/params/{k2}.p")
-
-
-
+                varm_flag=True
+            
+            
             for k in self._obs_init.keys():
                 vals = np.array(list(self._obs_init[k]))
                 if isinstance(vals[0],np.integer):
@@ -2242,10 +2271,11 @@ class AnndataAdaptor(DataAdaptor):
                 dtype_name = dtype.name
                 dtype_kind = dtype.kind
                 if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:
-                    vals = np.array([i.replace('.','_') for i in vals])
+                    vals = np.array([i.replace('.','_').replace('/','_') for i in vals])
+                self._obs_init[k] = vals
+            pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")  
+            pickle_dumper(np.array(list(self._obs_init.index)),f"{ID}/VAR/var/name_0.p")  
 
-                pickle_dumper(vals,"{}/obs/{}.p".format(userID,k.replace('/','_')))
-            pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")                                
             for k in self._var_init.keys():
                 vals = np.array(list(self._var_init[k]))
                 if isinstance(vals[0],np.integer):
@@ -2256,24 +2286,38 @@ class AnndataAdaptor(DataAdaptor):
                 dtype_name = dtype.name
                 dtype_kind = dtype.kind
                 if dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_:
-                    vals = np.array([i.replace('.','_') for i in vals])
-                pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
-
-            pickle_dumper(np.array(list(self._var_init.index)),f"{userID}/var/name_0.p")                
-
+                    vals = np.array([i.replace('.','_').replace('/','_') for i in vals])
+                self._var_init[k] = vals
+            pickle_dumper(np.array(list(self._var_init.index)),f"{userID}/var/name_0.p") 
+            pickle_dumper(np.array(list(self._var_init.index)),f"{ID}/VAR/obs/name_0.p")  
+               
+            obsm_flag = False
             for k in self._obsm_init.keys():
-                k2 = "X_".join(k.split("X_")[1:])
-                pickle_dumper(self._obsm_init[k],f"{userID}/emb/{k2}.p")
+                k2 = k[2:] if k.startswith("X_") else k
+                pickle_dumper(DataAdaptor.normalize_embedding(self._obsm_init[k]),f"{userID}/emb/{k2}.p")
                 if self._obsm_init[k].shape[1] > 2:
                     pickle_dumper(self._obsm_init[k],f"{userID}/pca/{k2}.p")
 
                 r = self._obsp_init.get("N_"+k2,self._obsp_init.get("connectivities",None))
+                if r is None and len(self._obsp_init) > 0:
+                    r = list(self._obsp_init.values())[0]                
                 p = self._uns_init.get("N_"+k2+"_params",{})
                 if r is not None:
                     pickle_dumper(r,f"{userID}/nnm/{k2}.p")
                     pickle_dumper(p,f"{userID}/params/{k2}.p")
+                obsm_flag = True
 
             pickle_dumper({},f"{ID}/paired_embeddings.p")
+
+
+            common_rest.annotations_put_worker(self,self._obs_init,userID=userID, initVar=True)
+            common_rest.annotations_put_worker(self,self._var_init,userID=self.guest_idhash+"/VAR", initVar=True)            
+
+            if not obsm_flag:
+                pickle_dumper(np.zeros((self.data.shape[0],2)),f"{ID}/OBS/emb/root.p")
+            if not varm_flag:
+                pickle_dumper(np.zeros((self.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
+            
              
 
     def _validate_and_initialize(self):
@@ -2324,6 +2368,9 @@ class AnndataAdaptor(DataAdaptor):
 
         self._obs_init = self._obs_init.set_index("name_0")
         self._var_init = self._var_init.set_index("name_0")
+
+        self._obs_init.columns = pd.Index([k.replace('/','_') for k in self._obs_init.columns])
+        self._var_init.columns = pd.Index([k.replace('/','_') for k in self._var_init.columns])
 
 
         # heuristic
@@ -2417,20 +2464,31 @@ class AnndataAdaptor(DataAdaptor):
         annotations = self.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(self)}"
         fns = glob(f"{userID}/emb/*.p")
-        return [ann.split('.p')[0].split('/')[-1].split('\\')[-1].split('X_')[-1] for ann in fns]
+
+        x=[]
+        for ann in fns:
+            ann = ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+            x.push(ann[2:] if ann.startswith("X_") else ann)
+        return x
 
     def get_embedding_array(self, ename, dims=2):
+        annotations = self.dataset_config.user_annotations        
+        userID = f"{annotations._get_userdata_idhash(self)}"
+        full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")[:,0:dims]
+        return full_embedding
+
+    def get_embedding_array_joint(self, ename, dims=2):
         annotations = self.dataset_config.user_annotations        
         userID = f"{annotations._get_userdata_idhash(self)}"
         ID = userID.split("/")[0].split("\\")[0]
         paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
         otherMode = "VAR" if (userID.split('/')[-1].split('\\')[-1] == "OBS") else "OBS"
         
-        full_embedding = pickle_loader(f"{userID}/emb/{ename}.p")[:,0:dims]
         if ename in paired_embeddings:
             suffix_embedding = pickle_loader(f"{ID}/{otherMode}/emb/{paired_embeddings[ename]}.p")[:,0:dims]
-            full_embedding = np.vstack((full_embedding,suffix_embedding))
-        return full_embedding
+            return suffix_embedding
+        else:
+            return np.zeros((self.NAME[otherMode]["obs"].size,2))+0.5
 
     def get_colors(self):
         return convert_anndata_category_colors_to_cxg_category_colors(self.data)

@@ -348,8 +348,7 @@ class DataAdaptor(metaclass=ABCMeta):
         layout_data = []
         with ServerTiming.time("layout.query"):
             for ename in embeddings:
-                embedding = self.get_embedding_array(ename, 2)
-                normalized_layout = DataAdaptor.normalize_embedding(embedding)
+                normalized_layout = self.get_embedding_array(ename, 2)
                 layout_data.append(pd.DataFrame(normalized_layout, columns=[f"{ename}_0", f"{ename}_1"]))
 
         with ServerTiming.time("layout.encode"):
@@ -360,6 +359,33 @@ class DataAdaptor(metaclass=ABCMeta):
             fbs = encode_matrix_fbs(df, col_idx=df.columns, row_idx=None)
 
         return fbs
+
+    def layout_to_fbs_matrix_joint(self, fields):
+        """
+        return specified embeddings as a flatbuffer, using the cellxgene matrix fbs encoding.
+
+        * returns only first two dimensions, with name {ename}_0 and {ename}_1,
+          where {ename} is the embedding name.
+        * client assumes each will be individually centered & scaled (isotropically)
+          to a [0, 1] range.
+        * does not support filtering
+
+        """
+        embeddings = self.get_embedding_names() if fields is None or len(fields) == 0 else fields
+        layout_data = []
+        with ServerTiming.time("layout.query"):
+            for ename in embeddings:
+                normalized_layout = self.get_embedding_array_joint(ename, 2)
+                layout_data.append(pd.DataFrame(normalized_layout, columns=[f"{ename}_0", f"{ename}_1"]))
+
+        with ServerTiming.time("layout.encode"):
+            if layout_data:
+                df = pd.concat(layout_data, axis=1, copy=False)
+            else:
+                df = pd.DataFrame()
+            fbs = encode_matrix_fbs(df, col_idx=df.columns, row_idx=None)
+
+        return fbs        
 
     def get_last_mod_time(self):
         try:
