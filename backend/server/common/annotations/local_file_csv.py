@@ -198,7 +198,11 @@ class AnnotationsLocalFile(Annotations):
             id = (uid + data_adaptor.get_location()+f"__{data_adaptor._joint_mode}").encode()
             idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
         
-        mode = pickle.load(open(f"{idhash}/mode.p","rb"))
+        try:
+            mode = pickle.load(open(f"{idhash}/mode.p","rb"))
+        except:
+            mode = "OBS"
+        
         return idhash+"/"+mode
 
     def _get_output_dir(self):
