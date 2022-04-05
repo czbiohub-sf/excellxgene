@@ -529,6 +529,7 @@ def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
 
         sc.pp.pca(adata,n_comps=min(min(adata.shape) - 1, numPCs), svd_solver=pcaSolver)
         adata.X = X
+        vn = np.array(list(adata.var_names))
     else:            
         sam=SAM(counts = adata, inplace=True)
         X = sam.adata.X
@@ -537,6 +538,7 @@ def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
         sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM,max_iter=5)
         sam.adata.X = X        
         adata=sam.adata
+        vn = np.array(list(adata.var_names[np.sort(np.argsort(-np.array(list(adata.var['weights']))))]))
 
     if doBatch and not nobatch:
         if doSAM:
@@ -587,9 +589,9 @@ def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
     obsm = adata.obsm['X_pca']
 
     if umap:
-        return nnm,obsm,u,sam
+        return nnm,obsm,u,sam, vn
     else:
-        return nnm,obsm,sam
+        return nnm,obsm,sam, vn
 
 def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):
     mode = userID.split("/")[-1].split("\\")[-1]
@@ -656,23 +658,36 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 obs_mask2[:] = False
                 obs_mask2[filt] = True
 
-            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
+            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2, "obs_mask2": obs_mask}
             adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #subset cells
             adata = adata[:,obs_mask] # subset genes
             
-            adata2 = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR")[:,obs_mask2] # subset genes x subset cells
-            X_full = adata2.X #sg x sc
+            X_full = adata.X.T #sg x sc
         elif mode == "OBS": #obs_mask2 is for genes
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "OBS")[:,obs_mask2] #cells
-
-            AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
-            adata2 = compute_preprocess(AnnDataDict2, reembedParams, userID, "VAR", other=True) #genes
-            adata2 = adata2[:,obs_mask]
-
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "OBS")
             X_full = adata.X # sc x sg
         
-        nnm1, pca1, sam1 = embed(adata,reembedParams, umap=False, nobatch=mode=="VAR")
+        nnm1, pca1, sam1, vn1 = embed(adata,reembedParams, umap=False, nobatch=mode=="VAR")
+        vn1 = vn1.astype('int')
+        adata.X.eliminate_zeros()
+        _,y1 = adata.X.nonzero()
+        y1=y1[adata.X.data>min(reembedParams.get("minCountsGF",0),3)]
+        a1,c1 = np.unique(y1,return_counts=True)
+        n1 = np.zeros(adata.shape[1])
+        n1[a1]=c1                
+        n1 = n1 >= min(20,max(5,reembedParams.get("minCellsGF",0)/100*adata.shape[0]))
+        vn2 = np.array(list(adata.var_names))[n1].astype('int')
+        jointHVG = reembedParams.get("jointHVG",True) and  mode == "OBS"
         
+        if not jointHVG:
+            vn1 = np.array(list(adata.var_names)).astype('int')
+        
+        vn1 = vn1[np.in1d(vn1,vn2)]        
+        obs_mask2[:]=False
+        obs_mask2[vn1]=True
+        adata = adata[:,vn1.astype('str')]
+        adata2 = adata.X.T
+
         cl=SAM().leiden_clustering(X=nnm1,res=5)
         clu = np.unique(cl)
         avgs = []
@@ -694,8 +709,9 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             nnm2.data[:]=1    
         
         # given nnm1, pca1, sam1, nnm2, pca2
+
         X1 = StandardScaler(with_mean=False).fit_transform(adata.X) # cells
-        X2 = StandardScaler(with_mean=False).fit_transform(adata2.X)
+        X2 = StandardScaler(with_mean=False).fit_transform(adata2)
         mu1 = X1.mean(0).A.flatten()
         mu2 = X2.mean(0).A.flatten()        
         KNN1v2 = sparse_knn(X1,40,mu1).tocsr()
@@ -804,7 +820,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
             adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #cells
             adata = adata[:,obs_mask]
-            nnm, pca, _ = embed(adata,reembedParams, umap=False, nobatch=True)
+            nnm, pca, _, _ = embed(adata,reembedParams, umap=False, nobatch=True)
 
             cl=SAM().leiden_clustering(X=nnm,res=10)
             clu = np.unique(cl)
@@ -837,7 +853,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         else:
             adata = compute_preprocess(AnnDataDict, reembedParams, userID, mode)
             X_full = adata.X
-            nnm, obsm, umap, sam = embed(adata,reembedParams,umap=True, kernelPca = reembedParams.get("kernelPca",False))
+            nnm, obsm, umap, sam, _ = embed(adata,reembedParams,umap=True, kernelPca = reembedParams.get("kernelPca",False))
             
             result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
             result[obs_mask] = umap
@@ -845,6 +861,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
             pca[obs_mask] = obsm    
         X_umap = DataAdaptor.normalize_embedding(X_umap)
+
     elif embeddingMode == "Create embedding from subset":
          #direc    
         if pairedMode:
@@ -1383,13 +1400,21 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
     obs = AnnDataDict['obs']
     var = AnnDataDict['var']
     obs_mask = AnnDataDict['obs_mask']
+    obs_mask2 = AnnDataDict['obs_mask2']
     kkk=layers[0]
-    X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
-    adata = AnnData(X=X,obs=obs[obs_mask],var=var)
+    if np.all(obs_mask2):
+        X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
+    else:
+        X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask][:,obs_mask2]
+    
+    adata = AnnData(X=X,obs=obs[obs_mask],var=var[obs_mask2])
     adata.layers[layers[0]] = X
     for k in layers[1:]:
         kkk=k
-        X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
+        if np.all(obs_mask2):
+            X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
+        else:
+            X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask][:,obs_mask2]
         adata.layers[k] = X
 
 
@@ -1452,6 +1477,9 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
                 a2,_=sc.pp.filter_genes(adata_sub_raw, min_cells=minCellsGF/100*adata_sub_raw.shape[0],inplace=False)
                 a3,_=sc.pp.filter_genes(adata_sub_raw, max_cells=maxCellsGF/100*adata_sub_raw.shape[0],inplace=False)
                 a = a1*a2*a3
+                ixx = np.where(obs_mask2)[0]
+                obs_mask2[:]=False
+                obs_mask2[ixx[a]] = True  
                 
                 adata_sub_raw.X = adata_sub_raw.X.multiply(a.flatten()[None,:]).tocsr()
 
@@ -1468,6 +1496,9 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
             adatas.append(adata_sub_raw)
         adata_raw = anndata.concat(adatas,axis=0,join="inner")
         filt = np.in1d(np.array(list(cn)),np.array(cns))
+        ixx = np.where(obs_mask)[0]
+        obs_mask[:]=False
+        obs_mask[ixx[filt]]=True          
         temp = adata_raw.obs_names.copy()
         adata_raw.obs_names = adata_raw.obs["name_0"]
         adata_raw = adata_raw[cn]
@@ -1495,6 +1526,12 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
             a2,_=sc.pp.filter_genes(adata_raw, min_cells=minCellsGF/100*adata_raw.shape[0],inplace=False)
             a3,_=sc.pp.filter_genes(adata_raw, max_cells=maxCellsGF/100*adata_raw.shape[0],inplace=False)
             a = a1*a2*a3
+            ixx = np.where(obs_mask2)[0]
+            obs_mask2[:]=False
+            obs_mask2[ixx[a]] = True  
+            ixx = np.where(obs_mask)[0]
+            obs_mask[:]=False
+            obs_mask[ixx[filt]]=True          
             
             adata_raw.X = adata_raw.X.multiply(a.flatten()[None,:]).tocsr()
             
@@ -1506,10 +1543,10 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
                 except:
                     pass
         
-     #direc 
-    if mode == "VAR":   
-        adata_raw.X = StandardScaler(with_mean=False).fit_transform(adata_raw.X.T).T
-        adata_raw.X.data[adata_raw.X.data>10]=10   
+     #direc #FINDME
+    #if mode == "VAR":   
+    #    adata_raw.X = StandardScaler(with_mean=False).fit_transform(adata_raw.X.T).T
+    #    adata_raw.X.data[adata_raw.X.data>10]=10   
 
     adata_raw.layers['X'] = adata_raw.X            
     doBatchPrep = reembedParams.get("doBatchPrep",False)
@@ -1545,7 +1582,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
     ID = userID.split('/')[0].split('\\')[0]
     pickle_dumper(prepParams, f"{ID}/OBS/params/latest.p")
     pickle_dumper(prepParams, f"{ID}/VAR/params/latest.p")
-    return adata_raw
+    return adata_raw[filt]
    
 
 
