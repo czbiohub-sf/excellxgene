@@ -123,7 +123,8 @@ const continuous = (selectorId, colorScale) => {
     chromeKeyContinuous: state.controls.chromeKeyContinuous,
     chromeKeyCategorical: state.controls.chromeKeyCategorical,
     chromeKeys: Object.keys(chromatic).filter((item)=>item.startsWith("interpolate")).map((item)=>item.replace("interpolate","")).sort(),
-    jointEmbeddingFlag: state.controls.jointEmbeddingFlag
+    jointEmbeddingFlag: state.controls.jointEmbeddingFlag,
+    jointMode: state.controls.jointMode
   };
 })
 class MenuBar extends React.PureComponent {
@@ -425,7 +426,8 @@ class MenuBar extends React.PureComponent {
       chromeKeyContinuous,
       chromeKeyCategorical,
       chromeKeys,
-      jointEmbeddingFlag
+      jointEmbeddingFlag,
+      jointMode
     } = this.props;
     const { preferencesDialogOpen, pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];

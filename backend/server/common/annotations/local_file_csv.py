@@ -190,12 +190,12 @@ class AnnotationsLocalFile(Annotations):
         """
         useGuest = 'excxg_profile' not in session
         if useGuest:
-            id = (data_adaptor.get_location()).encode()
+            id = (data_adaptor.get_location()+f"__{data_adaptor._joint_mode}").encode()
             guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")            
             idhash = guest_idhash
         else:
             uid = session['excxg_profile']['sub']
-            id = (uid + data_adaptor.get_location()).encode()
+            id = (uid + data_adaptor.get_location()+f"__{data_adaptor._joint_mode}").encode()
             idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
         
         mode = pickle.load(open(f"{idhash}/mode.p","rb"))

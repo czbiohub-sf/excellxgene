@@ -452,6 +452,7 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
     dispatch({
       type: "writable obs annotations - save complete",
       lastSavedAnnoMatrix: annoMatrix,
+      annos
     });
     return;
   }
@@ -491,6 +492,7 @@ export const saveObsAnnotationsAction = () => async (dispatch, getState) => {
       dispatch({
         type: "writable obs annotations - save complete",
         lastSavedAnnoMatrix: annoMatrix,
+        annos
       });
     } else {
       dispatch({
@@ -550,6 +552,7 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
     return dispatch({
       type: "autosave: genesets complete",
       lastSavedGenesets: genesets,
+      sets
     });
   }
 
@@ -602,6 +605,7 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
       dispatch({
         type: "autosave: genesets complete",
         lastSavedGenesets: genesets,
+        sets
       })
     ]);
   } catch (error) {

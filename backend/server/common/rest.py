@@ -376,29 +376,29 @@ def annotations_put_worker(data_adaptor, new_label_df, userID=None, initVar = Fa
         tgt = "{}/var/{}.p".format(pathNew,col.replace('/','_'))
         pickle_dumper(vals,src)
 
-        #jointmode flag here
-        if initVar:
-            pickle_dumper(vals,tgt)
+        if data_adaptor._joint_mode or initVar:
+            if initVar:
+                pickle_dumper(vals,tgt)
 
-        name = data_adaptor.NAME[mode]["obs"]
-        
-        dtype = vals.dtype
-        dtype_name = dtype.name
-        dtype_kind = dtype.kind
-        a,c = np.unique(vals,return_counts=True)
-        flag =  a.size > 2000 or c.max() < 5
-        if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
-            d = _df_to_dict(vals,name)
-            try:
-                del d['unassigned']
-            except:
-                pass            
+            name = data_adaptor.NAME[mode]["obs"]
             
-            if os.path.exists(f"{pathNew}/set/{col}/"):
-                shutil.rmtree(f"{pathNew}/set/{col}/")            
-            os.makedirs(f"{pathNew}/set/{col}/")
-            for dkey in d:
-                pickle_dumper(d[dkey],f"{pathNew}/set/{col}/{dkey}.p")    
+            dtype = vals.dtype
+            dtype_name = dtype.name
+            dtype_kind = dtype.kind
+            a,c = np.unique(vals,return_counts=True)
+            flag =  a.size > 2000 or c.max() < 5
+            if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
+                d = _df_to_dict(vals,name)
+                try:
+                    del d['unassigned']
+                except:
+                    pass            
+                
+                if os.path.exists(f"{pathNew}/set/{col}/"):
+                    shutil.rmtree(f"{pathNew}/set/{col}/")            
+                os.makedirs(f"{pathNew}/set/{col}/")
+                for dkey in d:
+                    pickle_dumper(d[dkey],f"{pathNew}/set/{col}/{dkey}.p")    
 
 def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     """helper function to write annotations from fbs"""
@@ -858,10 +858,13 @@ def delete_obs_put(request, data_adaptor):
 
     if os.path.exists(f"{userID}/obs/{name}.p"):
         os.remove(f"{userID}/obs/{name}.p")
-    if os.path.exists(f"{ID}/var/{name}.p"):
-        os.remove(f"{ID}/var/{name}.p")
-    if os.path.exists(f"{ID}/set/{name}/"):
-        shutil.rmtree(f"{ID}/set/{name}/")                
+    
+    if data_adaptor._joint_mode:
+        if os.path.exists(f"{ID}/var/{name}.p"):
+            os.remove(f"{ID}/var/{name}.p")
+        if os.path.exists(f"{ID}/set/{name}/"):
+            shutil.rmtree(f"{ID}/set/{name}/")                
+    
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
@@ -880,15 +883,16 @@ def rename_obs_put(request, data_adaptor):
     
     if os.path.exists(f"{userID}/obs/{oldName}.p"):
         os.rename(f"{userID}/obs/{oldName}.p",f"{userID}/obs/{newName}.p")
-
-        try:
-            os.rename(f"{ID}/var/{oldName}.p",f"{ID}/var/{newName}.p")
-        except:
-            pass
-        try:
-            shutil.rmtree(f"{ID}/set/{oldName}/")
-        except:
-            pass    
+        
+        if data_adaptor._joint_mode:
+            try:
+                os.rename(f"{ID}/var/{oldName}.p",f"{ID}/var/{newName}.p")
+            except:
+                pass
+            try:
+                shutil.rmtree(f"{ID}/set/{oldName}/")
+            except:
+                pass    
     try:
         return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
@@ -896,43 +900,6 @@ def rename_obs_put(request, data_adaptor):
     except (ValueError, DisabledFeatureError, FilterError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
 
-
-def _can_cast_to_float32(dtype, array_values):
-    """
-    Optimistically returns True signifying that a type downcast to float32 is possible whenever the incoming type is
-    a float.
-
-    We also handle a special case here where the array is a Series object with integer categorical values AND NaNs.
-    Since NaNs are floating points in numpy, we upcast the integer array to float32 and return True.
-    """
-
-    if dtype.kind == "f":
-        return True
-
-    if dtype.kind == "O" and pd.Series(array_values).hasnans:
-        return True
-
-    return False
-
-def _can_cast_to_int32(dtype, array_values=None):
-    if pd.Series(array_values).hasnans:
-        return False
-
-    ordered_array_values = array_values
-    if array_values.dtype.name == "category" and not array_values.cat.ordered:
-        ordered_array_values = array_values.cat.as_ordered()
-
-    if dtype.kind in ["i", "u"]:
-        if np.can_cast(dtype, np.int32):
-            return True
-        ii32 = np.iinfo(np.int32)
-        if (
-            not pd.Series(ordered_array_values).empty
-            and (ordered_array_values.min() >= ii32.min and ordered_array_values.max() <= ii32.max)
-            or pd.Series(ordered_array_values).empty
-        ):
-            return True
-    return False
 
 def switch_cxg_mode(request,data_adaptor):
     userID = _get_user_id(data_adaptor)
@@ -1127,7 +1094,7 @@ def diff_genes_put(request,data_adaptor):
 
 
 def initialize_user(data_adaptor):            
-    userID = _get_user_id(data_adaptor)
+    userID = _get_user_id(data_adaptor).split("/")[0].split("\\")[0]
     if not os.path.exists(f"{userID}/"):
         os.system(f"mkdir {userID}")
         os.system(f"cp -r {data_adaptor.guest_idhash}/* {userID}/")
@@ -1362,7 +1329,7 @@ def genesets_put(request, data_adaptor):
         for name in genesets[set]:
             pickle_dumper(genesets[set][name],f"{userID}/set/{setn}/{name}.p")
 
-        if '//;;//' not in set:
+        if '//;;//' not in set and data_adaptor._joint_mode:
             # convert genesets to obs
             v = pickle_loader(f"{userID}/var/name_0.p")
             ID = userID.split('/')[0].split('\\')[0]

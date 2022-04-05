@@ -26,7 +26,8 @@ const DATASET_TITLE_FONT_SIZE = 14;
     annoMatrix: state.annoMatrix,
     userLoggedIn: state.controls.userInfo ? true : false,
     cxgMode: state.controls.cxgMode,
-    layoutChoice: state.layoutChoice
+    layoutChoice: state.layoutChoice,
+    jointMode: state.controls.jointMode
   };
 })
 class LeftSideBar extends React.Component {
@@ -54,7 +55,8 @@ class LeftSideBar extends React.Component {
       hostedMode,
       cxgMode,
       userLoggedIn,
-      layoutChoice
+      layoutChoice,
+      jointMode
     } = this.props;
     const { warningDialog, loading } = this.state;
     return (
@@ -70,7 +72,7 @@ class LeftSideBar extends React.Component {
           alignItems: "center",
         }}
       >
-        <div>
+        {userLoggedIn && jointMode ? <div>
           <Logo size={28} />
           <span
             style={{
@@ -80,10 +82,10 @@ class LeftSideBar extends React.Component {
               userSelect: "none",
             }}
           >
-            {userLoggedIn ? <span style={{color: cxgMode === "OBS" ? "blue" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
+            <span style={{color: cxgMode === "OBS" ? "blue" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
             cell
-            </span> : "cell"}
-            {userLoggedIn ? <AnchorButton 
+            </span>
+            <AnchorButton 
             loading={loading}
             style={{lineHeight: 0,
                     marginTop: "-5px",
@@ -110,20 +112,39 @@ class LeftSideBar extends React.Component {
             >
               ×
             </div>
-            </AnchorButton> : <div
+            </AnchorButton>
+            <span style={{color: cxgMode === "VAR" ? "red" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
+            gene
+            </span>
+          </span>
+        </div> : 
+        <div>
+        <Logo size={28} />
+        <span
+            style={{
+              fontSize: 24,
+              position: "relative",
+              top: -6,
+              fontWeight: "bold",
+              marginLeft: 5,
+              color: globals.logoColor,
+              userSelect: "none",
+            }}
+          >
+            cell
+            <span
               style={{
-                fontWeight: "bold",
-                fontSize: 28,
+                position: "relative",
+                top: 1,
+                fontWeight: 300,
+                fontSize: 24,
               }}
             >
               ×
-            </div>}
-
-            {userLoggedIn ? <span style={{color: cxgMode === "VAR" ? "red" : "#C0C0C0", fontWeight: "bold", fontSize: 24}}>
+            </span>
             gene
-            </span> : "gene"}
           </span>
-        </div>
+          </div>}
         <div style={{ marginRight: 5, height: "100%" }}>
           <Button
             minimal

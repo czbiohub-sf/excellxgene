@@ -1938,7 +1938,7 @@ class AnndataAdaptor(DataAdaptor):
         super().__init__(data_locator, app_config, dataset_config)
         self.data = None
         self._hosted_mode = app_config.hosted_mode
-
+        self._joint_mode = app_config.joint_mode
         self._load_data(data_locator, root_embedding=app_config.root_embedding, sam_weights=app_config.sam_weights, preprocess=app_config.preprocess)    
         self._create_pool()
 
@@ -2234,7 +2234,6 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{userID}/output/")
             pickle.dump("OBS",open(f"{self.guest_idhash}/mode.p","wb"))
 
-
             os.makedirs(f"{ID}/VAR/nnm/")
             os.makedirs(f"{ID}/VAR/emb/")
             os.makedirs(f"{ID}/VAR/params/")
@@ -2245,22 +2244,6 @@ class AnndataAdaptor(DataAdaptor):
             os.makedirs(f"{ID}/VAR/set/")   
             os.makedirs(f"{ID}/VAR/output/")
 
-            varm_flag = False
-            for k in self._varm_init.keys():
-                k2 = k[2:] if k.startswith("X_") else k
-                pickle_dumper(DataAdaptor.normalize_embedding(self._varm_init[k]),f"{ID}/VAR/emb/{k2}.p")
-                if self._varm_init[k].shape[1] > 2:
-                    pickle_dumper(self._varm_init[k],f"{ID}/VAR/pca/{k2}.p")
-                
-                r = self._varp_init.get("N_"+k2,self._varp_init.get("connectivities",None))
-                if r is None and len(self._varp_init) > 0:
-                    r = list(self._varp_init.values())[0]
-                if r is not None:
-                    pickle_dumper(r,f"{ID}/VAR/nnm/{k2}.p")
-                    pickle_dumper({},f"{ID}/VAR/params/{k2}.p")
-                varm_flag=True
-            
-            
             for k in self._obs_init.keys():
                 vals = np.array(list(self._obs_init[k]))
                 if isinstance(vals[0],np.integer):
@@ -2274,7 +2257,6 @@ class AnndataAdaptor(DataAdaptor):
                     vals = np.array([i.replace('.','_').replace('/','_') for i in vals])
                 self._obs_init[k] = vals
             pickle_dumper(np.array(list(self._obs_init.index)),f"{userID}/obs/name_0.p")  
-            pickle_dumper(np.array(list(self._obs_init.index)),f"{ID}/VAR/var/name_0.p")  
 
             for k in self._var_init.keys():
                 vals = np.array(list(self._var_init[k]))
@@ -2289,8 +2271,27 @@ class AnndataAdaptor(DataAdaptor):
                     vals = np.array([i.replace('.','_').replace('/','_') for i in vals])
                 self._var_init[k] = vals
             pickle_dumper(np.array(list(self._var_init.index)),f"{userID}/var/name_0.p") 
-            pickle_dumper(np.array(list(self._var_init.index)),f"{ID}/VAR/obs/name_0.p")  
-               
+            
+            if self._joint_mode:
+                pickle_dumper(np.array(list(self._obs_init.index)),f"{ID}/VAR/var/name_0.p")  
+                pickle_dumper(np.array(list(self._var_init.index)),f"{ID}/VAR/obs/name_0.p")              
+                common_rest.annotations_put_worker(self,self._var_init,userID=self.guest_idhash+"/VAR", initVar=True) 
+                common_rest.annotations_put_worker(self,self._obs_init,userID=userID, initVar=True)
+            else:
+                for col in self._obs_init:
+                    vals = np.array(list(self._obs_init[col]))
+                    if isinstance(vals[0],np.integer):
+                        if (len(set(vals))<500):
+                            vals = vals.astype('str')            
+                    pickle_dumper(vals,"{}/obs/{}.p".format(userID,col.replace('/','_')))                
+
+                for col in self._var_init:
+                    vals = np.array(list(self._var_init[col]))
+                    if isinstance(vals[0],np.integer):
+                        if (len(set(vals))<500):
+                            vals = vals.astype('str')            
+                    pickle_dumper(vals,"{}/var/{}.p".format(userID,col.replace('/','_')))                
+
             obsm_flag = False
             for k in self._obsm_init.keys():
                 k2 = k[2:] if k.startswith("X_") else k
@@ -2306,17 +2307,30 @@ class AnndataAdaptor(DataAdaptor):
                     pickle_dumper(r,f"{userID}/nnm/{k2}.p")
                     pickle_dumper(p,f"{userID}/params/{k2}.p")
                 obsm_flag = True
-
+            
+            if not obsm_flag:
+                pickle_dumper(np.zeros((self.data.shape[0],2)),f"{ID}/OBS/emb/root.p")            
+            
             pickle_dumper({},f"{ID}/paired_embeddings.p")
 
-
-            common_rest.annotations_put_worker(self,self._obs_init,userID=userID, initVar=True)
-            common_rest.annotations_put_worker(self,self._var_init,userID=self.guest_idhash+"/VAR", initVar=True)            
-
-            if not obsm_flag:
-                pickle_dumper(np.zeros((self.data.shape[0],2)),f"{ID}/OBS/emb/root.p")
-            if not varm_flag:
-                pickle_dumper(np.zeros((self.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
+            if self._joint_mode:
+                varm_flag = False
+                for k in self._varm_init.keys():
+                    k2 = k[2:] if k.startswith("X_") else k
+                    pickle_dumper(DataAdaptor.normalize_embedding(self._varm_init[k]),f"{ID}/VAR/emb/{k2}.p")
+                    if self._varm_init[k].shape[1] > 2:
+                        pickle_dumper(self._varm_init[k],f"{ID}/VAR/pca/{k2}.p")
+                    
+                    r = self._varp_init.get("N_"+k2,self._varp_init.get("connectivities",None))
+                    if r is None and len(self._varp_init) > 0:
+                        r = list(self._varp_init.values())[0]
+                    if r is not None:
+                        pickle_dumper(r,f"{ID}/VAR/nnm/{k2}.p")
+                        pickle_dumper({},f"{ID}/VAR/params/{k2}.p")
+                    varm_flag=True
+            
+                if not varm_flag:
+                    pickle_dumper(np.zeros((self.data.shape[1],2)),f"{ID}/VAR/emb/root.p")
             
              
 
@@ -2379,7 +2393,7 @@ class AnndataAdaptor(DataAdaptor):
             self.parameters.update({"diffexp_may_be_slow": True})
 
 
-        id = (self.get_location()).encode()
+        id = (self.get_location()+f"__{self._joint_mode}").encode()
         self.guest_idhash = base64.b32encode(blake2b(id, digest_size=5).digest()).decode("utf-8")
 
         print("Initializing user folders")
