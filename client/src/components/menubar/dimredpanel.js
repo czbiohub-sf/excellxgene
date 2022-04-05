@@ -31,7 +31,8 @@ function writableAnnotationsVar(annoMatrix) {
   annoMatrix: state.annoMatrix,
   currentLayout: state.layoutChoice.current,
   varRefresher: state.controls.varRefresher,
-  cxgMode: state.controls.cxgMode
+  cxgMode: state.controls.cxgMode,
+  jointMode: state.controls.jointMode
 }))
 class DimredPanel extends React.PureComponent {
   constructor(props) {
@@ -113,7 +114,7 @@ class DimredPanel extends React.PureComponent {
     const {
       cfshown, gfshown, hvgshown, samshown, trshown, aboDisabled, allDisabled
     } = this.state;
-    const { reembedParams, annoMatrix, dispatch, cxgMode, embName, onChange, currentLayout } = this.props;
+    const { reembedParams, annoMatrix, dispatch, cxgMode, embName, onChange, currentLayout, jointMode } = this.props;
     const lS = annoMatrix.schema.latent_spaces;
     const dsampleOptions = cxgMode === "VAR" ? writableAnnotationsVar(annoMatrix) : writableAnnotationsObs(annoMatrix)
     const latentSpaces = [];
@@ -232,7 +233,7 @@ class DimredPanel extends React.PureComponent {
                 >  
                   Cell and gene embedding
                 </Tooltip>    
-              } value="Cell and gene embedding"/>             
+              } value="Cell and gene embedding"/>            
           </RadioGroup>    
           {(cxgMode === "VAR" && annoMatrix.nVar > 50000 &&
         (reembedParams.embeddingMode==="Preprocess and run" || reembedParams.embeddingMode==="Cell and gene embedding")

@@ -307,7 +307,14 @@ def launch_args(func):
         is_flag=True,
         show_default=True,
         help="Calculates SAM weights (spatial dispersions) for each gene.",
-    )                                          
+    )   
+    @click.option(
+        "--joint_mode",
+        default=False,
+        is_flag=True,
+        show_default=True,
+        help="Enables switching between cell and gene modes in excellxgene.",
+    )                                             
     @click.help_option("--help", "-h", help="Show this message and exit.")
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -393,7 +400,8 @@ def launch(
     root_embedding,
     auth_url,
     preprocess,
-    sam_weights
+    sam_weights,
+    joint_mode
 ):
     """Launch the cellxgene data viewer.
     This web app lets you explore single-cell expression data.
@@ -422,6 +430,7 @@ def launch(
     app_config.preprocess = preprocess
     app_config.sam_weights = sam_weights
     app_config.hosted_mode = hosted
+    app_config.joint_mode = joint_mode
     server_config = app_config.server_config
 
     try:

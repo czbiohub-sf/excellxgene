@@ -211,6 +211,13 @@ class HostedModeAPI(Resource):
                                       "cxgMode": _get_user_id(data_adaptor).split('/')[-1].split('\\')[-1]}),
                                       HTTPStatus.OK)
 
+
+class JointModeAPI(Resource):
+    @cache_control(public=True, max_age=ONE_WEEK)
+    @rest_get_data_adaptor
+    def get(self, data_adaptor):    
+        return make_response(jsonify({"response": data_adaptor._joint_mode}),HTTPStatus.OK)
+
 class SwitchCxgModeAPI(Resource):
     @cache_control(public=True, max_age=ONE_WEEK)
     @rest_get_data_adaptor
@@ -562,6 +569,7 @@ def get_api_dataroot_resources(bp_dataroot):
     add_resource(UserInfoAPI, "/userinfo")
     add_resource(UserInfoAuth0API, "/userInfo")
     add_resource(HostedModeAPI, "/hostedMode")
+    add_resource(JointModeAPI, "/jointMode")
     add_resource(GeneInfoAPI, "/geneInfo")
     add_resource(GeneInfoBulkAPI, "/geneInfoBulk")
     add_resource(ResetToRootFolder,"/resetToRoot")

@@ -52,6 +52,9 @@ async function userInfoAuth0Fetch() {
 async function hostedModeFetch() {
   return fetchJson("hostedMode");
 }
+async function jointModeFetch() {
+  return fetchJson("jointMode");
+}
 async function initializeFetch() {
   return fetchJson("initialize");
 }
@@ -729,11 +732,12 @@ const doInitialDataLoad = () =>
     dispatch({ type: "initial data load start" });
     await initializeFetch(dispatch);
     try {
-      const [config, schema, res, res2] = await Promise.all([
+      const [config, schema, res, res2, res3] = await Promise.all([
         configFetch(dispatch),
         schemaFetch(dispatch),
         userInfoAuth0Fetch(dispatch),
         hostedModeFetch(dispatch),
+        jointModeFetch(dispatch),
         userColorsFetchAndLoad(dispatch),
         userInfoFetch(dispatch),
       ]);
@@ -742,6 +746,7 @@ const doInitialDataLoad = () =>
 
       const { response: userInfo } = res;
       const { response: hostedMode, cxgMode } = res2;
+      const { response: jointMode } = res3;
       if ( hostedMode ) {
         dispatch({type: "set user info", userInfo})
       } else {
@@ -749,6 +754,7 @@ const doInitialDataLoad = () =>
       }
       dispatch({type: "set cxg mode", cxgMode})
       dispatch({type: "set hosted mode", hostedMode})
+      dispatch({type: "set joint mode", jointMode})
       const baseDataUrl = `${globals.API.prefix}${globals.API.version}`;  
       const annoMatrix = new AnnoMatrixLoader(baseDataUrl, schema.schema);
       

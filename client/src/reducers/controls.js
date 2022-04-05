@@ -37,7 +37,8 @@ const Controls = (
     chromeKeyContinuous: "Spectral",
     chromeKeyCategorical: "Rainbow",
     cxgMode: "OBS",
-    jointEmbeddingFlag: true
+    jointEmbeddingFlag: true,
+    jointMode: false
   },
   action
 ) => {
@@ -110,9 +111,13 @@ const Controls = (
       };
     }
     case "autosave: genesets complete": {
+      let setTracker = state.setTracker;
+      action.sets.forEach((item)=>{
+        setTracker = setTracker.filter((a)=>a!==item);
+      })
       return {
         ...state,
-        setTracker: []
+        setTracker: setTracker
       }
     }          
     case "set var key": {
@@ -122,9 +127,13 @@ const Controls = (
       }
     }
     case "writable obs annotations - save complete": {
+      let annoTracker = state.annoTracker;
+      action.annos.forEach((item)=>{
+        annoTracker = annoTracker.filter((a)=>a!==item);
+      })
       return {
         ...state,
-        annoTracker: []
+        annoTracker: annoTracker
       }
     }
     case "graph: screencap start": {
@@ -190,6 +199,12 @@ const Controls = (
         hostedMode: action.hostedMode
       }
     }  
+    case "set joint mode": {
+      return {
+        ...state,
+        jointMode: action.jointMode
+      }
+    }      
     case "set cxg mode": {
       return {
         ...state,
