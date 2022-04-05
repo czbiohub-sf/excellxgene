@@ -78,31 +78,16 @@ class DimredPanel extends React.PureComponent {
     if (embeddingMode !== prevProps.reembedParams.embeddingMode) {
       if (embeddingMode === "Run UMAP") {
         this.setState({
-          cfshown: false,
-          gfshown: false,
-          hvgshown: true,
-          samshown: false,
-          trshown: false,
           aboDisabled: true,
           allDisabled: false
         })
       } else if (embeddingMode === "Preprocess and run" || embeddingMode === "Cell and gene embedding") {
         this.setState({
-          cfshown: false,
-          gfshown: false,
-          hvgshown: false,
-          samshown: false,
-          trshown: false,
           aboDisabled: false,
           allDisabled: false
         })
       } else if (embeddingMode === "Create embedding from subset") {
         this.setState({
-          cfshown: false,
-          gfshown: false,
-          hvgshown: false,
-          samshown: false,
-          trshown: false,
           aboDisabled: false,
           allDisabled: true
         })
@@ -297,21 +282,27 @@ class DimredPanel extends React.PureComponent {
       />}   
       <div style={{"paddingLeft":"10px"}}>
         <Collapse isOpen={trshown}>   
-        {!reembedParams.doSAM && <ControlGroup fill={true} vertical={false}>
-            <ParameterInput 
+        {(!reembedParams.doSAM || cxgMode === "OBS") && <ControlGroup fill={true} vertical={false}>
+          {!reembedParams.doSAM && <ParameterInput 
               label="Use SAM weights?"
               param="samHVG"
               tooltipContent={"Check to use SAM weights for feature selection."}
               disabled={disabled}
-            />   
+            />}   
+            {(cxgMode === "OBS" && reembedParams.embeddingMode === "Cell and gene embedding") && <ParameterInput 
+              label="Use HVGs for the joint embedding"
+              param="jointHVG"
+              tooltipContent={"Check to only display HVGs for the joint embedding."}
+              disabled={disabled}
+            />}            
           </ControlGroup>}
           <ControlGroup fill={true} vertical={false}>
             <ParameterInput
               min={0}
               max={annoMatrix.nVar}
-              label={`n_top_genes (${reembedParams.samHVG ? "SAM weights" : "scanpy HVG"})`}
+              label={`n_top_genes (${(reembedParams.samHVG || reembedParams.doSAM) ? "SAM weights" : "scanpy HVG"})`}
               param="nTopGenesHVG"
-              tooltipContent={`The number of genes to select using ${reembedParams.samHVG ? "SAM weights" : "scanpy HVG"}.`}
+              tooltipContent={`The number of genes to select using ${(reembedParams.samHVG || reembedParams.doSAM)? "SAM weights" : "scanpy HVG"}.`}
             />        
           </ControlGroup>                    
         </Collapse>  

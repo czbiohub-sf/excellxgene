@@ -135,10 +135,9 @@ class PrepPanel extends React.PureComponent {
         text={<b>Cell filtering</b>}
         fill minimal
         rightIcon={cfshown ? "chevron-down" : "chevron-right"} small
-        disabled = {disabled}
       />                    
       <div style={{"paddingLeft":"10px"}}>
-        <Collapse isOpen={cfshown && !disabled}>
+        <Collapse isOpen={cfshown}>
           <ControlGroup fill={true} vertical={false}>
             <ParameterInput
             min={0}
@@ -167,10 +166,9 @@ class PrepPanel extends React.PureComponent {
         text={<b>Gene filtering</b>}
         fill minimal
         rightIcon={gfshown ? "chevron-down" : "chevron-right"} small
-        disabled = {disabled}
       />   
       <div style={{"paddingLeft":"10px"}}>
-        <Collapse isOpen={gfshown && !disabled}>
+        <Collapse isOpen={gfshown}>
           <ControlGroup fill={true} vertical={false}>
             <ParameterInput
               min={0}

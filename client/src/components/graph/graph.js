@@ -571,10 +571,14 @@ class Graph extends React.Component {
     }
     if (multiselect) {
       this.setState({selectedOther: [...new Set([...I, ...(selectedOther ?? [])])]})
+      const I2 = [...new Set([...I, ...(selectedOther ?? [])])]
+      dispatch({type: "set other mode selection", selectedIndices: I2, selected: I2.map((item)=>allGenes[item])})        
+
     } else {
       this.setState({selectedOther: I})
+      dispatch({type: "set other mode selection", selectedIndices: I, selected: I.map((item)=>allGenes[item])})        
+
     }
-    dispatch({type: "set other mode selection", selectedIndices: I, selected: I.map((item)=>allGenes[item])})        
   }
 
   // when a lasso is completed, filter to the points within the lasso polygon

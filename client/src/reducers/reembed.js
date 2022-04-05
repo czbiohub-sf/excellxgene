@@ -90,6 +90,7 @@ const defaultDimredParams = {
   distanceMetric: "cosine",
   doSAM: false,
   samHVG: false,
+  jointHVG: true,
   nnaSAM: 50,
   scaleData: false,
   weightModeSAM: "rms",
