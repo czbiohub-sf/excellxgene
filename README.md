@@ -21,7 +21,7 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O ~
 bash ~/miniconda.sh -b -p $HOME/miniconda
 ```
 
-2. Create and activate a new environment (we need to install the TBB threading layer as well):
+2. Create and activate a new environment:
 
 ```
 conda create -n cxg python=3.8
