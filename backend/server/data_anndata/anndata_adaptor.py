@@ -1,15 +1,12 @@
 import warnings
-from datetime import datetime
 import anndata
 import numpy as np
 from packaging import version
 import pandas as pd
 import scipy as sp
 import traceback
-from pandas.core.dtypes.dtypes import CategoricalDtype
 from scipy import sparse
 from sklearn.preprocessing import StandardScaler
-from server_timing import Timing as ServerTiming
 import igraph as ig
 import leidenalg
 import time
@@ -23,46 +20,44 @@ import samalg.utilities as ut
 import scipy as sp
 from samalg import SAM
 import backend.common.compute.diffexp_generic as diffexp_generic
-from flask import jsonify, request, current_app, session, after_this_request, send_file
+from flask import jsonify, current_app, session
 from backend.common.colors import convert_anndata_category_colors_to_cxg_category_colors
-from backend.common.constants import Axis, MAX_LAYOUTS
+from backend.common.constants import Axis
 from backend.server.common.corpora import corpora_get_props_from_anndata
-from backend.common.errors import PrepareError, DatasetAccessError, FilterError
-from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
+from backend.common.errors import DatasetAccessError
 from anndata import AnnData
 from backend.server.data_common.data_adaptor import DataAdaptor
 from backend.common.fbs.matrix import encode_matrix_fbs
-from multiprocessing import Pool, RawArray, TimeoutError
 from functools import partial
 import backend.server.common.rest as common_rest
 import json
 from backend.common.utils.utils import jsonify_numpy
 import signal
 import pickle
-import pathlib
 import base64
-import sys
 from hashlib import blake2b
 from functools import wraps
-from multiprocessing import current_process, set_start_method, resource_tracker
 from os.path import exists
-from numba import njit, prange, config, threading_layer
+from numba import njit, prange
 from numba.core import types
 from numba.typed import Dict
 from sklearn.utils import check_array, check_random_state, sparsefuncs as sf
 from sklearn.utils.validation import _check_psd_eigenvalues
 from sklearn.utils.extmath import svd_flip
+import ray, threading
+import psutil
+    
+os.environ["RAY_ENABLE_MAC_LARGE_OBJECT_STORE"]="1"
+os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"]="1"
 
-
-
-if current_process().name == 'MainProcess':
-    print("Configuring multiprocessing spawner...")
-    if True or sys.platform.startswith('linux'):
-        set_start_method("fork")
-
-
-global active_processes
-active_processes = {}
+try:
+    if not os.path.exists(os.getcwd()+"/tmp/"):
+        os.makedirs(os.getcwd()+"/tmp/")
+    mem = psutil.virtual_memory().total
+    mem_tot = psutil.virtual_memory().total
+    ray.init(num_cpus=os.cpu_count()-2,object_store_memory=mem, _memory=mem_tot,_redis_max_memory=mem,_temp_dir=os.getcwd()+"/tmp/")
+except RuntimeError:
+    pass
 
 global process_count
 process_count = 0
@@ -191,53 +186,33 @@ def _callback_fn(res,ws,cfn,data,post_processing,tstart,pid):
         res = post_processing(res)
     d = {"response": res,"cfn": cfn, "fail": False}
     d.update(data)
-    ws.send(jsonify_numpy(d))
-
-    global active_processes
     try:
-        del active_processes[pid]
-    except:
-        pass
+        ws.send(jsonify_numpy(d))
+    except Exception as e:
+        traceback.print_exception(type(e), e, e.__traceback__)
 
     print("Process count:",pid,"Time elsapsed:",time.time()-tstart,"seconds")
 
-def _dummy():
-    return True
 
 def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
+    shm,shm_csc = da.shm_layers_csr,da.shm_layers_csc
     global process_count
     process_count = process_count + 1    
-
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing,tstart=time.time(),pid=process_count)
-    _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn, pid=process_count)
-    
-    global active_processes
-    active_processes[process_count] = (fn,args,_new_callback_fn,_new_error_fn)
+    _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn)
 
-    try:
-        if da._hosted_mode:
-            da.pool.apply_async(_dummy).get(timeout=0.1)
-        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
-    except TimeoutError:
+    def _ray_getter(i):
         try:
-            da.pool.apply_async(_dummy).get(timeout=1) 
-            da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)
-        except TimeoutError:
-            print("Resetting pool...")
-            da._reset_pool()
-            #for a in range(1,process_count+1):
-            #    if a in active_processes:
-            #        fn,args,_new_callback_fn,_new_error_fn = active_processes[a]
-            #        da.pool.apply_async(fn,args=args, callback=_new_callback_fn, error_callback=_new_error_fn)            
+            _new_callback_fn(ray.get(i))
+        except Exception as e:
+            _new_error_fn(e)
 
-def _error_callback(e, ws, cfn, pid):
+    args+=(shm,shm_csc)
+    thread = threading.Thread(target=_ray_getter,args=(fn.remote(*args),))
+    thread.start()
+    
+def _error_callback(e, ws, cfn):
     ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
-
-    global active_processes
-    try:
-        del active_processes[pid]
-    except:
-        pass
     traceback.print_exception(type(e), e, e.__traceback__)
 
 def sparse_scaler(X,scale=False, mode="OBS", mu=None, std=None):
@@ -254,8 +229,9 @@ def sparse_scaler(X,scale=False, mode="OBS", mu=None, std=None):
             X.data[:] = (X.data - mu[x]) / s
             X.data[X.data>10]=10
         X.data[X.data<0]=0
-        
-def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, scale, tMeanObs, tMeanSqObs):
+
+@ray.remote    
+def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, scale, tMeanObs, tMeanSqObs,shm,shm_csc):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
     niA = np.where(np.invert(np.in1d(np.arange(obs_mask_A.size),iA)))[0]
@@ -263,7 +239,7 @@ def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multi
     nA = iA.size
     nB = iB.size
     mode = userID.split("/")[-1].split("\\")[-1]
-    CUTOFF = 35000
+    CUTOFF = 60000
     mu = tMeanObs
     std = (tMeanSqObs**2 - mu**2)
     std[std<0]=0
@@ -373,7 +349,8 @@ def pickle_loader(fn):
         x = pickle.load(f)
     return x
 
-def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
+@ray.remote
+def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm, shm_csc):
      #direc        
 
     fnames = glob(f"{userID}/emb/*.p")
@@ -476,8 +453,16 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm):
             X = _read_shmem(shm,shm_csc,k,format="csr",mode=mode)
             adata.layers[k] = X[filt]
 
-    adata.write_h5ad(f"{userID}/output/{currentLayout.replace(';','_')}.h5ad")
-    return f"{userID}/output/{currentLayout.replace(';','_')}.h5ad"
+    if ihm:
+        if not os.path.exists("output/"):
+            os.makedirs("output/")       
+        
+        ID = userID.split('/')[0].split('\\')[0]        
+        adata.write_h5ad(f"output/{ID}_{currentLayout.replace(';','_')}.h5ad")
+        return f"output/{ID}_{currentLayout.replace(';','_')}.h5ad"
+    else:
+        adata.write_h5ad(f"{userID}/output/{currentLayout.replace(';','_')}.h5ad")
+        return f"{userID}/output/{currentLayout.replace(';','_')}.h5ad"
 
 def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
     for k in list(adata.obsm.keys()):
@@ -538,7 +523,7 @@ def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
         sam.run(batch_key=bk,n_genes=nTopGenesHVG,projection=None,npcs=min(min(adata.shape) - 1, numPCs), weight_mode=weightModeSAM,preprocessing=preprocessing,distance=distanceMetric,num_norm_avg=nnaSAM,max_iter=5)
         sam.adata.X = X        
         adata=sam.adata
-        vn = np.array(list(adata.var_names[np.sort(np.argsort(-np.array(list(adata.var['weights']))))]))
+        vn = np.array(list(adata.var_names[np.sort(np.argsort(-np.array(list(adata.var['weights'])))[:nTopGenesHVG])]))
 
     if doBatch and not nobatch:
         if doSAM:
@@ -593,13 +578,15 @@ def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
     else:
         return nnm,obsm,sam, vn
 
-def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, ihm):
+@ray.remote
+def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, jointMode,shm,shm_csc):
     mode = userID.split("/")[-1].split("\\")[-1]
     ID = userID.split("/")[0].split("\\")[0]
+    AnnDataDict['obs_mask']=AnnDataDict['obs_mask'].copy()
+    AnnDataDict['obs_mask2']=AnnDataDict['obs_mask2'].copy()
     
     obs_mask = AnnDataDict['obs_mask']
     obs_mask2 = AnnDataDict['obs_mask2']    
-
 
     embeddingMode = reembedParams.get("embeddingMode","Preprocess and run")
     otherMode = "OBS" if mode == "VAR" else "VAR"
@@ -659,19 +646,18 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 obs_mask2[filt] = True
 
             AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2, "obs_mask2": obs_mask}
-            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #subset cells
-            adata = adata[:,obs_mask] # subset genes
-            
-            X_full = adata.X.T #sg x sc
+            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", shm, shm_csc, other=True) #subset cells            
+            X_full = adata.X.T
         elif mode == "OBS": #obs_mask2 is for genes
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "OBS")
-            X_full = adata.X # sc x sg
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID,"OBS", shm, shm_csc)
+            X_full = adata.X
         
         nnm1, pca1, sam1, vn1 = embed(adata,reembedParams, umap=False, nobatch=mode=="VAR")
+        ####### profile FROM HERE #########
         vn1 = vn1.astype('int')
-        adata.X.eliminate_zeros()
         _,y1 = adata.X.nonzero()
-        y1=y1[adata.X.data>min(reembedParams.get("minCountsGF",0),3)]
+        data = adata.X.data[adata.X.data>0]
+        y1=y1[data>min(reembedParams.get("minCountsGF",0),3)]
         a1,c1 = np.unique(y1,return_counts=True)
         n1 = np.zeros(adata.shape[1])
         n1[a1]=c1                
@@ -682,9 +668,14 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         if not jointHVG:
             vn1 = np.array(list(adata.var_names)).astype('int')
         
-        vn1 = vn1[np.in1d(vn1,vn2)]        
+        vn1 = vn1[np.in1d(vn1,vn2)] 
+        ixx = np.where(obs_mask2)[0]    
+
         obs_mask2[:]=False
         obs_mask2[vn1]=True
+        
+        X_full = X_full[:,np.in1d(ixx,np.where(obs_mask2)[0])]
+
         adata = adata[:,vn1.astype('str')]
         adata2 = adata.X.T
 
@@ -692,7 +683,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         clu = np.unique(cl)
         avgs = []
         for c in clu:                
-            avgs.append(adata.X[cl==c].mean(0).A.flatten()) #do soft-averaging with coclustering matrix instead, perhaps
+            avgs.append(adata.X[cl==c].mean(0).A.flatten()) #FINDME: do soft-averaging with coclustering matrix instead, perhaps
         avgs = np.array(avgs)
         pca_obj = PCA(n_components = None)
         pca_obj.fit(avgs)
@@ -724,6 +715,8 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         mima(X2)        
         
         X = sp.sparse.bmat([[nnm1,X1],[X2,nnm2]]).tocsr()
+        ####### TO HERE is slow for lung tabula sapiens #########
+        
         print("Running Kernel PCA...")
         Z = kernel_svd(X,k=pca1.shape[1])        
 
@@ -818,7 +811,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 obs_mask2[filt] = True
 
             AnnDataDict2 = {"Xs": AnnDataDict['Xs'],"obs": AnnDataDict['var'], "var": AnnDataDict['obs'], "obs_mask": obs_mask2}
-            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", other=True) #cells
+            adata = compute_preprocess(AnnDataDict2, reembedParams, userID, "OBS", shm, shm_csc, other=True) #cells
             adata = adata[:,obs_mask]
             nnm, pca, _, _ = embed(adata,reembedParams, umap=False, nobatch=True)
 
@@ -842,7 +835,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 Z = obsm
             umap = SAM().run_umap(X=Z,min_dist=reembedParams.get("umapMinDist",0.1),metric=reembedParams.get("distanceMetric",'correlation'),seed=0)[0]  
 
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR") #genes
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, "VAR", shm, shm_csc) #genes
             X_full = adata.X
 
             result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
@@ -851,7 +844,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             pca = np.full((obs_mask.shape[0], obsm.shape[1]), np.NaN)
             pca[obs_mask] = obsm              
         else:
-            adata = compute_preprocess(AnnDataDict, reembedParams, userID, mode)
+            adata = compute_preprocess(AnnDataDict, reembedParams, userID, mode, shm, shm_csc)
             X_full = adata.X
             nnm, obsm, umap, sam, _ = embed(adata,reembedParams,umap=True, kernelPca = reembedParams.get("kernelPca",False))
             
@@ -924,7 +917,7 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             umap = pickle_loader(f"{userID}/emb/{currentLayout}.p")                     
             result = np.full((obs_mask.shape[0], umap.shape[1]), np.NaN)
             result[obs_mask] = umap[obs_mask] 
-            X_umap = result  
+            X_umap = DataAdaptor.normalize_embedding(result)
 
         try:
             nnm = pickle_loader(f"{userID}/nnm/{currentLayout}.p")[obs_mask][:,obs_mask]
@@ -1024,10 +1017,11 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
     if X_full is None:
         dataLayer = reembedParams.get("dataLayer","X")
         obs_mask = AnnDataDict['obs_mask']
-        X_full = _read_shmem(shm,shm_csc,dataLayer,format="csr",mode=mode)[obs_mask]
+        obs_mask2 = AnnDataDict['obs_mask2']
+        X_full = _read_shmem(shm,shm_csc,dataLayer,format="csr",mode=mode)[obs_mask][:,obs_mask2]
     
     if nnm is not None:
-        if reembedParams.get("calculateSamWeights",False) and not reembedParams.get("doSAM",False):
+        if reembedParams.get("calculateSamWeights",False):
             var = dispersion_ranking_NN(X_full,nnm_sub)
             for k in var.keys():
                 x = var[k]
@@ -1040,25 +1034,12 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
                 fn2 = "{}/obs/{};;{}.p".format(otherID,k.replace('/','_'),name)
                 if not os.path.exists(fn.split(';;')[0]+'.p'):
                     pickle_dumper(np.array(list(var[k])).astype('float'),fn.split(';;')[0]+'.p')
-                    pickle_dumper(np.array(list(var[k])).astype('float'),fn2.split(';;')[0]+'.p')
+                    if jointMode:
+                        pickle_dumper(np.array(list(var[k])).astype('float'),fn2.split(';;')[0]+'.p')
                 pickle_dumper(np.array(list(var[k])).astype('float'),fn)
-                pickle_dumper(np.array(list(var[k])).astype('float'),fn2)
-        elif reembedParams.get("doSAM",False) and sam is not None:
-            keys = ['weights','spatial_dispersions']
-            for k in keys:
-                x = sam.adata.var[k]
-                y = np.zeros(obs_mask2.size,dtype=x.dtype)
-                y[obs_mask2]=x
-                sam.adata.var[k] = y
-                            
-            for k in keys:                
-                fn = "{}/var/{};;{}.p".format(userID,"sam_"+k.replace('/','_'),name)
-                fn2 = "{}/obs/{};;{}.p".format(otherID,k.replace('/','_'),name)
-                if not os.path.exists(fn.split(';;')[0]+'.p'):
-                    pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn.split(';;')[0]+'.p')
-                    pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn2.split(';;')[0]+'.p')
-                pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn)  
-                pickle_dumper(np.array(list(sam.adata.var[k])).astype('float'),fn2)            
+                if jointMode:
+                    pickle_dumper(np.array(list(var[k])).astype('float'),fn2)
+
         pickle_dumper(nnm, f"{userID}/nnm/{name}.p")
     
     pickle_dumper(X_umap, f"{userID}/emb/{name}.p")
@@ -1072,7 +1053,8 @@ def pickle_dumper(x,fn):
     with open(fn,"wb") as f:
         pickle.dump(x,f)
 
-def compute_leiden(obs_mask,name,resolution,userID):
+@ray.remote
+def compute_leiden(obs_mask,name,resolution,userID,shm,shm_csc):
      #direc 
     try:
         nnm = pickle_loader(f"{userID}/nnm/{name}.p")   
@@ -1108,7 +1090,8 @@ def compute_leiden(obs_mask,name,resolution,userID):
     clusters[obs_mask] = result.astype('str')
     return list(result)
 
-def compute_sankey_df(labels, name, obs_mask, userID, numEdges):
+@ray.remote
+def compute_sankey_df(labels, name, obs_mask, userID, numEdges,shm,shm_csc):
     def reducer(a, b):
         result_a, inv_ndx = np.unique(a, return_inverse=True)
         result_b = np.bincount(inv_ndx, weights=b)
@@ -1252,7 +1235,8 @@ def generate_correlation_map(x, y):
         cov = np.dot(x, y.T) - n * np.dot(mu_x[:, None], mu_y[None, :])
         return cov / np.dot(s_x[:, None], s_y[None, :])
 
-def compute_sankey_df_corr(labels, obs_mask, params, var, userID):    
+@ray.remote
+def compute_sankey_df_corr(labels, obs_mask, params, var, userID,shm,shm_csc):    
     mode = userID.split("/")[-1].split("\\")[-1]
     adata = AnnData(X=_read_shmem(shm,shm_csc,params["dataLayer"],format="csr",mode=mode)[obs_mask],var=var)
 
@@ -1300,7 +1284,8 @@ def get_avgs(X,c,cu):
         Xs.append(X[c==i].mean(0).A.flatten())
     return np.vstack(Xs)
 
-def compute_sankey_df_corr_sg(labels, obs_mask, params, var, userID):
+@ray.remote
+def compute_sankey_df_corr_sg(labels, obs_mask, params, var, userID,shm,shm_csc):
     mode = userID.split("/")[-1].split("\\")[-1]
     adata = AnnData(X=_read_shmem(shm,shm_csc,params["dataLayer"],format="csr",mode=mode)[obs_mask])    
     adata = adata[:,var[params["selectedGenes"]].values]
@@ -1365,7 +1350,8 @@ def generate_coclustering_matrix(cl1,cl2):
     
     return (V.dot(v2.T) + ( V2.dot(v.T) ).T)/2
 
-def compute_sankey_df_coclustering(labels, obs_mask, numEdges):
+@ray.remote
+def compute_sankey_df_coclustering(labels, obs_mask, numEdges,shm,shm_csc):
     cl=[]
     clu = []
     for i,c in enumerate(labels):
@@ -1395,7 +1381,7 @@ def compute_sankey_df_coclustering(labels, obs_mask, numEdges):
     cs = list(cs)     
     return {"edges":ps,"weights":cs}
 
-def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
+def compute_preprocess(AnnDataDict, reembedParams, userID, mode, shm, shm_csc, other=True):
     layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
     var = AnnDataDict['var']
@@ -1435,6 +1421,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
     
     cn = np.array(list(adata.obs["name_0"]))        
     filt = np.array([True]*adata.shape[0])
+    a = np.array([True]*adata.shape[1])
     if not other and doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
         cl = np.array(list(adata.obs[batchPrepKey]))
         batches = np.unique(cl)
@@ -1481,7 +1468,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
                 obs_mask2[:]=False
                 obs_mask2[ixx[a]] = True  
                 
-                adata_sub_raw.X = adata_sub_raw.X.multiply(a.flatten()[None,:]).tocsr()
+                #adata_sub_raw.X = adata_sub_raw.X.multiply(a.flatten()[None,:]).tocsr()
 
                 if sumNormalizeCells:
                     sc.pp.normalize_total(adata_sub_raw,target_sum=target_sum)
@@ -1533,7 +1520,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
             obs_mask[:]=False
             obs_mask[ixx[filt]]=True          
             
-            adata_raw.X = adata_raw.X.multiply(a.flatten()[None,:]).tocsr()
+            #adata_raw.X = adata_raw.X.multiply(a.flatten()[None,:]).tocsr()
             
             if sumNormalizeCells:
                 sc.pp.normalize_total(adata_raw,target_sum=target_sum)
@@ -1582,7 +1569,7 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, other=True):
     ID = userID.split('/')[0].split('\\')[0]
     pickle_dumper(prepParams, f"{ID}/OBS/params/latest.p")
     pickle_dumper(prepParams, f"{ID}/VAR/params/latest.p")
-    return adata_raw[filt]
+    return adata_raw[filt][:,a]
    
 
 
@@ -1711,7 +1698,7 @@ def initialize_socket(da):
                     def post_processing(res):
                         return {"layoutSchema": res, "schema": common_rest.schema_get_helper(da, userID = userID)}                        
 
-                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, current_app.hosted_mode)
+                    _multiprocessing_wrapper(da,ws,compute_embedding, "reembedding",data,post_processing,AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, da._joint_mode)
     
     @sock.route("/sankey")
     def sankey(ws):
@@ -1871,19 +1858,23 @@ def fmt_swapper(X):
     elif X.getformat()=="csr":
         return sp.sparse.csc_matrix(_fmt_swapper(X.indices,X.indptr,X.data,X.shape[1]+1),shape=X.shape)
 
-def _create_shm(X,dtype):
+"""def _create_shm(X,dtype):
     ra = RawArray(dtype,X.size)
     ntype = "int32" if dtype == "I" else "float32"
     X_np = np.frombuffer(ra, dtype = ntype)
     np.copyto(X_np, X)
-    return ra
+    return ra"""
 
 def _create_shm_from_data(X):
-    a = _create_shm(X.indices,'I')
-    b = _create_shm(X.indptr,'I')
-    c = _create_shm(X.data,'f')    
-    return (a,b,c,X.shape)
-
+    a = ray.put(X.indices)
+    gc.collect()
+    b = ray.put(X.indptr)
+    gc.collect()
+    c = ray.put(X.data)
+    gc.collect()
+    d = ray.put(X.shape)    
+    gc.collect()
+    return (a,b,c,d)
 
 def _read_shmem(shm,shm_csc,layer,format="csr",mode="OBS"):
     if mode == "OBS":
@@ -1897,24 +1888,26 @@ def _read_shmem(shm,shm_csc,layer,format="csr",mode="OBS"):
         else:
             return _create_data_from_shm(*shm[layer]).T        
 
-def _create_data_from_shm(a,b,c,Xsh):
-    indices = np.frombuffer(a,"int32")
-    indptr = np.frombuffer(b,"int32")
-    data = np.frombuffer(c,"float32")
+def _create_data_from_shm(indices,indptr,data,Xsh):
+    indices = ray.get(indices)
+    indptr = ray.get(indptr)
+    data = ray.get(data)
+    Xsh = ray.get(Xsh)
     return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
 
-def _create_data_from_shm_csc(a,b,c,Xsh):
-    indices = np.frombuffer(a,"int32")
-    indptr = np.frombuffer(b,"int32")
-    data = np.frombuffer(c,"float32")
+def _create_data_from_shm_csc(indices,indptr,data,Xsh):
+    indices = ray.get(indices)
+    indptr = ray.get(indptr)
+    data = ray.get(data)
+    Xsh = ray.get(Xsh)    
     return sp.sparse.csc_matrix((data,indices,indptr),shape=Xsh)
     
-def _initializer(ishm,ishm_csc):
+"""def _initializer(ishm,ishm_csc):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     global shm
     global shm_csc
     shm = ishm
-    shm_csc = ishm_csc
+    shm_csc = ishm_csc"""
 
 def dispersion_ranking_NN(X, nnm, weight_mode='rms'):
     import scipy.sparse as sp
@@ -1977,7 +1970,7 @@ class AnndataAdaptor(DataAdaptor):
         self._hosted_mode = app_config.hosted_mode
         self._joint_mode = app_config.joint_mode
         self._load_data(data_locator, root_embedding=app_config.root_embedding, sam_weights=app_config.sam_weights, preprocess=app_config.preprocess)    
-        self._create_pool()
+        #self._create_pool()
 
         print("Validating and initializing...")
         self._validate_and_initialize()
@@ -1991,13 +1984,13 @@ class AnndataAdaptor(DataAdaptor):
             except TimeoutError:
                 pass"""
 
-    def _create_pool(self):
-        self.pool = Pool(os.cpu_count(), initializer=_initializer, initargs=(self.shm_layers_csr,self.shm_layers_csc), maxtasksperchild=None)
-    def _reset_pool(self):
-        self.pool.close()
-        self.pool.terminate()
-        self.pool.join()
-        self._create_pool()
+    #def _create_pool(self):
+    #    self.pool = Pool(os.cpu_count(), initializer=_initializer, initargs=(self.shm_layers_csr,self.shm_layers_csc), maxtasksperchild=None)
+    #def _reset_pool(self):
+    #    self.pool.close()
+    #    self.pool.terminate()
+    #    self.pool.join()
+    #    self._create_pool()
     
     def cleanup(self):
         pass

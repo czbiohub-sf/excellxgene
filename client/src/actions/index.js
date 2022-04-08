@@ -631,7 +631,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       const { layoutChoice } = getState();
       if (hostedMode){
         const a = document.createElement("a");
-        a.href = `/output/${data.response.split('/output/').at(-1)}`
+        a.href = data.response;//`${data.response.userid}/output/${data.response.url.split('/output/').at(-1)}`
         a.style = "display: none";      
         a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
         document.body.appendChild(a);

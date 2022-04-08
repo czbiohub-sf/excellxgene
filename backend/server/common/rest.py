@@ -666,7 +666,8 @@ def upload_var_metadata_post(request, data_adaptor):
         valsrev[:] = filler
         vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
         pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
-        pickle_dumper(vals,"{}/obs/{}.p".format(ID,k.replace('/','_')))
+        if data_adaptor._joint_mode:
+            pickle_dumper(vals,"{}/obs/{}.p".format(ID,k.replace('/','_')))
 
     @after_this_request
     def remove_file(response):

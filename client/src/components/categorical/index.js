@@ -417,7 +417,7 @@ class Categories extends React.Component {
       outputController
     } = this.props;
     const ontologyEnabled = ontology?.enabled ?? false;
-    const loading = !!leidenController?.pendingFetch || !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
+    const loading = !!leidenController?.pendingFetch;// || !!reembedController?.pendingFetch || !!preprocessController?.pendingFetch;
     const saveLoading = !!outputController?.pendingFetch;
     /* all names, sorted in display order.  Will be rendered in this order */
     const allCategoryNames = ControlsHelpers.selectableCategoryNames(
