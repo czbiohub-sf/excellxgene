@@ -78,16 +78,31 @@ class DimredPanel extends React.PureComponent {
     if (embeddingMode !== prevProps.reembedParams.embeddingMode) {
       if (embeddingMode === "Run UMAP") {
         this.setState({
+          cfshown: false,
+          gfshown: false,
+          hvgshown: true,
+          samshown: false,
+          trshown: false,
           aboDisabled: true,
           allDisabled: false
         })
       } else if (embeddingMode === "Preprocess and run" || embeddingMode === "Cell and gene embedding") {
         this.setState({
+          cfshown: false,
+          gfshown: false,
+          hvgshown: false,
+          samshown: false,
+          trshown: false,          
           aboDisabled: false,
           allDisabled: false
         })
       } else if (embeddingMode === "Create embedding from subset") {
         this.setState({
+          cfshown: false,
+          gfshown: false,
+          hvgshown: false,
+          samshown: false,
+          trshown: false,          
           aboDisabled: false,
           allDisabled: true
         })
@@ -99,12 +114,12 @@ class DimredPanel extends React.PureComponent {
     const {
       cfshown, gfshown, hvgshown, samshown, trshown, aboDisabled, allDisabled
     } = this.state;
-    const { reembedParams, annoMatrix, dispatch, cxgMode, embName, onChange, currentLayout, jointMode } = this.props;
+    const { reembedParams, annoMatrix, dispatch, cxgMode, embName, onChange, currentLayout } = this.props;
     const lS = annoMatrix.schema.latent_spaces;
     const dsampleOptions = cxgMode === "VAR" ? writableAnnotationsVar(annoMatrix) : writableAnnotationsObs(annoMatrix)
     const latentSpaces = [];
     lS.forEach((item)=>{
-      if (item.includes(`;;${currentLayout}`) && !item.includes(`;;${currentLayout};;`)){
+      if (item.endsWith(`;;${currentLayout}`)){
         const n = item.split(';;').at(0);
         if (!latentSpaces.includes(n)){
           latentSpaces.push(n)

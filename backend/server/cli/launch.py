@@ -15,7 +15,6 @@ from six.moves.urllib.parse import urlencode
 from backend.common.errors import DatasetAccessError, ConfigurationError
 from backend.common.utils.utils import sort_options
 from flask_sock import Sock
-import multiprocessing
 from authlib.integrations.flask_client import OAuth
 import sys
 import signal
@@ -23,6 +22,7 @@ from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 from functools import wraps
 import yaml
+import ray
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -511,9 +511,7 @@ def launch(
         global in_handler
         if not in_handler:
             in_handler = True
-            #if hosted:
-            app_config.server_config.data_adaptor.pool.terminate()
-            app_config.server_config.data_adaptor.pool.join()           
+            ray.shutdown()        
             sys.exit(0)
 
     signal.signal(signal.SIGINT, handler)
