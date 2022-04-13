@@ -46,18 +46,6 @@ from sklearn.utils.validation import _check_psd_eigenvalues
 from sklearn.utils.extmath import svd_flip
 import ray, threading
 import psutil
-    
-os.environ["RAY_ENABLE_MAC_LARGE_OBJECT_STORE"]="1"
-os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"]="1"
-
-try:
-    if not os.path.exists(os.getcwd()+"/tmp/"):
-        os.makedirs(os.getcwd()+"/tmp/")
-    mem = psutil.virtual_memory().total
-    mem_tot = psutil.virtual_memory().total
-    ray.init(num_cpus=os.cpu_count()-2,object_store_memory=mem, _memory=mem_tot,_redis_max_memory=mem,_temp_dir=os.getcwd()+"/tmp/")
-except RuntimeError:
-    pass
 
 global process_count
 process_count = 0
@@ -200,16 +188,25 @@ def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     process_count = process_count + 1    
     _new_callback_fn = partial(_callback_fn,ws=ws,cfn=cfn,data=data,post_processing=post_processing,tstart=time.time(),pid=process_count)
     _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn)
+    args+=(shm,shm_csc)
 
-    def _ray_getter(i):
+    if ray.is_initialized():
+        def _ray_getter(i):
+            try:
+                _new_callback_fn(ray.get(i))
+            except Exception as e:
+                _new_error_fn(e)
+
+        thread = threading.Thread(target=_ray_getter,args=(fn.remote(*args),))
+        thread.start()
+    else:
         try:
-            _new_callback_fn(ray.get(i))
+            _new_callback_fn(fn._function(*args))
         except Exception as e:
             _new_error_fn(e)
-
-    args+=(shm,shm_csc)
-    thread = threading.Thread(target=_ray_getter,args=(fn.remote(*args),))
-    thread.start()
+    
+    
+    
     
 def _error_callback(e, ws, cfn):
     ws.send(jsonify_numpy({"fail": True, "cfn": cfn}))
@@ -1852,7 +1849,6 @@ def _fmt_swapper(indices,indptr,data,n):#x,y,d,ptr):
     return dres,res,indptr2
 
 def fmt_swapper(X):
-    import scipy as sp
     if X.getformat()=="csc":
         return sp.sparse.csr_matrix(_fmt_swapper(X.indices,X.indptr,X.data,X.shape[0]+1),shape=X.shape)
     elif X.getformat()=="csr":
@@ -1866,14 +1862,17 @@ def fmt_swapper(X):
     return ra"""
 
 def _create_shm_from_data(X):
-    a = ray.put(X.indices)
-    gc.collect()
-    b = ray.put(X.indptr)
-    gc.collect()
-    c = ray.put(X.data)
-    gc.collect()
-    d = ray.put(X.shape)    
-    gc.collect()
+    if ray.is_initialized():
+        a = ray.put(X.indices)
+        gc.collect()
+        b = ray.put(X.indptr)
+        gc.collect()
+        c = ray.put(X.data)
+        gc.collect()
+        d = ray.put(X.shape)    
+        gc.collect()
+    else:
+        a,b,c,d = X.indices,X.indptr,X.data,X.shape
     return (a,b,c,d)
 
 def _read_shmem(shm,shm_csc,layer,format="csr",mode="OBS"):
@@ -1889,17 +1888,19 @@ def _read_shmem(shm,shm_csc,layer,format="csr",mode="OBS"):
             return _create_data_from_shm(*shm[layer]).T        
 
 def _create_data_from_shm(indices,indptr,data,Xsh):
-    indices = ray.get(indices)
-    indptr = ray.get(indptr)
-    data = ray.get(data)
-    Xsh = ray.get(Xsh)
+    if ray.is_initialized():
+        indices = ray.get(indices)
+        indptr = ray.get(indptr)
+        data = ray.get(data)
+        Xsh = ray.get(Xsh)
     return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
 
 def _create_data_from_shm_csc(indices,indptr,data,Xsh):
-    indices = ray.get(indices)
-    indptr = ray.get(indptr)
-    data = ray.get(data)
-    Xsh = ray.get(Xsh)    
+    if ray.is_initialized():
+        indices = ray.get(indices)
+        indptr = ray.get(indptr)
+        data = ray.get(data)
+        Xsh = ray.get(Xsh)    
     return sp.sparse.csc_matrix((data,indices,indptr),shape=Xsh)
     
 """def _initializer(ishm,ishm_csc):
@@ -1969,6 +1970,20 @@ class AnndataAdaptor(DataAdaptor):
         self.data = None
         self._hosted_mode = app_config.hosted_mode
         self._joint_mode = app_config.joint_mode
+
+        if app_config.hosted_mode:
+            os.environ["RAY_ENABLE_MAC_LARGE_OBJECT_STORE"]="1"
+            os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"]="1"
+
+            try:
+                if not os.path.exists(os.getcwd()+"/tmp/"):
+                    os.makedirs(os.getcwd()+"/tmp/")
+                mem = psutil.virtual_memory().total
+                mem_tot = psutil.virtual_memory().total
+                ray.init(num_cpus=os.cpu_count()-2,object_store_memory=mem, _memory=mem_tot,_redis_max_memory=mem,_temp_dir=os.getcwd()+"/tmp/")
+            except RuntimeError:
+                pass        
+
         self._load_data(data_locator, root_embedding=app_config.root_embedding, sam_weights=app_config.sam_weights, preprocess=app_config.preprocess)    
         #self._create_pool()
 

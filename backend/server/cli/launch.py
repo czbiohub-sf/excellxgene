@@ -559,7 +559,9 @@ def launch(
             
             annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
             userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
-            app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
+            if not os.path.exists(f"{userID}/"):
+                os.system(f"mkdir {userID}")
+                os.system(f"cp -r {app_config.server_config.data_adaptor.guest_idhash}/* {userID}/")               
             return redirect(auth_url)
         
         @server.app.route('/login')
@@ -753,7 +755,9 @@ def create_app(datapath,
             
             annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
             userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
-            app_config.server_config.data_adaptor._initialize_user_folders(userID)                   
+            if not os.path.exists(f"{userID}/"):
+                os.system(f"mkdir {userID}")
+                os.system(f"cp -r {app_config.server_config.data_adaptor.guest_idhash}/* {userID}/")               
             return redirect(auth_url)
         
         @server.app.route('/login')

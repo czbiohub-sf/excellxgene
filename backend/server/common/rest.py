@@ -1099,7 +1099,6 @@ def initialize_user(data_adaptor):
     if not os.path.exists(f"{userID}/"):
         os.system(f"mkdir {userID}")
         os.system(f"cp -r {data_adaptor.guest_idhash}/* {userID}/")
-    #data_adaptor._initialize_user_folders(userID)           
 
     if not current_app.hosted_mode:
         session.clear()        
