@@ -16,6 +16,7 @@ import {
   createColorQuery,
 } from "../../util/stateManager/colorHelpers";
 import renderThrottle from "../../util/renderThrottle";
+import setupSVGandBrushElements from "./setupSVGandBrush";
 import {
   flagBackground,
   flagSelected,
@@ -23,6 +24,27 @@ import {
   flagHalfSelected
 } from "../../util/glHelpers";
 
+function withinPolygon(polygon, x, y) {
+  const n = polygon.length;
+  let p = polygon[n - 1];
+  let x0 = p[0];
+  let y0 = p[1];
+  let x1;
+  let y1;
+  let inside = false;
+
+  for (let i = 0; i < n; i += 1) {
+    p = polygon[i];
+    x1 = p[0];
+    y1 = p[1];
+
+    if (y1 > y !== y0 > y && x < ((x0 - x1) * (y - y1)) / (y0 - y1) + x1)
+      inside = !inside;
+    x0 = x1;
+    y0 = y1;
+  }
+  return inside;
+}
 function createProjectionTF(viewportWidth, viewportHeight) {
   /*
   the projection transform accounts for the screen size & other layout
@@ -39,12 +61,24 @@ function getScale(col, rangeMin, rangeMax) {
 const getXScale = memoize(getScale);
 const getYScale = memoize(getScale);
 
+function createModelTF() {
+  /*
+  preallocate coordinate system transformation between data and gl.
+  Data arrives in a [0,1] range, and we operate elsewhere in [-1,1].
+  */
+  const m = mat3.fromScaling(mat3.create(), [2, 2]);
+  mat3.translate(m, m, [-0.5, -0.5]);
+  return m;
+}
+
+
 @connect((state) => {
   const { obsCrossfilter: crossfilter } = state;
   const { scatterplotXXaccessor, scatterplotYYaccessor, scatterplotXXisObs, scatterplotYYisObs } = state.controls;
 
   return {
     annoMatrix: state.annoMatrix,
+    obsCrossfilter: state.obsCrossfilter,
     colors: state.colors,
     pointDilation: state.pointDilation,
 
@@ -59,7 +93,8 @@ const getYScale = memoize(getScale);
     logScaleExpr: state.reembedParameters.logScaleExpr,
     scaleExpr: state.reembedParameters.scaleExpr,
     chromeKeyCategorical: state.controls.chromeKeyCategorical,
-    chromeKeyContinuous: state.controls.chromeKeyContinuous
+    chromeKeyContinuous: state.controls.chromeKeyContinuous,
+    selectionTool: "lasso",
   };
 })
 class Scatterplot extends React.PureComponent {
@@ -93,7 +128,29 @@ class Scatterplot extends React.PureComponent {
   static watchAsync(props, prevProps) {
     return !shallowEqual(props.watchProps, prevProps.watchProps);
   }
-
+  constructor(props) {
+    super(props);
+    const viewport = this.getViewportDimensions();
+    const modelTF = createModelTF();
+    this.axes = false;
+    this.reglCanvas = null;
+    this.renderCache = null;
+    this.state = {
+      toolSVG: null,
+      tool: null,
+      container: null,
+      camera: null,
+      modelTF,
+      modelInvTF: mat3.invert([], modelTF),
+      //projectionTF: createProjectionTF(viewport.width, viewport.height),
+      regl: null,
+      drawPoints: null,
+      minimized: null,
+      viewport,
+      selectedCells: [],
+      projectionTF: createProjectionTF(width, height),
+    };
+  }
   computePointPositions = memoize((X, Y, xScale, yScale) => {
     const positions = new Float32Array(2 * X.length);
     for (let i = 0, len = X.length; i < len; i += 1) {
@@ -132,17 +189,6 @@ class Scatterplot extends React.PureComponent {
       return x;
     }
   );
-
-  /*computeSelectedFlags = memoize(
-    (crossfilter, _flagSelected, _flagUnselected) => {
-      const x = crossfilter.fillByIsSelected(
-        new Float32Array(crossfilter.size()),
-        _flagSelected,
-        _flagUnselected
-      );
-      return x;
-    }
-  );*/
 
   computeHighlightFlags = memoize(
     (nObs, pointDilationData, pointDilationLabel) => {
@@ -211,19 +257,179 @@ class Scatterplot extends React.PureComponent {
     }
   );
 
-  constructor(props) {
-    super(props);
-    const viewport = this.getViewportDimensions();
-    this.axes = false;
-    this.reglCanvas = null;
-    this.renderCache = null;
-    this.state = {
-      regl: null,
-      drawPoints: null,
-      minimized: null,
-      viewport,
-      projectionTF: createProjectionTF(width, height),
-    };
+  handleLassoStart() {
+    // do nothing
+  }
+    
+  // when a lasso is completed, filter to the points within the lasso polygon
+  handleLassoEnd(polygon) {
+    const minimumPolygonArea = 10;
+    if (
+      polygon.length < 3 ||
+      Math.abs(d3.polygonArea(polygon)) < minimumPolygonArea
+    ) {
+      // do nothing
+    } else {
+      this.selectWithinPolygon(polygon)
+    }
+  }
+
+  handleLassoCancel() {
+    // do nothing
+  }
+
+  handleLassoDeselectAction() {
+    // do nothing
+  }
+  createToolSVG = () => {
+    /*
+    Called from componentDidUpdate. Create the tool SVG, and return any
+    state changes that should be passed to setState().
+    */
+    const { selectionTool } = this.props;
+    const { viewport } = this.state;
+
+    /* clear out whatever was on the div, even if nothing, but usually the brushes etc */
+    const lasso = d3.select("#lasso-layer-scatter");
+    if (lasso.empty()) return {}; // still initializing
+    lasso.selectAll(".lasso-group-scatter").remove();
+
+
+    let handleStart;
+    let handleDrag;
+    let handleEnd;
+    let handleCancel;
+    if (selectionTool === "brush") {
+      
+      handleStart = this.handleBrushStartAction.bind(this);
+      handleDrag = this.handleBrushDragAction.bind(this);
+      handleEnd = this.handleBrushEndAction.bind(this);
+    } else {
+      handleStart = this.handleLassoStart.bind(this);
+      handleEnd = this.handleLassoEnd.bind(this);
+      handleCancel = this.handleLassoCancel.bind(this);
+    }
+
+    const { svg: newToolSVG, tool, container } = setupSVGandBrushElements(
+      selectionTool,
+      handleStart,
+      handleDrag,
+      handleEnd,
+      handleCancel,
+      viewport
+    );
+    return { toolSVG: newToolSVG, tool, container };
+  };
+  polygonBoundingBox = (polygon) => {
+    let minX = Number.MAX_VALUE;
+    let minY = Number.MAX_VALUE;
+    let maxX = Number.MIN_VALUE;
+    let maxY = Number.MIN_VALUE;
+    for (let i = 0, l = polygon.length; i < l; i += 1) {
+      const point = polygon[i];
+      const [x, y] = point;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return [minX, minY, maxX, maxY];
+  }
+  selectWithinPolygon(polygon) {
+    const { dispatch, obsCrossfilter, annoMatrix } = this.props;
+    const [minX, minY, maxX, maxY] = this.polygonBoundingBox(polygon);
+    const { positions } = this.state;
+    const I = [];
+    let i = 0;
+    for (let z = 0; z < positions.length; z+=2) {
+      const x = positions[z]
+      const y = positions[z+1]
+      if (!(x < minX || x > maxX || y < minY || y > maxY)) {
+        if (withinPolygon(polygon,x,y)){
+          I.push(i)
+        }
+      }
+      i+=1;
+    }
+    
+    const arr = new Array(annoMatrix.nObs);
+    obsCrossfilter.fillByIsSelected(arr, true, false);
+
+    annoMatrix.fetch("obs", "name_0").then(async (nameDf)=>{
+      const rowNames = nameDf.__columns[0];
+      const values = [];
+      I.forEach((item)=>{
+        if (arr[item]){
+          values.push(rowNames[item])
+        }
+      })
+      const selection = {
+        mode: "exact",
+        values,
+      }; 
+      const newObsCrossfilter = await obsCrossfilter.select("obs", "name_0", selection);
+      dispatch({
+        type: "",
+        obsCrossfilter: newObsCrossfilter
+      });
+    })
+  }  
+  handleCanvasEvent = (e) => {
+    const { camera, projectionTF } = this.state;
+    if (e.type !== "wheel") e.preventDefault();
+    if (camera.handleEvent(e, projectionTF)) {
+      this.renderCanvas();
+      this.setState((state) => {
+        return { ...state, updateOverlay: !state.updateOverlay };
+      });
+    }
+  };  
+  handleSelect = () => { //FindMe
+    const { volcanoAccessor, allGenes, dispatch } = this.props;
+    
+    const group = `${volcanoAccessor.split('//;;//;;').at(0)}//;;//`
+    const geneset = volcanoAccessor.split('//;;//;;').at(1)
+
+    const { selectedGenes: genesToAdd, gIdx, sgInitial } = this.state;
+
+    const gI = [];
+    sgInitial.forEach((item)=>{
+      gI.push(allGenes.__columns[0][gIdx[item]])
+    })
+    const gA = [];
+    genesToAdd.forEach((item)=>{
+      gA.push(allGenes.__columns[0][gIdx[item]])
+    })    
+    dispatch(actions.genesetDeleteGenes(group, geneset, gI));
+    dispatch(actions.genesetAddGenes(group, geneset, gA));
+  };
+
+  componentDidUpdate(prevProps, prevState) {
+    const {
+      selectionTool,
+      scatterplotXXaccessor,
+      scatterplotYYaccessor
+    } = this.props;
+    
+    
+    const { toolSVG, viewport } = this.state;
+    const hasResized =
+      prevState.viewport.height !== viewport.height ||
+      prevState.viewport.width !== viewport.width;
+    let stateChanges = {};
+    if (scatterplotXXaccessor !== prevProps.scatterplotXXaccessor || scatterplotYYaccessor !== prevProps.scatterplotYYaccessor){
+      stateChanges = {...stateChanges, loading: true};
+    }
+    if (
+      (viewport.height && viewport.width && !toolSVG) || // first time init
+      hasResized || //  window size has changed we want to recreate all SVGs
+      selectionTool !== prevProps.selectionTool // change of selection tool
+    ) {
+      stateChanges = {
+        ...stateChanges,
+        ...this.createToolSVG(),
+      };
+    }
   }
 
   componentDidMount() {
@@ -300,6 +506,7 @@ class Scatterplot extends React.PureComponent {
       yScale
     );
 
+    this.setState({...this.state,positions})
     const colors = this.computePointColors(colorTable.rgb);
 
     const { colorAccessor } = colorsProp;
@@ -549,6 +756,20 @@ class Scatterplot extends React.PureComponent {
           <Button
             type="button"
             minimal
+            data-testid="clear-scatterplot-selection"
+            onClick={async () => {
+                const newObsCrossfilter = await this.props.obsCrossfilter.select("obs", "name_0", {
+                  mode: "all",
+                });         
+                dispatch({type: "", obsCrossfilter: newObsCrossfilter})
+              }     
+            }
+          >
+            clear
+          </Button>          
+          <Button
+            type="button"
+            minimal
             data-testid="clear-scatterplot"
             onClick={() =>
               dispatch({
@@ -569,6 +790,23 @@ class Scatterplot extends React.PureComponent {
             }px`,
           }}
         >
+          <svg
+            id="lasso-layer-scatter"
+            data-testid="layout-overlay-scatter"
+            className="graph-svg"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              zIndex: 1,
+              marginLeft: margin.left,
+              marginTop: margin.top,
+              display: minimized ? "none" : null,              
+            }}
+            width={width}
+            height={height}
+            pointerEvents="auto"
+          />               
           <canvas
             width={width}
             height={height}
@@ -579,6 +817,11 @@ class Scatterplot extends React.PureComponent {
               display: minimized ? "none" : null,
             }}
             ref={this.setReglCanvas}
+            onMouseDown={this.handleCanvasEvent}
+            onMouseUp={this.handleCanvasEvent}
+            onMouseMove={this.handleCanvasEvent}
+            onDoubleClick={this.handleCanvasEvent}
+            onWheel={this.handleCanvasEvent}                 
           />
           <Async
             watchFn={Scatterplot.watchAsync}
