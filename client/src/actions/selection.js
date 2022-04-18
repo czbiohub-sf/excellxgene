@@ -177,9 +177,15 @@ export const graphLassoEndAction = (embName, polygon, multiselect) => async (
     mode: "within-polygon",
     polygon,
   };
-  let obsCrossfilter = await prevObsCrossfilter.select("obs", "name_0", {
-    mode: "all",
-  });
+  let obsCrossfilter;
+  if (isMultiselectOn) {
+    obsCrossfilter = await prevObsCrossfilter.select("obs", "name_0", {
+      mode: "all",
+    });
+  } else {
+    obsCrossfilter = prevObsCrossfilter;
+  }
+
   obsCrossfilter = await obsCrossfilter.select("emb", embName, selection);
 
   const embSelection =
