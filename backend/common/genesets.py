@@ -93,8 +93,8 @@ def write_gene_sets_tidycsv(f, genesets):
     for k1 in genesets.keys():
         for k2 in genesets[k1].keys():
             genes = genesets[k1].get(k2,None)
-            k3 ='//;;//' in k1
-            knew = k1.split('//;;//')[0]
+            k3 ='__DEG__' in k1
+            knew = k1.split('__DEG__')[0]
             if not genes:
                 writer.writerow([knew, k2, k3])
             else:

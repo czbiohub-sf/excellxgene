@@ -130,7 +130,8 @@ class DimredPanel extends React.PureComponent {
         }        
       }
     })
-
+    const cOrG = cxgMode === "OBS" ? "cell" : "gene";
+    const gOrC = cxgMode !== "OBS" ? "cell" : "gene";
     const disabled = allDisabled || aboDisabled;
     const advancedShown = this.state?.advancedShown ?? false;
     let tem;
@@ -234,7 +235,8 @@ class DimredPanel extends React.PureComponent {
                   Cell and gene embedding
                 </Tooltip>    
               } value="Cell and gene embedding"/>            
-          </RadioGroup>    
+          </RadioGroup>
+          <ControlGroup vertical={true}>
           {(cxgMode === "VAR" && annoMatrix.nVar > 50000 &&
         (reembedParams.embeddingMode==="Preprocess and run" || reembedParams.embeddingMode==="Cell and gene embedding")
        ) &&        
@@ -243,7 +245,28 @@ class DimredPanel extends React.PureComponent {
             param="dsampleKey"
             tooltipContent={"Select labels to uniformly downsample cells from."}
             options={["None",...dsampleOptions]}
-          />}                        
+          />}  
+          {(reembedParams.embeddingMode==="Cell and gene embedding") && <ParameterInput
+            label={`Scale ${cOrG} connectivities by`}
+            param="cellScaler"
+            tooltipContent={`Internal ${cOrG} connectivities will be scaled by this number.`}
+            min={0}
+            max={1.0}
+          />}  
+          {(reembedParams.embeddingMode==="Cell and gene embedding") && <ParameterInput
+            label={`Scale ${gOrC} connectivities by`}
+            param="geneScaler"
+            tooltipContent={`Internal ${gOrC} connectivities will be scaled by this number.`}
+            min={0}
+            max={1.0}
+          />}
+          {(reembedParams.embeddingMode==="Cell and gene embedding") && <ParameterInput
+            label={`Number of cell-gene edges`}
+            param="knnCross"
+            tooltipContent={`Determines the number of edges drawn between cells and genes in the joint graph.`}
+            min={0}
+          />}        
+          </ControlGroup>                                     
         </ControlGroup>        
       </div>  
       <div style={{paddingTop: "30px"}}>

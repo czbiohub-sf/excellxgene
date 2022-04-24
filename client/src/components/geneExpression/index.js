@@ -134,8 +134,8 @@ class GeneExpression extends React.Component {
         if (x[0] === "gene_set_description" && x[1] === "gene_set_name"){
           continue;
         }
-        const suffix = x[2]==="True" ? "//;;//" : "";
-        if (`${x[0]}//;;//` in genesets) {
+        const suffix = x[2]==="True" ? "" : "";
+        if (`${x[0]}${suffix}` in genesets) {
           genesets[`${x[0]}${suffix}`][x[1]] = x.slice(3)
         } else {
           genesets[`${x[0]}${suffix}`]={}

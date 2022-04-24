@@ -273,6 +273,7 @@ export const annotationDeleteCategoryAction = (categoryName) => (
   dispatch({
     type: "writable obs annotations - save complete",
     lastSavedAnnoMatrix: obsCrossfilter.annoMatrix,
+    annos: [categoryName]
   });
   fetch(
     `${API.prefix}${API.version}annotations/delete`,

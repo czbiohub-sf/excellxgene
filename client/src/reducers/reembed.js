@@ -84,6 +84,9 @@ const defaultBatchParams = {
 const defaultDimredParams = {
   numPCs: 50,
   kernelPca: false,
+  cellScaler: 1.0,
+  knnCross: 40,
+  geneScaler: 1.0,
   pcaSolver: "randomized",
   neighborsKnn: 20,
   neighborsMethod: "umap",

@@ -232,19 +232,7 @@ class SendFileAPI(Resource):
     @auth0_token_required
     def get(self,data_adaptor):
         field = request.args.get("path", None)
-    
-        annotations = data_adaptor.dataset_config.user_annotations        
-        userID = f"{annotations._get_userdata_idhash(data_adaptor)}"             
-        assert (userID in field)
         os.remove(field)
-        #file_basename = field.split('/')[-1]
-        #response = make_response()
-        #response.headers['Content-Description'] = 'File Transfer'
-        #response.headers['Cache-Control'] = 'no-cache'
-        #response.headers['Content-Type'] = 'application/octet-stream'
-        #response.headers['Content-Disposition'] = 'attachment; filename=%s' % file_basename
-        #response.headers['Content-Length'] = os.path.getsize(field)
-        #response.headers['X-Accel-Redirect'] = f"/output/{file_basename}" # nginx: http://wiki.nginx.org/NginxXSendfile
         return make_response()
 
 class AnnotationsVarAPI(Resource):

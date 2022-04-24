@@ -1241,7 +1241,7 @@ class Graph extends React.Component {
         return (
           <Card interactive elevation={Elevation.TWO}>
             <div style={{ paddingBottom: "10px" }}>
-              <strong>{colorAccessor}</strong>
+              <strong>{colorAccessor.split('//;;//').join("")}</strong>
             </div>
             <div
               style={{

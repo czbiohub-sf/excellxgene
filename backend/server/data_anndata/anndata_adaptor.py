@@ -117,7 +117,7 @@ def get_linear_operator(matrices):
     return H
 
 
-def sparse_knn(D, k, mu):
+def sparse_knn(D, k):
     D1 = D.tocoo()
     idr = np.argsort(D1.row)
     D1.row[:] = D1.row[idr]
@@ -127,9 +127,9 @@ def sparse_knn(D, k, mu):
     _, ind = np.unique(D1.row, return_index=True)
     ind = np.append(ind, D1.data.size)
     for i in range(ind.size - 1):
-        idx = np.argsort(D1.data[ind[i] : ind[i + 1]] - mu[D1.col[ind[i] : ind[i+1]]])
+        idx = np.argsort(D1.data[ind[i] : ind[i + 1]])# - mu[D1.col[ind[i] : ind[i+1]]])
         if idx.size > k:
-            idx = idx[:-k]
+            idx = idx[:-k] if k > 0 else idx
             D1.data[np.arange(ind[i], ind[i + 1])[idx]] = 0
     D1.eliminate_zeros()
     return D1
@@ -226,6 +226,13 @@ def sparse_scaler(X,scale=False, mode="OBS", mu=None, std=None):
             X.data[:] = (X.data - mu[x]) / s
             X.data[X.data>10]=10
         X.data[X.data<0]=0
+
+def _sp_scaler(X, mu):
+    _,y = X.nonzero()
+    X.data[:] = X.data - mu[y]
+    X.data[X.data>10]=10
+    X.data[X.data<0]=0
+    X.eliminate_zeros()
 
 @ray.remote    
 def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, scale, tMeanObs, tMeanSqObs,shm,shm_csc):
@@ -609,7 +616,10 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
     if embeddingMode == "Cell and gene embedding":
         if pairedMode:
             if not np.all(obs_mask):
-                name2 = f"{paired_embeddings[parentName]};;{embName}"
+                try:
+                    name2 = f"{paired_embeddings[parentName]};;{embName}"
+                except KeyError:
+                    name2 = embName
             else:
                 name2 = embName    
         else:
@@ -701,17 +711,31 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
         X1 = StandardScaler(with_mean=False).fit_transform(adata.X) # cells
         X2 = StandardScaler(with_mean=False).fit_transform(adata2)
         mu1 = X1.mean(0).A.flatten()
-        mu2 = X2.mean(0).A.flatten()        
-        KNN1v2 = sparse_knn(X1,40,mu1).tocsr()
-        KNN2v1 = sparse_knn(X2,40,mu2).tocsr()
+        mu2 = X2.mean(0).A.flatten() 
+        X1.eliminate_zeros()
+        X2.eliminate_zeros()
+        _sp_scaler(X1,mu1)
+        _sp_scaler(X2,mu2) 
+        knnCross = reembedParams.get("knnCross",40)      
+        KNN1v2 = sparse_knn(X1,knnCross).tocsr()
+        KNN2v1 = sparse_knn(X2,knnCross).tocsr()
+        KNN1v2.eliminate_zeros()
+        KNN2v1.eliminate_zeros()
         KNN1v2.data[:]=1
         KNN2v1.data[:]=1
         X1 = X1.multiply(KNN1v2).tocsr()
         X2 = X2.multiply(KNN2v1).tocsr()
         mima(X1)
         mima(X2)        
-        
-        X = sp.sparse.bmat([[nnm1,X1],[X2,nnm2]]).tocsr()
+
+        nnm1c = nnm1.copy()
+        nnm1c.data[:] = nnm1c.data*reembedParams.get("cellScaler",1.0)
+        nnm1c.eliminate_zeros()
+
+        nnm2c = nnm2.copy()
+        nnm2c.data[:] = nnm2c.data*reembedParams.get("geneScaler",1.0)
+        nnm2c.eliminate_zeros()        
+        X = sp.sparse.bmat([[nnm1c,X1],[X2,nnm2c]]).tocsr()
         ####### TO HERE is slow for lung tabula sapiens #########
         
         print("Running Kernel PCA...")
@@ -858,7 +882,10 @@ def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLa
             ID = userID.split("/")[0].split("\\")[0]
 
             if not np.all(obs_mask):
-                name2 = f"{paired_embeddings[parentName]};;{embName}"
+                try:
+                    name2 = f"{paired_embeddings[parentName]};;{embName}"
+                except KeyError:
+                    name2 = embName
             else:
                 name2 = embName    
 
@@ -2581,23 +2608,11 @@ class AnndataAdaptor(DataAdaptor):
             x=x[:,None]
             if logscale:
                 x = bisym_log_transform(x)
+
             if scale:
-                if mode == "OBS":
-                    std = (self.tMeanSqs["OBS"][layer][i1] - self.tMeans["OBS"][layer][i1]**2)
-                    if std <= 0:
-                        std = 1
-                    std = std**0.5
-                    x = (x - self.tMeans["OBS"][layer][i1])/std
-                    x[x>10]=10
-                    x[x<0]=0
-                elif mode == "VAR":
-                    mu = self.tMeans["OBS"][layer]
-                    std = (self.tMeanSqs["OBS"][layer] - mu**2)
-                    std[std<=0]=1
-                    std=std**0.5
-                    x = (x - mu[:,None]) / std[:,None]
-                    x[x>10]=10
-                    x[x<0]=0
+                x = (x-x.mean())/x.std()
+                x[x>10]=10
+                x[x<-10]=-10
         else:
             x = XI[:,col_idx]
             if logscale:
@@ -2608,22 +2623,9 @@ class AnndataAdaptor(DataAdaptor):
 
             if scale:
                 x = x.A
-                if mode == "OBS":
-                    std = (self.tMeanSqs["OBS"][layer][col_idx] - self.tMeans["OBS"][layer][col_idx]**2)
-                    std[std<=0]=1
-                    std=std**0.5
-                    mu = self.tMeans["OBS"][layer][col_idx]
-                    x = (x - mu[None,:])/std[None,:]
-                    x[x>10]=10
-                    x[x<0]=0
-                elif mode == "VAR":
-                    std = (self.tMeanSqs["OBS"][layer] - self.tMeans["OBS"][layer]**2)
-                    mu = self.tMeans["OBS"][layer]
-                    std[std<=0]=1
-                    std=std**0.5
-                    x = (x - mu[:,None])/std[:,None]  
-                    x[x>10]=10
-                    x[x<0]=0         
+                x = (x - x.mean(0)[None,:])/x.std(0)[None,:]
+                x[x>10]=10
+                x[x<-10]=-10 
 
         return x
 
