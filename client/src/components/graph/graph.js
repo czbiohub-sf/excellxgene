@@ -10,6 +10,8 @@ import { Popover2 } from "@blueprintjs/popover2";
 import setupSVGandBrushElements from "./setupSVGandBrush";
 import _camera from "../../util/camera";
 import _drawPoints from "./drawPointsRegl";
+import * as html2canvas from 'html2canvas';
+
 import {
   createColorTable,
   createColorQuery,
@@ -130,6 +132,7 @@ class Graph extends React.Component {
     Must be created for each canvas
     */
     // setup canvas, webgl draw function and camera
+    //canvas.getContext("webgl", {preserveDrawingBuffer: false});
     const camera = _camera(canvas);
     const regl = _regl(canvas);
     const drawPoints = _drawPoints(regl);
@@ -1278,7 +1281,7 @@ class Graph extends React.Component {
     );
   }
 
-  renderPoints(
+  async renderPoints(
     regl,
     drawPoints,
     colorBuffer,
@@ -1311,22 +1314,27 @@ class Graph extends React.Component {
       minViewportDimension: Math.min(width, height),
     }, pointScaler
     );
-    if (screenCap) {
-      regl._gl.canvas.toBlob(function(blob) {
-        var a = document.createElement("a");
-        document.body.appendChild(a);
-        a.style = "display: none";
-    
-        var url = window.URL.createObjectURL(blob);
-        a.href = url;
-        a.download = `${layoutChoice.current.split(';;').at(-1)}_emb.png`;
-        a.click();
-        window.URL.revokeObjectURL(url); 
-        dispatch({type: "graph: screencap end"}) 
-      });                
-    }
-    regl._gl.flush();
+    if (screenCap) {  
+      const graph = regl._gl.canvas;//document.getElementById("embedding-layout");
+      const legend = document.getElementById("continuous_legend");
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(graph, 0, 0);
 
+      const canvas_new = await html2canvasPruned.html2canvas(legend);      
+      ctx.drawImage(canvas_new, 0, 0);
+      const blob = await canvas.convertToBlob();
+      var a = document.createElement("a");      
+      document.body.appendChild(a);
+      a.style = "display: none";
+      var url = window.URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `${layoutChoice.current.split(';;').at(-1)}_emb.png`;
+      a.click();
+      window.URL.revokeObjectURL(url); 
+      dispatch({type: "graph: screencap end"}) 
+    } 
+    regl._gl.flush();
     if (nPoints <= annoMatrix.nObs) {
       this.setState({...this.state,positions2: null, selectedOther: []})
       dispatch({type: "set other mode selection", selectedIndices: [], selected: []})  
@@ -1335,6 +1343,7 @@ class Graph extends React.Component {
         dispatch({type: "set other mode selection", selectedIndices: this.state.defaultSelectedOther ?? [], selected: this.state.selectedOther.map((item)=>allGenes[item]) ?? []})  
       }
     }
+    
   }
 
   render() {
@@ -1570,3 +1579,78 @@ const StillLoading = ({ displayName, width, height }) => {
 };
 
 export default Graph;
+
+
+var html2canvasPruned = {
+	addClassRecursively: function(element, className) {
+		if (element.classList) {
+			element.classList.add(className);
+			if (element.children.length > 0) {
+        for ( let i = 0; i < element.children.length; i+=1 ){
+          const childElement = element.children[i];
+          this.addClassRecursively(childElement, className);
+        }
+			}
+		}
+	},
+	addWhiteListClass: function(elementContainer) {
+		this.addClassRecursively(elementContainer, "export_whitelist_class");
+		while (elementContainer) {
+			if (elementContainer.classList) {
+				elementContainer.classList.add("export_whitelist_class");
+			}
+			elementContainer = elementContainer.parentElement;
+		}
+	},
+	removeWhiteListClass: function(element) { // Clean up afterwards.  Currently requires JQuery, but could be rewritten without it in the style of addWhiteListClass.
+    if (typeof jQuery !== 'undefined') {
+      jQuery(element).parents().addBack().removeClass('export_whitelist_class');
+      jQuery(element).find('*').removeClass('export_whitelist_class');
+    }
+  },
+  getStyleSheets: function() {
+		var styleSheets = this.styleSheets;
+		if (!styleSheets) {
+			var fileNames = [".css"]; // Array of endings of names of css files that are needed
+			styleSheets = Object.values(document.styleSheets).filter(function(sheet) {
+				var fileLocation = sheet.href;
+				if (fileLocation) {
+					return !fileNames.every(function(fileName) {
+						return !fileLocation.endsWith(fileName);
+					})
+				}
+			});
+			this.styleSheets = styleSheets;
+		}
+		return styleSheets;
+	},
+	copyStyles: function(destDocument) {
+		var styleElement = destDocument.createElement("style");
+		destDocument.body.appendChild(styleElement);
+		var styleElementSheet = styleElement.sheet;
+
+		this.getStyleSheets().forEach(function(styleSheet) {
+      for (let i = 0; i < styleSheet.rules.length; i+=1) {
+        styleElementSheet.insertRule(styleSheet.rules[i].cssText);
+      }
+		})
+	},
+  html2canvas: function(element) {
+    this.addWhiteListClass(element);
+    var that = this;
+    return html2canvas(element, {
+      scale: 1,
+      ignoreElements: function(element) {
+        if (element.classList && !element.classList.contains('export_whitelist_class')) {
+          return true;
+        }
+        return false;
+      },
+      onclone: function(clonedDocument) {
+        that.copyStyles(clonedDocument);
+        that.removeWhiteListClass(element); 
+      },
+
+    })
+  },
+}
