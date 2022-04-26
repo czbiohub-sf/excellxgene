@@ -2275,10 +2275,6 @@ class AnndataAdaptor(DataAdaptor):
             
             self.NAME = {"OBS": {"obs": np.array(list(adata.obs_names)), "var": np.array(list(adata.var_names))},
                          "VAR": {"var": np.array(list(adata.obs_names)), "obs": np.array(list(adata.var_names))}}
-            
-            if "X_root" in adata.obsm.keys():
-                adata.obsm["X_Root"] = adata.obsm["X_root"]
-                del adata.obsm["X_root"]
 
             self.data = adata
             print("Finished loading the data.")
