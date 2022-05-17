@@ -2,10 +2,32 @@ import { useHotkeys, InputGroup } from "@blueprintjs/core";
 import React, { createRef, useMemo } from "react";
 import actions from "../../actions";
 import { subsetAction, resetSubsetAction } from "../../actions/viewStack";
+
+
+
 export const GlobalHotkeys = (props) => {
   const { dispatch } = props;
   const inputRef = createRef();
   let zPressed = false;
+  let shiftPressed = false;
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === "Shift") {
+      if (!shiftPressed) {
+        shiftPressed = true;
+        dispatch({ type: "set multiple gene select on" });
+      }
+    } 
+  });
+  
+  document.addEventListener('keyup', (e) => {
+    if (e.key === "Shift") {
+      shiftPressed = false;
+      dispatch({ type: "set multiple gene select off" });
+    } 
+  });
+  
+  
   const hotkeys = useMemo(
     () => [
       {
@@ -22,7 +44,7 @@ export const GlobalHotkeys = (props) => {
           zPressed = false;
           dispatch({ type: "graph: lasso multi-selection off" });
         },
-      },
+      }, 
       {
         combo: "SHIFT+W",
         global: true,
@@ -39,7 +61,16 @@ export const GlobalHotkeys = (props) => {
         onKeyDown: () => {
           dispatch(resetSubsetAction())
         },
-      },            
+      },  
+      {
+        combo: "ESC",
+        global: true,
+        label: "Clear gene selection.",
+        onKeyDown: () => {
+          dispatch({type: "clear gene selection"})
+          dispatch({type: "last clicked gene", gene: null})
+        },
+      },                    
     ],
     []
   );

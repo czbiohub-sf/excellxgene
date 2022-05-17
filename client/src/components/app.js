@@ -48,7 +48,7 @@ class App extends React.Component {
     const { dispatch, layoutChoice } = this.props;
     const { loading, error, graphRenderCounter } = this.props;
     return (
-      <Container>
+      <Container>        
         <Helmet title="cellxgene" />
         {loading ? (
           <div
@@ -81,6 +81,7 @@ class App extends React.Component {
               
               return (
               <>
+              
                 <GlobalHotkeys dispatch={dispatch} />
                 <MenuBar />
                 <Embedding />

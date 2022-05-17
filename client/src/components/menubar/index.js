@@ -88,7 +88,7 @@ const continuous = (selectorId, colorScale) => {
     subsetPossible,
     subsetResetPossible,
     var_keys: [... new Set(vk)],
-    geneSelection: Object.keys(state.geneSelection),
+    geneSelection: [...state.geneSelection.genes],
     tooManyCells: numberCells > 50000,
     graphInteractionMode: state.controls.graphInteractionMode,
     clipPercentileMin: Math.round(100 * (annoMatrix?.clipRange?.[0] ?? 0)),

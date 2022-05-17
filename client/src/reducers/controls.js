@@ -1,6 +1,5 @@
 import uniq from "lodash.uniq";
 import filter from "lodash.filter";
-import { dispatch } from "d3";
 
 const Controls = (
   state = {
@@ -38,7 +37,10 @@ const Controls = (
     chromeKeyCategorical: "Rainbow",
     cxgMode: "OBS",
     jointEmbeddingFlag: true,
-    jointMode: false
+    jointMode: false,
+    multiGeneSelect: false,
+    lastClickedGene: null,
+    lastClickedGeneset: null,
   },
   action
 ) => {
@@ -63,6 +65,24 @@ const Controls = (
         isSubsetted: false,
         allGenes: action.allGenes ?? defaultValue
       };
+    }
+    case "set multiple gene select on": {
+      return {
+        ...state,
+        multiGeneSelect: true
+      }
+    }
+    case "set multiple gene select off": {
+      return {
+        ...state,
+        multiGeneSelect: false
+      }
+    }    
+    case "last clicked gene": {
+      return {
+        ...state,
+        lastClickedGene: action.gene
+      }
     }
     case "init: set up websockets": {
       return {

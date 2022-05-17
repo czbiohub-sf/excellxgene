@@ -1,5 +1,3 @@
-import _ from "lodash";
-
 /**
  * Gene set state. Geneset UI state is in a different reducer.
  *
@@ -66,8 +64,6 @@ const GeneSets = (
     case "geneset: create": {
       const { genesetName, genesetDescription } = action;
       if (
-        typeof genesetName !== "string" ||
-        !genesetName ||
         genesetDescription === undefined
       )
         throw new Error("geneset: create -- name or description unspecified.");
@@ -77,8 +73,10 @@ const GeneSets = (
       const symbols = gs?.[genesetName] ?? [];
       
       genesets[genesetDescription] = gs;
-      genesets[genesetDescription][genesetName] = symbols;
-
+      if (genesetName) {
+        genesets[genesetDescription][genesetName] = symbols;
+      }
+      
       return {
         ...state,
         genesets,

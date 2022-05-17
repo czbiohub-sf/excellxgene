@@ -1,26 +1,28 @@
-import { H4, Icon, MenuItem } from "@blueprintjs/core";
+import { MenuItem, Button, Icon, AnchorButton, Tooltip } from "@blueprintjs/core";
 import { IconNames } from "@blueprintjs/icons";
-import React, { useMemo } from "react";
+import React from "react";
 import fuzzysort from "fuzzysort";
 import { Suggest } from "@blueprintjs/select";
 import { connect } from "react-redux";
 import Gene from "./gene";
 import { postUserErrorToast } from "../framework/toasters";
 import actions from "../../actions";
-
-
+import LabelInput from "../labelInput";
+import pull from "lodash.pull";
+import uniq from "lodash.uniq";
+import * as globals from "../../globals"
 
 @connect((state) => {
   return {
     annoMatrix: state.annoMatrix,
     userDefinedGenes: state.controls.userDefinedGenes,
-    userDefinedGenesLoading: state.controls.userDefinedGenesLoading,
+    userDefinedGenesLoading: state.controls.userDefinedGenesLoading
   };
 })
 class QuickGene extends React.Component {
   constructor(props){
     super(props);
-    this.state={isExpanded: true, geneNames: [], status: "pending"};
+    this.state={ geneNames: [], status: "pending", inputString: "", commaModeActivated: false, newFolder: null, newDescription: ""};
   }
   
   componentDidMount = () => {
@@ -51,6 +53,40 @@ class QuickGene extends React.Component {
       />
     );
   };
+  addFolder = () => {
+    const newFolder = (
+        <div style={{display: 'flex', flexDirection: 'row', justifyContent: "left", textAlign: "left"}}>
+        <AnchorButton icon="chevron-right" minimal/>
+          <LabelInput
+            onChange={(e) => {
+              this.setState({newDescription: e})
+            }}
+            inputProps={{
+              placeholder: "New group",
+              fill: true,
+              autoFocus: true,
+              onKeyDown: (e)=>{
+                const { dispatch } = this.props;
+                const { newDescription } = this.state;
+                if (e.key==="Enter" && e.target.value !== ""){
+                  dispatch({
+                    type: "geneset: create",
+                    genesetName: null,
+                    genesetDescription: newDescription
+                  });
+                  
+                  this.setState({newFolder: null, newDescription: ""})
+                }
+              },
+              onBlur: (e) => {
+                this.setState({newFolder: null})
+              }
+            }}
+          />
+        </div>
+    );
+    this.setState({newFolder})
+  }
 
   handleClick = (g) => {
     const { dispatch, userDefinedGenes } = this.props;
@@ -77,6 +113,10 @@ class QuickGene extends React.Component {
 
   componentDidUpdate(prevProps) {
     const { annoMatrix } = this.props;
+    const { inputString, commaModeActivated } = this.state;
+    if (!commaModeActivated && inputString.includes(',')){
+      this.setState({commaModeActivated: true})
+    }
     if(annoMatrix !== prevProps.annoMatrix){
       this.setGeneNames(annoMatrix);
     }
@@ -105,47 +145,55 @@ class QuickGene extends React.Component {
       throw error;
     }
   }
+  handleAddGenes = () => {
+    const { dispatch } = this.props;
+    const { inputString: genesToPopulateGeneset, geneNames } = this.state;
+
+    const genesArrayFromString = pull(
+      uniq(genesToPopulateGeneset.split(/[ ,]+/)),
+      ""
+    );
+
+    genesArrayFromString.forEach((_gene) => {
+      if (geneNames.includes(_gene)) {
+        dispatch({ type: "single user defined gene start" });
+        dispatch(actions.requestUserDefinedGene(_gene));
+        dispatch({ type: "single user defined gene complete" });      
+
+      }
+    });
+
+  }
+  handleTextChange = (e) => {
+    this.setState({inputString: e})
+  }
 
   handleActivateCreateGenesetMode = () => {
     const { dispatch } = this.props;
     dispatch({ type: "geneset: activate add new geneset mode" });
   };
-  handleExpand = () => {
-    this.setState({
-      ...this.state,
-      isExpanded: !this.state.isExpanded
-    })
-  }
+
   render() {
-    const { dispatch, userDefinedGenes, userDefinedGenesLoading } = this.props;
-    const { isExpanded, geneNames } = this.state;
+    const { dispatch, userDefinedGenes, userDefinedGenesLoading, rightWidth, openPreferences } = this.props;
+    const { geneNames, inputString, commaModeActivated, newFolder } = this.state;
+    const noCommaInput = !inputString.includes(",")
 
     return (
       <div style={{ width: "100%", marginBottom: "16px" }}>
-      <H4
-        role="menuitem"
-        tabIndex="0"
-        data-testclass="quickgene-heading-expand"
-        onKeyPress={this.handleExpand}
-        style={{
-          cursor: "pointer",
-        }}
-        onClick={this.handleExpand}
-      >
-        Genes{" "}
-        {isExpanded ? (
-          <Icon icon={IconNames.CHEVRON_DOWN} />
-        ) : (
-          <Icon icon={IconNames.CHEVRON_RIGHT} />
-        )}
-      </H4>
-      {isExpanded && (
         <>
-          <div style={{ marginBottom: "8px" }}>
-            <Suggest
+          <div style={{ marginBottom: "8px", display: "flex", flexDirection: "row", columnGap: "5px" }}>
+            <Tooltip
+              content="Expression preferences"
+              position="bottom"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            >
+                <AnchorButton icon="cog" style={{marginBottom: "16px"}}
+                  onClick={openPreferences}
+                />
+            </Tooltip>                
+            {noCommaInput ? <Suggest
               resetOnSelect
               closeOnSelect
-              resetOnClose
               itemDisabled={userDefinedGenesLoading ? () => true : () => false}
               noResults={<MenuItem disabled text="No matching genes." />}
               onItemSelect={(g) => {
@@ -154,21 +202,79 @@ class QuickGene extends React.Component {
               initialContent={<MenuItem disabled text="Enter a gene…" />}
               inputProps={{
                 "data-testid": "gene-search",
-                placeholder: "Quick Gene Search",
+                placeholder: "Add gene(s)",
                 leftIcon: IconNames.SEARCH,
                 fill: true,
+                autoFocus: commaModeActivated
               }}
+              onQueryChange={this.handleTextChange}
+              query={inputString}
               inputValueRenderer={() => ""}
               itemListPredicate={this.filterGenes}
               itemRenderer={this.renderGene}
               items={geneNames || ["No genes"]}
               popoverProps={{ minimal: true }}
               fill
-            />
+            /> : <LabelInput
+              onChange={this.handleTextChange}
+              inputProps={{
+                placeholder: "Add gene(s)",
+                leftIcon: IconNames.SEARCH,
+                fill: true,
+                autoFocus: true,
+                onKeyDown: (e)=>{
+                  if (e.key==="Enter"){
+                    this.handleAddGenes(e.target.value)
+                  }
+                }
+              }}
+              label={inputString}
+              
+            />}
+            {/*<Popover2 position="bottom-right" content={<div style={{display: 'flex', flexDirection: 'column'}}
+            >
+              <AnchorButton
+                onClick={(e) => {
+                  this.addGeneSet();
+                  const { parentElement } = e.target
+                  parentElement.classList.add(Classes.POPOVER_DISMISS)
+                  parentElement.click()                  
+                }}
+                text={<span style={{color: "gray"}}>Gene Set</span>}
+                minimal
+              />
+              <AnchorButton
+                onClick={(e) => {
+                  this.addGeneSetGroup(); 
+                  const { parentElement } = e.target
+                  parentElement.classList.add(Classes.POPOVER_DISMISS)
+                  parentElement.click()                  
+                }}
+                text={<span style={{color: "gray"}}>Gene Set Group</span>}
+                minimal
+              />              
+            </div>}>
+                <Button style={{color: "gray", width: "10%"}} 
+                        icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
+                </Button>      
+            </Popover2>*/}
+            <Tooltip
+              content="Create group"
+              position="bottom"
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            >
+              <Button style={{color: "gray", width: "10%"}} 
+                      onClick={this.addFolder}
+                      icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
+              </Button> 
+            </Tooltip>                                    
+                    
           </div>
-          <QuickGenes dispatch={dispatch} userDefinedGenes={userDefinedGenes}/>
+          <div style={{position: "absolute", left: 5}}>
+          <QuickGenes dispatch={dispatch} userDefinedGenes={userDefinedGenes} rightWidth={rightWidth}/>
+          </div>    
         </>
-      )}
+      {newFolder}        
     </div>    
       );
   }
@@ -181,7 +287,7 @@ const removeGene = (gene,isColorAccessor,dispatch) => () => {
   }
 };
 const QuickGenes = React.memo((props) => {
-  const { dispatch, userDefinedGenes } = props;
+  const { dispatch, userDefinedGenes, rightWidth } = props;
   const [ renderedGenes, setRenderedGenes ] = React.useState(null)
 
   React.useEffect(() => {
@@ -190,9 +296,10 @@ const QuickGenes = React.memo((props) => {
         key={`quick=${gene}`}
         gene={gene}
         removeGene={removeGene}
+        rightWidth={rightWidth}
       />
     )))
-  }, [userDefinedGenes])
+  }, [userDefinedGenes, rightWidth])
 
   return renderedGenes;
 });

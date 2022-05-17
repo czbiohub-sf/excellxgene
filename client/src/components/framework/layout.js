@@ -77,7 +77,11 @@ class Layout extends React.Component {
   };
 
   onMouseMove = (e) => {
-    e.preventDefault();
+    const { dragging, leftWidth, separatorXPosition,
+      dragging2, rightWidth, separatorXPosition2 } = this.state;    
+    if ((dragging2 && rightWidth && separatorXPosition2) || (dragging && leftWidth && separatorXPosition)) {
+      e.preventDefault();
+    }
     this.onMove(e.clientX);
   };
 

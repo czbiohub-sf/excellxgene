@@ -3,7 +3,7 @@ import { InputGroup, MenuItem, Keys } from "@blueprintjs/core";
 import { IconNames } from "@blueprintjs/icons";
 import { Suggest } from "@blueprintjs/select";
 import fuzzysort from "fuzzysort";
-
+import styles from "./geneExpression/gene.css"
 export default class LabelInput extends React.PureComponent {
   /*
   Input widget for text labels, which acts like an InputGroup, but will also 
@@ -185,6 +185,7 @@ export default class LabelInput extends React.PureComponent {
           popoverProps={popoverProps}
           inputProps={geneComplete ? {
             placeholder: "Gene set search",
+            className: styles.unselectable,
             leftIcon: IconNames.SEARCH,
             fill: true,
           } :inputProps}

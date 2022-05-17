@@ -11,6 +11,7 @@ import GenesetMenus from "./menus/genesetMenus";
 import EditGenesetNameDialogue from "./menus/editGenesetNameDialogue";
 import HistogramBrush from "../brushableHistogram";
 import { resetSubsetAction } from "../../actions/viewStack";
+import styles from "./gene.css"
 
 @connect((state) => {
   return {
@@ -30,15 +31,15 @@ class GeneSet extends React.Component {
 
   constructor(props) {
     super(props);
+    const { setGenes } = props;
     this.state = {
       isOpen: false,
       genePage: 0,
-      maxGenePage: Math.ceil((props.setGenes.length-0.1) / 10) - 1,
+      maxGenePage: setGenes ? Math.ceil((setGenes.length-0.1) / 10) - 1 : null,
       removeHistZeros: false,
       queryGene: "",
       sortDirection: null,
       geneMetadatas: null,
-      isSelected: false
     };
   }
 
@@ -218,23 +219,6 @@ class GeneSet extends React.Component {
       }      
     }
   }
-  toggleAllOff = () => {
-    const { dispatch, setGenes } = this.props;
-    dispatch({type: "unselect genes", genes: setGenes})
-    this.setState({
-      ...this.state,
-      isSelected: false
-    })     
-  }
-  toggleAllOn = () => {
-    const { dispatch, setGenes } = this.props;
-    dispatch({type: "select genes", genes: setGenes})   
-    this.setState({
-      ...this.state,
-      isSelected: true
-    }) 
-  }  
-
 
   writeSort = () => {
     const { genesetDescription: group, setName: geneset, dispatch } = this.props;
@@ -294,20 +278,23 @@ class GeneSet extends React.Component {
           rightWidth={rightWidth}
           group={genesetDescription}
           allGenes={allGenes}
+          parentGenes={genes}
         />
       );
     });
   }
 
   render() {
-    const { dispatch, setName, setGenes, genesetDescription, displayLabel, varMetadata, allGenes, userLoggedIn, currentSelectionDEG, volcanoAccessor, cxgMode } = this.props;
+    const { dispatch, setName, setGenes, genesetDescription,
+            displayLabel, varMetadata, allGenes, currentSelectionDEG, volcanoAccessor, cxgMode,
+            setMode, set } = this.props;
     const diffExp = genesetDescription?.includes("//;;//")
     const cOrG = cxgMode === "OBS" ? "genes" : "cells";
     const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
 
-    const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene, sortDirection, isSelected } = this.state;
+    const { isOpen, maxGenePage, genePage, removeHistZeros, queryGene, sortDirection } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
-    const genesetIsEmpty = setGenes.length === 0;
+    const genesetIsEmpty = setGenes?.length === 0;
     let sortIcon = "expand-all";
     
     if (sortDirection === "ascending"){
@@ -315,119 +302,79 @@ class GeneSet extends React.Component {
     } else if (sortDirection === "descending"){
       sortIcon="chevron-down"
     }
-    
     return (
-      <div style={{ marginBottom: 3}}>
-        <div style={{display: "flex"}}>
-          {userLoggedIn && 
-            <div style={{paddingTop: "3px", paddingRight: "10px", backgroundColor: "#E0E0E0"}}>
-              <input
-                id={`${setName}-checkbox-selection`}
-                className={`${Classes.CONTROL} ${Classes.CHECKBOX}`}
-
-                onChange={isSelected ? this.toggleAllOff : this.toggleAllOn}
-                data-testclass="geneset-select"
-                data-testid={`geneset-select-${setName}`}
-                checked={isSelected}
-                type="checkbox"
-              />
-           </div>}   
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            backgroundColor: "#E0E0E0",
-            width: "100%"
-          }}
-        >       
-          <span
-            role="menuitem"
-            tabIndex="0"
-            data-testclass="geneset-expand"
-            data-testid={`${setName}:geneset-expand`}
-            onKeyPress={
-              /* TODO(colinmegill): #2101: click handler on span */ () => {}
-            }
+      <div draggable={setMode === "genes"} onDragStart={(e)=>{
+        e.dataTransfer.setData("text",`${genesetDescription}@@${setName}`)
+      }} onDragOver={(e)=>{
+        e.stopPropagation();
+        e.preventDefault();
+      }} onDrop={(e)=>{
+        const name = e.dataTransfer.getData("text");
+        if (!name.includes("@@")) {
+          // add gene to the geneset :)
+          // repurpose <GeneSet/> to be the folder, too. 
+          // It should have two modes. If it contains genes, it behaves like geneset.
+          // If it contains genesets, it behaves like a folder.
+          // all geneset buttons should get moved into "GenesetMenu", available buttons depends on what kind of geneset it is.
+          // 1) diffexp geneset, 2) normal geneset 3) group of genesets <-- different menu options.
+        }
+      }} style={{ cursor: "move", marginBottom: 3}}>
+        {setMode === "genes" ? 
+        (<>
+          <div style={{display: "flex"}}>  
+          <div
             style={{
-              cursor: "pointer",
-              userSelect: "none",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              backgroundColor: "#E0E0E0",
+              width: "100%"
             }}
-            onClick={this.onGenesetMenuClick}
-          >
-            <Truncate
-              tooltipAddendum={
-                genesetDescription ? `: ${genesetDescription.split('//;;//').at(0)}` : ""
+          >       
+            <span
+              role="menuitem"
+              tabIndex="0"
+              data-testclass="geneset-expand"
+              data-testid={`${setName}:geneset-expand`}
+              onKeyPress={
+                /* TODO(colinmegill): #2101: click handler on span */ () => {}
               }
+              style={{
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={this.onGenesetMenuClick}
             >
-              <span
-                style={{
-                  maxWidth: globals.leftSidebarWidth - genesetNameLengthVisible,
-                }}
-                data-testid={`${setName}:geneset-label`}
+              <Truncate
+                tooltipAddendum={
+                  genesetDescription ? `: ${genesetDescription.split('//;;//').at(0)}` : ""
+                }
               >
-                {displayLabel}
-              </span>
-            </Truncate>
-            {isOpen ? (
-              <FaChevronDown
-                data-testclass="geneset-expand-is-expanded"
-                style={{ fontSize: 10, marginLeft: 5 }}
-              />
-            ) : (
-              <FaChevronRight
-                data-testclass="geneset-expand-is-not-expanded"
-                style={{ fontSize: 10, marginLeft: 5 }}
-              />
-            )}
-          </span>
-          <div style={{display: "flex", textAlign: "right"}}>
-          {diffExp && <Tooltip
-          content={
-            "Click to display volcano plot."
-          }
-          position={Position.RIGHT}
-          hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          modifiers={{
-            preventOverflow: { enabled: false },
-            hide: { enabled: false },
-          }}          
-        >
-        <AnchorButton
-          onClick={() => {
-            if (`${genesetDescription};;${setName}`===volcanoAccessor) {
-              dispatch({type: "clear volcano plot"})
-            } else {
-              dispatch({type: "set volcano accessor",data: `${genesetDescription};;${setName}`})
-            }
-            
-          }}
-          minimal
-          active={`${genesetDescription};;${setName}`===volcanoAccessor}
-          icon={"scatter-plot"}
-        />
-        </Tooltip>}            
-          {diffExp && <Tooltip
-          content={
-            `Click to select the ${cOrG} associated with this DEG group.`
-          }
-          position={Position.RIGHT}
-          hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          modifiers={{
-            preventOverflow: { enabled: false },
-            hide: { enabled: false },
-          }}          
-        >
-        <AnchorButton
-          onClick={(e) => {this.selectCellsFromGroup()}}
-          minimal
-          active={activeSelection}
-          icon={"polygon-filter"}
-        />
-        </Tooltip>}              
-          <Tooltip
+                <span
+                  style={{
+                    maxWidth: globals.leftSidebarWidth - genesetNameLengthVisible,
+                  }}
+                  data-testid={`${setName}:geneset-label`}
+                >
+                  {displayLabel}
+                </span>
+              </Truncate>
+              {isOpen ? (
+                <FaChevronDown
+                  data-testclass="geneset-expand-is-expanded"
+                  style={{ fontSize: 10, marginLeft: 5 }}
+                />
+              ) : (
+                <FaChevronRight
+                  data-testclass="geneset-expand-is-not-expanded"
+                  style={{ fontSize: 10, marginLeft: 5 }}
+                />
+              )}
+            </span>
+            <div style={{display: "flex", textAlign: "right"}}>
+            {diffExp && <Tooltip
             content={
-              `Click to sort ${cOrG} by the chosen var metadata.`
+              "Click to display volcano plot."
             }
             position={Position.RIGHT}
             hoverOpenDelay={globals.tooltipHoverOpenDelay}
@@ -437,114 +384,158 @@ class GeneSet extends React.Component {
             }}          
           >
           <AnchorButton
-            onClick={(e) => {this.onSortGenes()}}
-            active={sortDirection}
+            onClick={() => {
+              if (`${genesetDescription};;${setName}`===volcanoAccessor) {
+                dispatch({type: "clear volcano plot"})
+              } else {
+                dispatch({type: "set volcano accessor",data: `${genesetDescription};;${setName}`})
+              }
+              
+            }}
             minimal
-            disabled={varMetadata === "" || !isOpen}
-            icon={sortIcon}
+            active={`${genesetDescription};;${setName}`===volcanoAccessor}
+            icon={"scatter-plot"}
           />
-          </Tooltip>          
-          {allGenes ? <div>
+          </Tooltip>}            
+            {diffExp && <Tooltip
+            content={
+              `Click to select the ${cOrG} associated with this DEG group.`
+            }
+            position={Position.RIGHT}
+            hoverOpenDelay={globals.tooltipHoverOpenDelay}
+            modifiers={{
+              preventOverflow: { enabled: false },
+              hide: { enabled: false },
+            }}          
+          >
+          <AnchorButton
+            onClick={(e) => {this.selectCellsFromGroup()}}
+            minimal
+            active={activeSelection}
+            icon={"polygon-filter"}
+          />
+          </Tooltip>}              
+            <Tooltip
+              content={
+                `Click to sort ${cOrG} by the chosen var metadata.`
+              }
+              position={Position.RIGHT}
+              hoverOpenDelay={globals.tooltipHoverOpenDelay}
+              modifiers={{
+                preventOverflow: { enabled: false },
+                hide: { enabled: false },
+              }}          
+            >
             <AnchorButton
+              onClick={(e) => {this.onSortGenes()}}
+              active={sortDirection}
               minimal
-              icon={"vertical-bar-chart-desc"}
-              onClick={() => {this.setState({...this.state,removeHistZeros: !removeHistZeros})}}
-              active={removeHistZeros}
-            /> 
-          </div> : <div>
-            <GenesetMenus 
-              isOpen={isOpen}
-              genesetsEditable 
-              geneset={setName} 
-              disableToggle={false} 
-              writeSort={this.writeSort}
-              disableWriteSort={!sortDirection}
-              histToggler={()=>{
-                this.setState({...this.state,removeHistZeros: !removeHistZeros})
-                }
-              } 
-              toggleText={removeHistZeros ? "Include zeros in histograms." : "Exclude zeros in histograms."}
-              removeHistZeros={removeHistZeros}
-              group={genesetDescription}
-              />
-          </div>}
+              disabled={varMetadata === "" || !isOpen}
+              icon={sortIcon}
+            />
+            </Tooltip>          
+            {allGenes ? <div>
+              <AnchorButton
+                minimal
+                icon={"vertical-bar-chart-desc"}
+                onClick={() => {this.setState({...this.state,removeHistZeros: !removeHistZeros})}}
+                active={removeHistZeros}
+              /> 
+            </div> : <div>
+              <GenesetMenus 
+                isOpen={isOpen}
+                genesetsEditable 
+                geneset={setName} 
+                disableToggle={false} 
+                writeSort={this.writeSort}
+                disableWriteSort={!sortDirection}
+                histToggler={()=>{
+                  this.setState({...this.state,removeHistZeros: !removeHistZeros})
+                  }
+                } 
+                toggleText={removeHistZeros ? "Include zeros in histograms." : "Exclude zeros in histograms."}
+                removeHistZeros={removeHistZeros}
+                group={genesetDescription}
+                />
+            </div>}
+            </div>
           </div>
-        </div>
-        </div>
+          </div>
 
-        <div style={{ marginLeft: 15, marginTop: 5, marginRight: 0 }}>
-          {isOpen && genesetIsEmpty && (
-            <p style={{ fontStyle: "italic", color: "lightgrey" }}>
-              No genes to display
-            </p>
+          <div style={{ marginLeft: 15, marginTop: 5, marginRight: 0 }}>
+            {isOpen && genesetIsEmpty && (
+              <p style={{ fontStyle: "italic", color: "lightgrey" }}>
+                No genes to display
+              </p>
+            )}
+          </div>
+          {isOpen && !allGenes && !genesetIsEmpty && setGenes.length > 0 && (
+            <HistogramBrush
+              isGeneSetSummary
+              field={setName}
+              setGenes={setGenes}
+              removeHistZeros={removeHistZeros}
+            />
           )}
-        </div>
-        {isOpen && !allGenes && !genesetIsEmpty && setGenes.length > 0 && (
-          <HistogramBrush
-            isGeneSetSummary
-            field={setName}
-            setGenes={setGenes}
-            removeHistZeros={removeHistZeros}
-          />
-        )}
-        {isOpen &&!genesetIsEmpty ? 
-        <div>
-        <div style={{
-          textAlign: "right"
-        }}>
-          {`Showing ${cOrG} ${genePage*10+1}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
-          <AnchorButton
-            type="button"
-            icon="double-chevron-left"
-            onClick={()=>{this.setState({...this.state,genePage: 0})}}
-            minimal
-            disabled={genePage === 0}
-          />          
-          <AnchorButton
-            type="button"
-            icon="chevron-left"
-            onClick={this.decrementGenePage}
-            minimal
-            disabled={genePage === 0}
-          />
-          <AnchorButton
-            type="button"
-            icon="chevron-right"
-            onClick={this.incrementGenePage}
-            minimal
-            disabled={genePage === maxGenePage}
-          />  
-          <AnchorButton
-            type="button"
-            icon="double-chevron-right"
-            onClick={()=>{this.setState({...this.state,genePage: maxGenePage})}}
-            minimal
-            disabled={genePage === maxGenePage}
-          />                            
-        </div>
-        <hr/>
-          <div style={{
-            display: "flex"
+          {isOpen &&!genesetIsEmpty ? 
+          <div>
+          <div className={styles.unselectable} style={{
+            textAlign: "right"
           }}>
-    
-          <LabelInput
-            labelSuggestions={setGenes}
-            onChange={this.onQueryGeneChange}
-            onSelect={this.onQueryGeneSelect}
-            label={queryGene}
-            geneComplete
-            popoverProps={null}
-          />          
-          </div>    
+            {`Showing ${cOrG} ${genePage*10+1}-${Math.min((genePage+1)*10,setGenes.length)} / ${setGenes.length}`}
+            <AnchorButton
+              type="button"
+              icon="double-chevron-left"
+              onClick={()=>{this.setState({...this.state,genePage: 0})}}
+              minimal
+              disabled={genePage === 0}
+            />          
+            <AnchorButton
+              type="button"
+              icon="chevron-left"
+              onClick={this.decrementGenePage}
+              minimal
+              disabled={genePage === 0}
+            />
+            <AnchorButton
+              type="button"
+              icon="chevron-right"
+              onClick={this.incrementGenePage}
+              minimal
+              disabled={genePage === maxGenePage}
+            />  
+            <AnchorButton
+              type="button"
+              icon="double-chevron-right"
+              onClick={()=>{this.setState({...this.state,genePage: maxGenePage})}}
+              minimal
+              disabled={genePage === maxGenePage}
+            />                            
+          </div>
           <hr/>
-          </div>                               
-         : null}
-         
-        {isOpen && !genesetIsEmpty && this.renderGenes()}
-        <EditGenesetNameDialogue
-          parentGeneset={setName}
-          parentGenesetDescription={genesetDescription}
-        />
+            <div style={{
+              display: "flex"
+            }}>
+      
+            <LabelInput
+              labelSuggestions={setGenes}
+              onChange={this.onQueryGeneChange}
+              onSelect={this.onQueryGeneSelect}
+              label={queryGene}
+              geneComplete
+              popoverProps={null}
+            />          
+            </div>    
+            <hr/>
+            </div>                               
+          : null}
+          
+          {isOpen && !genesetIsEmpty && this.renderGenes()}
+          <EditGenesetNameDialogue
+            parentGeneset={setName}
+            parentGenesetDescription={genesetDescription}
+          />
+        </>) : set} {/* wrap set with geneset folder*/}
       </div>
     );
   }

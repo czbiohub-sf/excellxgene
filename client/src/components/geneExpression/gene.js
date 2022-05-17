@@ -1,11 +1,11 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Classes, Button, Icon, Tooltip } from "@blueprintjs/core";
+import { Button, Icon } from "@blueprintjs/core";
 import Truncate from "../util/truncate";
 import HistogramBrush from "../brushableHistogram";
 import * as globals from "../../globals";
 import actions from "../../actions";
-
+import styles from "./gene.css"
 const MINI_HISTOGRAM_WIDTH = 110;
 
 @connect((state, ownProps) => {
@@ -13,25 +13,27 @@ const MINI_HISTOGRAM_WIDTH = 110;
 
   return {
     varMetadata: state.controls.varMetadata,
-    isSelected: state.geneSelection?.[gene] ?? false,
+    isSelected: state.geneSelection.genes.has(gene),
     isColorAccessor: state.colors.colorAccessor === gene,
     isScatterplotXXaccessor: state.controls.scatterplotXXaccessor === gene,
     isScatterplotYYaccessor: state.controls.scatterplotYYaccessor === gene,
     dataLayerExpr: state.reembedParameters.dataLayerExpr,
     logScaleExpr: state.reembedParameters.logScaleExpr,
     scaleExpr: state.reembedParameters.scaleExpr,
-    userLoggedIn: state.controls.userInfo ? true : false
+    userLoggedIn: state.controls.userInfo ? true : false,
+    multiGeneSelect: state.controls.multiGeneSelect,
+    lastClickedGene: state.controls.lastClickedGene
   };
 })
 class Gene extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      geneIsExpanded: false
+      geneIsExpanded: false,
     };
   }
 
-  onColorChangeClick = () => {
+  onColorChangeClick = (e) => {
     const { dispatch, gene, isObs } = this.props;
     if (isObs) {
       dispatch({
@@ -41,35 +43,39 @@ class Gene extends React.Component {
     } else {
       dispatch(actions.requestSingleGeneExpressionCountsForColoringPOST(gene));
     }
+    e.stopPropagation();
   };
-
-  handleGeneExpandClick = () => {
+  handleGeneExpandClick = (e) => {
     const { geneIsExpanded } = this.state;
     this.setState({ geneIsExpanded: !geneIsExpanded });
+    e.stopPropagation();
   };
 
-  handleSetGeneAsScatterplotX = () => {
+  handleSetGeneAsScatterplotX = (e) => {
     const { dispatch, gene, isObs } = this.props;
     dispatch({
       type: "set scatterplot x",
       data: gene,
       isObs: isObs
     });
+    e.stopPropagation();
   };
 
-  handleSetGeneAsScatterplotY = () => {
+  handleSetGeneAsScatterplotY = (e) => {
     const { dispatch, gene, isObs } = this.props;
     dispatch({
       type: "set scatterplot y",
       data: gene,
       isObs: isObs
     });
+    e.stopPropagation();
   };
 
   handleDeleteGeneFromSet = () => {
     const { dispatch, group, gene, geneset } = this.props;
     dispatch(actions.genesetDeleteGenes(group, geneset, [gene]));
   };
+
   toggleOff = () => {
     const { dispatch, gene } = this.props;
     dispatch({type: "unselect gene",gene})
@@ -96,7 +102,10 @@ class Gene extends React.Component {
       allGenes,
       leftWidth,
       onRemoveClick,
-      isObs
+      isObs,
+      multiGeneSelect,
+      parentGenes,
+      lastClickedGene      
     } = this.props;
     const { geneIsExpanded } = this.state;
     let geneSymbolWidth;
@@ -111,9 +120,37 @@ class Gene extends React.Component {
     } else {
       trashHandler = removeGene ? removeGene(gene,isColorAccessor,dispatch) : this.handleDeleteGeneFromSet;
     }
-    
+    // Geneset is Droppable if the dragged is a gene.
+    // Geneset folder is Droppable if the dragged is a geneset.
+    // Empty folder can be either a geneset or a geneset folder.
+    // Creating empty folder is possible, but i have to get rid of "grouped genesets" demarcation. 
+    // Differential expression genesets are draggable but only copied.
+
     return (
-      <div>
+      <div draggable onDragStart={(e)=>{
+        e.dataTransfer.setData("text",gene)
+        e.stopPropagation();
+      }} style={{cursor: "move", backgroundColor: isSelected && !isObs ? "#B4D5FE" : null}} onClick={(e)=>{
+        if ((!multiGeneSelect || !lastClickedGene) && !isSelected) {
+          dispatch({type: "last clicked gene",gene})
+        } else if(multiGeneSelect && !isSelected) {
+          let first = null;
+          let last = null;
+          if (parentGenes.includes(lastClickedGene) && parentGenes.includes(gene)) {
+            first = parentGenes.indexOf(lastClickedGene)
+            last = parentGenes.indexOf(gene)
+            if (first > last){
+              const t = first;
+              first = last;
+              last = t;
+            }
+            dispatch({type: "select genes", genes:  parentGenes.slice(first,last)})
+          }        
+        } else if (isSelected && gene === lastClickedGene) {
+          dispatch({type: "last clicked gene",gene: null})
+        }
+        isSelected ? this.toggleOff() : this.toggleOn()
+      }}>
         <div
           style={{
             marginLeft: 5,
@@ -139,7 +176,7 @@ class Gene extends React.Component {
             }}
           >
             <div style={{display: "flex", marginTop: "2px"}}>           
-            {userLoggedIn && !isObs && 
+            {/*userLoggedIn && !isObs && 
               <input
                 id={`${gene}-checkbox-selection`}
                 className={`${Classes.CONTROL} ${Classes.CHECKBOX}`}
@@ -155,7 +192,7 @@ class Gene extends React.Component {
                   top: -1,
                 }}                
               />
-            }   
+            */}   
             <Truncate
               tooltipAddendum={geneDescription && !isObs && `: ${geneDescription}`}
             >
@@ -165,6 +202,7 @@ class Gene extends React.Component {
                   display: "inline-block",
                   paddingRight: "5px"
                 }}
+                className={styles.unselectable}
                 data-testid={`${gene}:gene-label`}
               >
                 {gene}
@@ -175,6 +213,7 @@ class Gene extends React.Component {
                 isUserDefined
                 field={gene}
                 mini
+                backgroundColor={isSelected && !isObs ? "#B4D5FE" : null}
                 width={MINI_HISTOGRAM_WIDTH - (isObs ? 40 : 0)}
                 removeHistZeros={removeHistZeros}
                 isObs={isObs}
@@ -201,7 +240,7 @@ class Gene extends React.Component {
               intent={isScatterplotXXaccessor ? "primary" : "none"}
               style={{ fontWeight: 700, marginRight: 2 }}
             >
-              x
+              <span className={styles.unselectable}>x</span>
             </Button>
             <Button
               minimal
@@ -212,7 +251,7 @@ class Gene extends React.Component {
               intent={isScatterplotYYaccessor ? "primary" : "none"}
               style={{ fontWeight: 700, marginRight: 2 }}
             >
-              y
+              <span className={styles.unselectable}>y</span>
             </Button>
             <Button
               minimal

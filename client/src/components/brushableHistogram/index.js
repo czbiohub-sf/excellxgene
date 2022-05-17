@@ -362,6 +362,7 @@ class HistogramBrush extends React.PureComponent {
       isGeneSetSummary,
       isScatterplotXXaccessor,
       isScatterplotYYaccessor,
+      backgroundColor,
       zebra,
       continuousSelectionRange,
       isObs,
@@ -411,7 +412,7 @@ class HistogramBrush extends React.PureComponent {
                 }
                 style={{
                   padding: mini ? 0 : globals.leftSidebarSectionPadding,
-                  backgroundColor: zebra ? globals.lightestGrey : "white",
+                  backgroundColor: backgroundColor,
                 }}
               >
                 <Histogram
@@ -427,6 +428,7 @@ class HistogramBrush extends React.PureComponent {
                   onBrushEnd={this.onBrushEnd}
                   margin={mini ? MARGIN_MINI : MARGIN}
                   isColorBy={isColorAccessor}
+                  backgroundColor={backgroundColor}
                   selectionRange={continuousSelectionRange}
                   mini={mini}
                   chromeKeyContinuous={chromeKeyContinuous}
