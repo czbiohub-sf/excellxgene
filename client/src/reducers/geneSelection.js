@@ -1,30 +1,22 @@
-const GeneSelection = (state={}, action) => {
+const GeneSelection = (state={genes: new Set()}, action) => {
   switch (action.type) {    
     case "select gene": {
       return {
-        ...state,
-        [action.gene]: true
+        genes: state.genes.add(action.gene)
       }
     }
-    case "unselect gene": {
-      const s = state;
-      delete s[action.gene];
-      return s;
-    }    
     case "select genes": {
-      const s = state;
-      action.genes.forEach((item)=>{
-        s[item]= true
-      })
-      return s;
+      return {
+        genes: new Set([...state.genes, ...action.genes])
+      }
+    }    
+    case "unselect gene": {
+      state.genes.delete(action.gene)
+      return state;
+    }            
+    case "clear gene selection": {
+      return {genes: new Set()}
     }
-    case "unselect genes": {
-      const s = state;
-      action.genes.forEach((item)=>{
-        delete s[item]
-      })
-      return s;
-    }        
     default: {
       return state;
     }

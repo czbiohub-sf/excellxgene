@@ -196,11 +196,8 @@ export const downloadData = () => async (
     cells = Array.isArray(cells) ? cells : Array.from(cells);
 
     const annoNames = [];
-    
     for (const item of annoMatrix.schema.annotations?.obs?.columns) {
-      if(item?.categories){
-        annoNames.push(item.name)
-      }
+      annoNames.push(item.name)
     }
     wsDownloadAnndata.send(JSON.stringify({
       labelNames: annoNames,
@@ -216,22 +213,15 @@ export const downloadMetadata = () => async (
 ) => {
     const state = getState();
     // get current embedding
-    const { layoutChoice, sankeySelection, annoMatrix } = state;
-    const { selectedCategories } = sankeySelection;
+    const { layoutChoice, annoMatrix } = state;
 
     let catNames;
-    if (selectedCategories.length === 0) {
-      catNames = [];
-      for (const item of annoMatrix.schema.annotations?.obs?.columns) {
-        if(item?.categories){
-          if (item.name !== "name_0"){
-            catNames.push(item.name)
-          }
-        }
-      }      
-    } else {
-      catNames = selectedCategories;
-    }
+    catNames = [];
+    for (const item of annoMatrix.schema.annotations?.obs?.columns) {
+      if (item.name !== "name_0"){
+        catNames.push(item.name)
+      }
+    }      
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
     dispatch({
@@ -255,20 +245,37 @@ export const downloadMetadata = () => async (
     );
 
     const blob = await res.blob()
+
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: `${layoutChoice.current}_obs.txt`.split(";").join("_"),
+        types: [
+          {
+            description: 'Txt Files',
+            accept: {
+              'text/plain': ['.txt'],
+            },
+          },
+        ],
+      });
+    } catch {
+      dispatch({
+        type: "output data: request completed"
+      });
+      return; 
+    }
+
+
     
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+
     dispatch({
       type: "output data: request completed"
-    });
+    });    
 
-    var a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    var url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = `${layoutChoice.current}_obs.txt`.split(";").join("_");
-    a.click();
-    window.URL.revokeObjectURL(url);
 }
 
 export const downloadVarMetadata = () => async (
@@ -298,27 +305,46 @@ export const downloadVarMetadata = () => async (
     );
 
     const blob = await res.blob()
-    
+
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: `${layoutChoice.current}_var.txt`.split(";").join("_"),
+        types: [
+          {
+            description: 'Txt Files',
+            accept: {
+              'text/plain': ['.txt'],
+            },
+          },
+        ],
+      });
+    } catch { 
+      dispatch({
+        type: "output data: request completed"
+      });
+  
+      return; 
+    }
+
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+
     dispatch({
       type: "output data: request completed"
-    });
-
-    var a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    var url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = `${layoutChoice.current}_var.txt`.split(";").join("_");
-    a.click();
-    window.URL.revokeObjectURL(url);
+    });    
 }
 
 export const downloadGenedata = () => async (
-  _dispatch,
+  dispatch,
   _getState
 ) => {
-
+    
+  dispatch({
+      type: "output data: request start"
+    });
+    
     const res = await fetch(
       `${API.prefix}${API.version}downloadGenedata`,
       {
@@ -333,15 +359,33 @@ export const downloadGenedata = () => async (
 
     const blob = await res.blob()
 
-    var a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: "gene-sets.csv",
+        types: [
+          {
+            description: 'Csv Files',
+            accept: {
+              'text/plain': ['.csv'],
+            },
+          },
+        ],
+      });
+    } catch { 
+      dispatch({
+        type: "output data: request completed"
+      });      
+      return; 
+    }
 
-    var url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = "gene-sets.csv";
-    a.click();
-    window.URL.revokeObjectURL(url);
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+
+    dispatch({
+      type: "output data: request completed"
+    });    
 }
 export const requestSaveAnndataToFile = (saveName) => async (
   dispatch,
@@ -628,15 +672,16 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
       }); 
       dispatch({type: "track anno", anno: name})      
     } else if (data.cfn === "downloadAnndata"){
-      const { layoutChoice } = getState();
       if (hostedMode){
+        const { layoutChoice } = getState();
         const a = document.createElement("a");
-        a.href = data.response;//`${data.response.userid}/output/${data.response.url.split('/output/').at(-1)}`
+        a.href = data.response;
         a.style = "display: none";      
-        a.download = `${layoutChoice.current}.h5ad`.split(";").join("_");
+        a.download = `${layoutChoice.current}.h5ad`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);  
+        
         dispatch({
           type: "output data: request completed",
         });            
@@ -649,7 +694,7 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
             credentials: "include",
           })
       } else {
-        postAsyncSuccessToast("Data saved to output folder.");
+        postAsyncSuccessToast("Data output to the root directory.");
         dispatch({
           type: "output data: request completed",
         });            

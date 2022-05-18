@@ -1,6 +1,7 @@
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
+import { Classes } from "@blueprintjs/core";
 import Container from "./framework/container";
 import Layout from "./framework/layout";
 import LeftSideBar from "./leftSidebar";
@@ -48,7 +49,7 @@ class App extends React.Component {
     const { dispatch, layoutChoice } = this.props;
     const { loading, error, graphRenderCounter } = this.props;
     return (
-      <Container>
+      <Container>        
         <Helmet title="cellxgene" />
         {loading ? (
           <div
@@ -78,9 +79,9 @@ class App extends React.Component {
           <Layout>
             <LeftSideBar />
             {(viewportRef) => {
-              
               return (
               <>
+              
                 <GlobalHotkeys dispatch={dispatch} />
                 <MenuBar />
                 <Embedding />

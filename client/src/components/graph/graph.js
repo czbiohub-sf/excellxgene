@@ -10,7 +10,7 @@ import { Popover2 } from "@blueprintjs/popover2";
 import setupSVGandBrushElements from "./setupSVGandBrush";
 import _camera from "../../util/camera";
 import _drawPoints from "./drawPointsRegl";
-import * as html2canvas from 'html2canvas';
+import { Html2Canvas } from "../../html2canvasPruned";
 
 import {
   createColorTable,
@@ -1320,9 +1320,12 @@ class Graph extends React.Component {
       const canvas = new OffscreenCanvas(width, height);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(graph, 0, 0);
-
-      const canvas_new = await html2canvasPruned.html2canvas(legend);      
-      ctx.drawImage(canvas_new, 0, 0);
+      const H2C = new Html2Canvas();
+      const canvas_new = await H2C.h2c.html2canvas(legend);      
+      try {
+        ctx.drawImage(canvas_new, 0, 0);
+      } catch {}
+      
       const blob = await canvas.convertToBlob();
       var a = document.createElement("a");      
       document.body.appendChild(a);
@@ -1406,7 +1409,7 @@ class Graph extends React.Component {
         <svg
           id="lasso-layer"
           data-testid="layout-overlay"
-          className="graph-svg"
+          className={`graph-svg`}
           style={{
             position: "absolute",
             top: 0,
@@ -1425,7 +1428,7 @@ class Graph extends React.Component {
         >
           <svg
             id="lidar-layer"
-            className="graph-svg"
+            className={`graph-svg`}
             style={{
               position: "absolute",
               top: 0,
@@ -1453,7 +1456,7 @@ class Graph extends React.Component {
             margin: 0,
             shapeRendering: "crispEdges",
           }}
-          className="graph-canvas"
+          className={`graph-canvas`}
           id="embedding-layout"
           data-testid="layout-graph"
           ref={this.setReglCanvas}
@@ -1580,77 +1583,3 @@ const StillLoading = ({ displayName, width, height }) => {
 
 export default Graph;
 
-
-var html2canvasPruned = {
-	addClassRecursively: function(element, className) {
-		if (element.classList) {
-			element.classList.add(className);
-			if (element.children.length > 0) {
-        for ( let i = 0; i < element.children.length; i+=1 ){
-          const childElement = element.children[i];
-          this.addClassRecursively(childElement, className);
-        }
-			}
-		}
-	},
-	addWhiteListClass: function(elementContainer) {
-		this.addClassRecursively(elementContainer, "export_whitelist_class");
-		while (elementContainer) {
-			if (elementContainer.classList) {
-				elementContainer.classList.add("export_whitelist_class");
-			}
-			elementContainer = elementContainer.parentElement;
-		}
-	},
-	removeWhiteListClass: function(element) { // Clean up afterwards.  Currently requires JQuery, but could be rewritten without it in the style of addWhiteListClass.
-    if (typeof jQuery !== 'undefined') {
-      jQuery(element).parents().addBack().removeClass('export_whitelist_class');
-      jQuery(element).find('*').removeClass('export_whitelist_class');
-    }
-  },
-  getStyleSheets: function() {
-		var styleSheets = this.styleSheets;
-		if (!styleSheets) {
-			var fileNames = [".css"]; // Array of endings of names of css files that are needed
-			styleSheets = Object.values(document.styleSheets).filter(function(sheet) {
-				var fileLocation = sheet.href;
-				if (fileLocation) {
-					return !fileNames.every(function(fileName) {
-						return !fileLocation.endsWith(fileName);
-					})
-				}
-			});
-			this.styleSheets = styleSheets;
-		}
-		return styleSheets;
-	},
-	copyStyles: function(destDocument) {
-		var styleElement = destDocument.createElement("style");
-		destDocument.body.appendChild(styleElement);
-		var styleElementSheet = styleElement.sheet;
-
-		this.getStyleSheets().forEach(function(styleSheet) {
-      for (let i = 0; i < styleSheet.rules.length; i+=1) {
-        styleElementSheet.insertRule(styleSheet.rules[i].cssText);
-      }
-		})
-	},
-  html2canvas: function(element) {
-    this.addWhiteListClass(element);
-    var that = this;
-    return html2canvas(element, {
-      scale: 1,
-      ignoreElements: function(element) {
-        if (element.classList && !element.classList.contains('export_whitelist_class')) {
-          return true;
-        }
-        return false;
-      },
-      onclone: function(clonedDocument) {
-        that.copyStyles(clonedDocument);
-        that.removeWhiteListClass(element); 
-      },
-
-    })
-  },
-}

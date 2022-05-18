@@ -8,6 +8,7 @@ import click
 from flask_compress import Compress
 from flask_cors import CORS
 from backend.server.default_config import default_config
+from os import environ as env
 from backend.server.app.app import Server
 from backend.server.common.config.app_config import AppConfig
 from flask import redirect, session, jsonify, current_app
@@ -23,8 +24,10 @@ DEFAULT_CONFIG = AppConfig()
 from functools import wraps
 import yaml
 import ray
-from dotenv import load_dotenv
-load_dotenv()
+from dotenv import load_dotenv, find_dotenv
+ENV_FILE = find_dotenv()
+if ENV_FILE:
+    load_dotenv(ENV_FILE)
 
 def auth0_token_required(f):
     @wraps(f)
@@ -536,14 +539,15 @@ def launch(
         oauth = OAuth(server.app)
         auth0 = oauth.register(
             'auth0',
-            client_id='YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB',
-            client_secret=os.environ.get('SECRET'),
-            api_base_url='https://dev-gbiqjhha.us.auth0.com',
-            access_token_url=f'https://dev-gbiqjhha.us.auth0.com/oauth/token',
-            authorize_url=f'https://dev-gbiqjhha.us.auth0.com/authorize',
+            client_id=env.get("AUTH0_CLIENT_ID"),
+            client_secret=env.get("AUTH0_CLIENT_SECRET"),
+            api_base_url=f'https://{env.get("AUTH0_DOMAIN")}',
+            access_token_url=f'https://{env.get("AUTH0_DOMAIN")}/oauth/token',
+            authorize_url=f'https://{env.get("AUTH0_DOMAIN")}/authorize',
             client_kwargs={
                 'scope': 'openid profile email',
-            }
+            },
+            server_metadata_url=f'https://{env.get("AUTH0_DOMAIN")}/.well-known/openid-configuration'
         )
         if auth_url is None:
             auth_url = cellxgene_url
@@ -555,29 +559,21 @@ def launch(
             userinfo = resp.json()
             # Store the user information in flask session.
             session['jwt_payload'] = userinfo
-            session['excxg_profile'] = userinfo
-            
-            annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
-            userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
-            if not os.path.exists(f"{userID}/"):
-                os.system(f"mkdir {userID}")
-                os.system(f"cp -r {app_config.server_config.data_adaptor.guest_idhash}/* {userID}/")               
+            session['excxg_profile'] = userinfo              
             return redirect(auth_url)
         
         @server.app.route('/login')
         def login():
-            return auth0.authorize_redirect(redirect_uri=auth_url+'/callback') #TODO: CHANGE FOR SERVER
+            return auth0.authorize_redirect(redirect_uri=auth_url+'/callback')
         
         @server.app.route('/logout')
         def logout():
-            # Clear session stored data
             session.clear()
-            # Redirect user to logout endpoint
-            params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
+            params = {'returnTo': auth_url, 'client_id': env.get("AUTH0_CLIENT_ID")}
             return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
     
-    #server.app.use_x_sendfile = True
     try:
+        server.app.config['SESSION_COOKIE_NAME'] = 'session_cookie'
         server.app.run(
             host=server_config.app__host,
             debug=False,
@@ -590,186 +586,3 @@ def launch(
         if e.errno == errno.EADDRINUSE:
             raise click.ClickException("Port is in use, please specify an open port using the --port flag.") from e
         raise
-
-
-def create_app(datapath,
-    verbose=DEFAULT_CONFIG.server_config.app__verbose,
-    debug=DEFAULT_CONFIG.server_config.app__debug,
-    open_browser=DEFAULT_CONFIG.server_config.app__open_browser,
-    port=DEFAULT_CONFIG.server_config.app__port,
-    host=DEFAULT_CONFIG.server_config.app__host,
-    embedding=DEFAULT_CONFIG.dataset_config.embeddings__names,
-    obs_names=DEFAULT_CONFIG.server_config.single_dataset__obs_names,
-    var_names=DEFAULT_CONFIG.server_config.single_dataset__var_names,
-    max_category_items=DEFAULT_CONFIG.dataset_config.presentation__max_categories,
-    disable_custom_colors=False,
-    diffexp_lfc_cutoff=DEFAULT_CONFIG.dataset_config.diffexp__lfc_cutoff,
-    title=DEFAULT_CONFIG.server_config.single_dataset__title,
-    scripts=DEFAULT_CONFIG.dataset_config.app__scripts,
-    about=DEFAULT_CONFIG.server_config.single_dataset__about,
-    disable_annotations=not DEFAULT_CONFIG.dataset_config.user_annotations__enable,
-    annotations_file=DEFAULT_CONFIG.dataset_config.user_annotations__local_file_csv__file,
-    user_generated_data_dir=DEFAULT_CONFIG.dataset_config.user_annotations__local_file_csv__directory,
-    gene_sets_file=DEFAULT_CONFIG.dataset_config.user_annotations__local_file_csv__gene_sets_file,
-    disable_gene_sets_save=DEFAULT_CONFIG.dataset_config.user_annotations__gene_sets__readonly,
-    backed=DEFAULT_CONFIG.server_config.adaptor__anndata_adaptor__backed,
-    disable_diffexp=not DEFAULT_CONFIG.dataset_config.diffexp__enable,
-    experimental_annotations_ontology=DEFAULT_CONFIG.dataset_config.user_annotations__ontology__enable,
-    experimental_annotations_ontology_obo=DEFAULT_CONFIG.dataset_config.user_annotations__ontology__obo_location,
-    config_file=None,
-    dump_default_config=False,
-    hosted=False,
-    root_embedding=None,
-    auth_url=None):
-
-
-    if dump_default_config:
-        print(default_config)
-        sys.exit(0)
-
-    # Startup message
-    # app config
-    app_config = AppConfig()
-    app_config.root_embedding = root_embedding
-    app_config.hosted_mode = hosted
-    server_config = app_config.server_config
-
-    try:
-        if config_file:
-            app_config.update_from_config_file(config_file)
-
-        # Determine which config options were give on the command line.
-        # Those will override the ones provided in the config file (if provided).
-        cli_config = AppConfig()
-        cli_config.update_server_config(
-            app__verbose=verbose,
-            app__debug=debug,
-            app__host=host,
-            app__port=port,
-            app__open_browser=open_browser,
-            single_dataset__datapath=datapath,
-            single_dataset__title=title,
-            single_dataset__about=about,
-            single_dataset__obs_names=obs_names,
-            single_dataset__var_names=var_names,
-            adaptor__anndata_adaptor__backed=backed,
-        )
-        cli_config.update_dataset_config(
-            app__scripts=scripts,
-            user_annotations__enable=not disable_annotations,
-            user_annotations__local_file_csv__file=annotations_file,
-            user_annotations__local_file_csv__directory=user_generated_data_dir,
-            user_annotations__local_file_csv__gene_sets_file=gene_sets_file,
-            user_annotations__gene_sets__readonly=disable_gene_sets_save,
-            user_annotations__ontology__enable=experimental_annotations_ontology,
-            user_annotations__ontology__obo_location=experimental_annotations_ontology_obo,
-            presentation__max_categories=max_category_items,
-            presentation__custom_colors=not disable_custom_colors,
-            embeddings__names=embedding,
-            diffexp__enable=not disable_diffexp,
-            diffexp__lfc_cutoff=diffexp_lfc_cutoff,
-        )
-
-        diff = cli_config.server_config.changes_from_default()
-        changes = {key: val for key, val, _ in diff}
-        app_config.update_server_config(**changes)
-
-        diff = cli_config.dataset_config.changes_from_default()
-        changes = {key: val for key, val, _ in diff}
-        app_config.update_dataset_config(**changes)
-
-        # process the configuration
-        #  any errors will be thrown as an exception.
-        #  any info messages will be passed to the messagefn function.
-
-        def messagefn(message):
-            click.echo("[cellxgene] " + message)
-
-        # Use a default secret if one is not provided
-        if not server_config.app__flask_secret_key:
-            app_config.update_server_config(app__flask_secret_key="SparkleAndShine")
-
-        app_config.complete_config(messagefn)
-
-    except (ConfigurationError, DatasetAccessError) as e:
-        raise click.ClickException(e)
-
-    handle_scripts(scripts)
-
-    # create the server
-
-    server = CliLaunchServer(app_config)
-    sock = Sock(server.app)
-    app_config.server_config.data_adaptor.socket = sock
-    server.app.hosted_mode = hosted
-
-    cellxgene_url = f"http://{app_config.server_config.app__host}:{app_config.server_config.app__port}"
-    initialize_socket(app_config.server_config.data_adaptor)
-    global in_handler
-    in_handler = False
-    def handler(signal, frame):
-        print('\nShutting down cellxgene.')
-        global in_handler
-        if not in_handler:
-            in_handler = True
-            #if hosted:
-            app_config.server_config.data_adaptor.pool.terminate()
-            app_config.server_config.data_adaptor.pool.join()           
-            sys.exit(0)
-
-    signal.signal(signal.SIGINT, handler)
-    
-    if not server_config.app__verbose:
-        log = logging.getLogger("werkzeug")
-        log.setLevel(logging.ERROR)
-
-
-    if not server_config.app__verbose:
-        f = open(os.devnull, "w")
-        sys.stdout = f
-    
-    if hosted:
-        oauth = OAuth(server.app)
-        auth0 = oauth.register(
-            'auth0',
-            client_id='YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB',
-            client_secret=os.environ.get('SECRET'),
-            api_base_url='https://dev-gbiqjhha.us.auth0.com',
-            access_token_url=f'https://dev-gbiqjhha.us.auth0.com/oauth/token',
-            authorize_url=f'https://dev-gbiqjhha.us.auth0.com/authorize',
-            client_kwargs={
-                'scope': 'openid profile email',
-            }
-        )
-        if auth_url is None:
-            auth_url = cellxgene_url
-
-        @server.app.route('/callback')
-        def callback_handling():
-            auth0.authorize_access_token()
-            resp = auth0.get('userinfo')
-            userinfo = resp.json()
-            # Store the user information in flask session.
-            session['jwt_payload'] = userinfo
-            session['excxg_profile'] = userinfo
-            
-            annotations = app_config.server_config.data_adaptor.dataset_config.user_annotations        
-            userID = f"{annotations._get_userdata_idhash(app_config.server_config.data_adaptor)}"
-            if not os.path.exists(f"{userID}/"):
-                os.system(f"mkdir {userID}")
-                os.system(f"cp -r {app_config.server_config.data_adaptor.guest_idhash}/* {userID}/")               
-            return redirect(auth_url)
-        
-        @server.app.route('/login')
-        def login():
-            return auth0.authorize_redirect(redirect_uri=auth_url+'/callback') #TODO: CHANGE FOR SERVER
-        
-        @server.app.route('/logout')
-        def logout():
-            # Clear session stored data
-            session.clear()
-            # Redirect user to logout endpoint
-            params = {'returnTo': auth_url, 'client_id': 'YfYv7GULwG1u0Bsy0KhNcOya1DGDr0lB'}
-            return redirect(auth0.api_base_url + '/v2/logout?' + urlencode(params))
-    
-    return server.app

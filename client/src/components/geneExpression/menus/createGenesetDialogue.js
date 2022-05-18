@@ -18,7 +18,7 @@ import actions from "../../../actions";
   genesets: state.genesets.genesets,
   genesetsUI: state.genesetsUI,
   selectedGenesLasso: state.genesets.selectedGenesLasso,
-  geneSelection: Object.keys(state.geneSelection),
+  geneSelection: [...state.geneSelection.genes],
   cOrG: state.controls.cxgMode === "OBS" ? "gene" : "cell"
 }))
 class CreateGenesetDialogue extends React.PureComponent {

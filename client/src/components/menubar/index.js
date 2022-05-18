@@ -1,7 +1,8 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, Checkbox, MenuItem } from "@blueprintjs/core";
+import { ButtonGroup, Button, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, Checkbox, MenuItem, Classes } from "@blueprintjs/core";
 import { Select } from "@blueprintjs/select"
+import { Popover2 } from "@blueprintjs/popover2";
 import * as globals from "../../globals";
 import styles from "./menubar.css";
 import actions from "../../actions";
@@ -15,6 +16,9 @@ import { requestSankey } from "../../actions/sankey";
 import StateParameterInput from "./parameterinputstate";
 import * as chromatic from "d3-scale-chromatic";
 import * as d3 from "d3";
+import CellMetadataUploadButton from "./cellMetadataUpload";
+import VarMetadataUpload from "./varMetadataUpload";
+import GeneSetsUpload from "./geneSetsUpload";
 
 function HotkeysDialog(props) {
   const { open } = props;
@@ -88,7 +92,7 @@ const continuous = (selectorId, colorScale) => {
     subsetPossible,
     subsetResetPossible,
     var_keys: [... new Set(vk)],
-    geneSelection: Object.keys(state.geneSelection),
+    geneSelection: [...state.geneSelection.genes],
     tooManyCells: numberCells > 50000,
     graphInteractionMode: state.controls.graphInteractionMode,
     clipPercentileMin: Math.round(100 * (annoMatrix?.clipRange?.[0] ?? 0)),
@@ -139,12 +143,6 @@ class MenuBar extends React.PureComponent {
     if (e.key === null) return true;
     if (e.ctrlKey || e.altKey || e.metaKey) return true;
 
-    // concept borrowed from blueprint's numericInputUtils:
-    // keys that print a single character when pressed have a `key` name of
-    // length 1. every other key has a longer `key` name (e.g. "Backspace",
-    // "ArrowUp", "Shift"). since none of those keys can print a character
-    // to the field--and since they may have important native behaviors
-    // beyond printing a character--we don't want to disable their effects.
     const isSingleCharKey = e.key.length === 1;
     if (!isSingleCharKey) return true;
 
@@ -856,21 +854,50 @@ class MenuBar extends React.PureComponent {
           </div>
         </Dialog>              
         {userLoggedIn && <ButtonGroup className={styles.menubarButton}>   
-          <Tooltip
-            content="Save current subset to an `.h5ad` file."
-            position="bottom"
-            hoverOpenDelay={globals.tooltipHoverOpenDelay}
-          >                                              
-            <AnchorButton
-                type="button"
-                icon="floppy-disk"
-                intent={tooManyCells ?"danger" : "none"}
-                loading={loading}
-                onClick={() => {
-                  this.handleSaveData()
-                }}
-              /> 
-            </Tooltip>               
+      
+            <Popover2 position="bottom" content={
+              <div style={{display: "flex", flexDirection: "column"}}>
+                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>{
+
+                  dispatch(actions.downloadData())
+                }}>
+                  Annotated Dataframe
+                </Button>
+                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadMetadata())}>
+                  Cell metadata
+                </Button>      
+                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadVarMetadata())}>
+                  Gene metadata
+                </Button>                                
+                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadGenedata())}>
+                  Gene sets
+                </Button>                      
+              </div>
+            }>
+        
+                <AnchorButton
+                    type="button"
+                    icon="download"
+                    //intent={tooManyCells ?"danger" : "none"}
+                    loading={loading}
+                /> 
+
+              </Popover2>   
+
+            <Popover2 position="bottom" content={
+              <div style={{display: "flex", flexDirection: "column"}}>
+                <CellMetadataUploadButton/>    
+                <VarMetadataUpload/>
+                <GeneSetsUpload/>
+              </div>
+            }>
+           
+                <AnchorButton
+                    type="button"
+                    icon="upload"
+                /> 
+
+              </Popover2>                                                 
           </ButtonGroup>}
 
         <div style={{paddingTop: "10px", flexBasis: "100%", height: 0}}></div>

@@ -1,5 +1,3 @@
-import _ from "lodash";
-
 /**
  * Gene set state. Geneset UI state is in a different reducer.
  *
@@ -47,6 +45,12 @@ const GeneSets = (
       const { data } = action;
 
       const { genesets } = data;
+      if (!("" in genesets)) {
+        genesets[""]={}
+      }
+      if (!("Gene search results" in genesets[""])) {
+        genesets[""]["Gene search results"] = [];
+      }
       return {
         ...state,
         initialized: true,
@@ -66,8 +70,6 @@ const GeneSets = (
     case "geneset: create": {
       const { genesetName, genesetDescription } = action;
       if (
-        typeof genesetName !== "string" ||
-        !genesetName ||
         genesetDescription === undefined
       )
         throw new Error("geneset: create -- name or description unspecified.");
@@ -77,8 +79,10 @@ const GeneSets = (
       const symbols = gs?.[genesetName] ?? [];
       
       genesets[genesetDescription] = gs;
-      genesets[genesetDescription][genesetName] = symbols;
-
+      if (genesetName) {
+        genesets[genesetDescription][genesetName] = symbols;
+      }
+      
       return {
         ...state,
         genesets,
@@ -118,9 +122,7 @@ const GeneSets = (
     }    
 
     case "geneset: update": {
-      const { genesetDescription, genesetName, update } = action;
-
-      
+      const { genesetDescription, genesetName, update, isDragging } = action;      
       if (!(genesetDescription in state.genesets))
         throw new Error("geneset: update -- geneset group does not exist.");
 
@@ -163,8 +165,12 @@ const GeneSets = (
           
           for (const key2 in genesets[key]) {
             if (key === genesetDescription && key2 === genesetName) {
-              const x =  key.includes('//;;//') ? '//;;//' : '';
-              newGenesets[`${update.genesetDescription}${x}`][`${update.genesetName}`] = genesets[key][key2]
+              //const x =  key.includes('//;;//') ? '//;;//' : '';
+              //console.log(newGenesets)
+              newGenesets[`${update.genesetDescription}`][`${update.genesetName}`] = genesets[key][key2]
+              if (key.includes('//;;//') || isDragging) {
+                newGenesets[key][`${key2}`] = genesets[key][key2]
+              }
             } else {
               newGenesets[key][`${key2}`] = genesets[key][key2]
             }
@@ -177,6 +183,17 @@ const GeneSets = (
           ...state,
           genesets: newGenesets,
         };          
+      } else if (update.genesetName && update.genesetDescription==="") { 
+        
+        let { [update.genesetName]: geneset } = state.genesets?.[""] ?? {}; 
+        geneset = geneset ? geneset : [];
+        if ("" in state.genesets) {
+          state.genesets[""][update.genesetName] = [];
+        } else {
+          state.genesets[""] = {[update.genesetName]: []}
+        }
+        delete state.genesets[genesetDescription]
+        return state;
       } else {
         const newGenesets = {};
         const genesets = state.genesets;
