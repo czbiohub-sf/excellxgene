@@ -176,8 +176,11 @@ export const GenesetHotkeys = (props) => {
         label: "Delete the most recent ungrouped geneset.",
         onKeyDown: async () => {
           let geneset;
-          if ("" in genesets) {
+          if ("" in genesets && Object.keys(genesets[""]).length >= 2) {
             geneset = Object.keys(genesets[""])[0];
+            if (geneset === "Gene search results") {
+              geneset = Object.keys(genesets[""])[1];
+            }
           }
           if (geneset) {
             dispatch({
