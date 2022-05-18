@@ -82,7 +82,9 @@ class GeneExpression extends React.Component {
     if (oldName !== newName) {
       dispatch({type: "geneset: update",genesetDescription: oldName, update: {genesetDescription: newName}})
     }
-    dispatch(actions.requestDiffRename(oldName.split('//;;//').at(0),newName.split('//;;//').at(0)))    
+    if (oldName.includes("//;;//")){
+      dispatch(actions.requestDiffRename(oldName.split('//;;//').at(0),newName.split('//;;//').at(0)))    
+    }
     dispatch(actions.requestSetRename(oldName,newName)) 
     dispatch({type: "track set", group: newName, set: null})   
     this.disableEditNameMode()
@@ -217,25 +219,25 @@ class GeneExpression extends React.Component {
     }
     */
     const { dispatch, genesets, rightWidth, cxgMode } = this.props;    
-    const cOrG = cxgMode==="OBS" ? `gene` : `cell`    
-
+    
     const nogroups = [];
     if ("" in genesets) {
       for (const name in genesets[""]) {
-        nogroups.push(
-          <GeneSet
-            key={name}
-            set={genesets[""][name]}
-            displayLabel={name}
-            setName={name}
-            genesetDescription={""}
-            rightWidth={rightWidth}
-            setMode="genes"
-          />
-        );        
+        if (name !== "Gene search results"){
+          nogroups.push(
+            <GeneSet
+              key={name}
+              setGenes={genesets[""][name]}
+              displayLabel={name}
+              setName={name}
+              genesetDescription={""}
+              rightWidth={rightWidth}
+              setMode="genes"
+            />
+          );   
+        }     
       }
     }
-
     const sets = {};
     const sets2 = {};
     for (const group in genesets) {
@@ -244,8 +246,13 @@ class GeneExpression extends React.Component {
           sets[group] = (
             <GeneSet
               key={group}
+              setName={group}
+              genesetDescription={group}
               rightWidth={rightWidth}
               setMode="unset"
+              deleteGroup={() => {
+                dispatch(actions.genesetDeleteGroup(group))
+              }}
             />
           )
         } else {
@@ -280,18 +287,29 @@ class GeneExpression extends React.Component {
             sets2[group] = (
               <GeneSet
                 key={group}
+                setName={group}
+                genesetDescription={group}
                 set={sets2[group]}
                 rightWidth={rightWidth}
                 setMode="genesets"
+                deleteGroup={() => {
+                  dispatch(actions.genesetDeleteGroup(group))
+                  dispatch(actions.requestDiffDelete(group))
+                }}
               />
             ); 
           } else {
             sets[group] = (
               <GeneSet
                 key={group}
+                setName={group}
+                genesetDescription={group}
                 set={sets[group]}
                 rightWidth={rightWidth}
                 setMode="genesets"
+                deleteGroup={() => {
+                  dispatch(actions.genesetDeleteGroup(group))
+                }}
               />
             );
           }         
@@ -560,7 +578,7 @@ class GeneExpression extends React.Component {
               </div>                                
             </Dialog>                       
         </div>
-        <div style={{marginBottom: "20px",
+        <div style={{
               display: "flex",
               justifyContent: "left",
               columnGap: "5px"}}>    
@@ -666,13 +684,18 @@ class GeneExpression extends React.Component {
 
           
           <div>
-            {(nogroupElements.length > 0) && <div style={{paddingBottom: "5px"}}>
-              <b>Ungrouped {cOrG} sets</b>
-            </div>}              
-            {nogroupElements}
-            {(genesetElements.length > 0) && <div style={{paddingBottom: "5px"}}>
-              <b>Grouped {cOrG} sets</b>
-            </div> }                         
+            <div style={{marginBottom: 10}}>    
+            {("" in genesets) && <GeneSet
+                key={"Gene search results"}
+                setGenes={genesets[""]["Gene search results"]}
+                displayLabel={"Gene search results"}
+                setName={"Gene search results"}
+                genesetDescription={""}
+                rightWidth={rightWidth}
+                setMode="genes"
+            />}
+            </div>
+            {nogroupElements}                     
             {genesetElements}
             {(diffExpElements.length > 0) && <div style={{paddingBottom: "5px",paddingTop: "5px"}}>
               <b>Differential expression {cOrG} sets</b>

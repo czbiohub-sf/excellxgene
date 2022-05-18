@@ -1,6 +1,7 @@
 import { MenuItem, Button, Icon, AnchorButton, Tooltip } from "@blueprintjs/core";
 import { IconNames } from "@blueprintjs/icons";
 import React from "react";
+import { Popover2 } from "@blueprintjs/popover2";
 import fuzzysort from "fuzzysort";
 import { Suggest } from "@blueprintjs/select";
 import { connect } from "react-redux";
@@ -22,7 +23,7 @@ import * as globals from "../../globals"
 class QuickGene extends React.Component {
   constructor(props){
     super(props);
-    this.state={ geneNames: [], status: "pending", inputString: "", commaModeActivated: false, newFolder: null, newDescription: ""};
+    this.state={ geneNames: [], status: "pending", inputString: "", commaModeActivated: false, newDescription: "", isPopoverOpen: false};
   }
   
   componentDidMount = () => {
@@ -53,40 +54,6 @@ class QuickGene extends React.Component {
       />
     );
   };
-  addFolder = () => {
-    const newFolder = (
-        <div style={{display: 'flex', flexDirection: 'row', justifyContent: "left", textAlign: "left"}}>
-        <AnchorButton icon="chevron-right" minimal/>
-          <LabelInput
-            onChange={(e) => {
-              this.setState({newDescription: e})
-            }}
-            inputProps={{
-              placeholder: "New group",
-              fill: true,
-              autoFocus: true,
-              onKeyDown: (e)=>{
-                const { dispatch } = this.props;
-                const { newDescription } = this.state;
-                if (e.key==="Enter" && e.target.value !== ""){
-                  dispatch({
-                    type: "geneset: create",
-                    genesetName: null,
-                    genesetDescription: newDescription
-                  });
-                  
-                  this.setState({newFolder: null, newDescription: ""})
-                }
-              },
-              onBlur: (e) => {
-                this.setState({newFolder: null})
-              }
-            }}
-          />
-        </div>
-    );
-    this.setState({newFolder})
-  }
 
   handleClick = (g) => {
     const { dispatch, userDefinedGenes } = this.props;
@@ -98,9 +65,8 @@ class QuickGene extends React.Component {
     } else if (geneNames.indexOf(gene) === undefined) {
       postUserErrorToast("That doesn't appear to be a valid gene name.");
     } else {
-      dispatch({ type: "single user defined gene start" });
-      dispatch(actions.requestUserDefinedGene(gene));
-      dispatch({ type: "single user defined gene complete" });
+      dispatch(actions.genesetAddGenes("", "Gene search results", [gene]));
+      dispatch({type: "track set", group: "", set: "Gene search results"})
     }
   };
 
@@ -154,15 +120,14 @@ class QuickGene extends React.Component {
       ""
     );
 
+    const genesToAdd=[];
     genesArrayFromString.forEach((_gene) => {
       if (geneNames.includes(_gene)) {
-        dispatch({ type: "single user defined gene start" });
-        dispatch(actions.requestUserDefinedGene(_gene));
-        dispatch({ type: "single user defined gene complete" });      
-
+        genesToAdd.push(_gene);
       }
     });
-
+    dispatch(actions.genesetAddGenes("", "Gene search results", genesToAdd));
+    dispatch({type: "track set", group: "", set: "Gene search results"})
   }
   handleTextChange = (e) => {
     this.setState({inputString: e})
@@ -175,19 +140,19 @@ class QuickGene extends React.Component {
 
   render() {
     const { dispatch, userDefinedGenes, userDefinedGenesLoading, rightWidth, openPreferences } = this.props;
-    const { geneNames, inputString, commaModeActivated, newFolder } = this.state;
+    const { geneNames, inputString, commaModeActivated, isPopoverOpen } = this.state;
     const noCommaInput = !inputString.includes(",")
 
     return (
-      <div style={{ width: "100%", marginBottom: "16px" }}>
+      <div style={{ width: "100%"}}>
         <>
-          <div style={{ marginBottom: "8px", display: "flex", flexDirection: "row", columnGap: "5px" }}>
+          <div style={{ display: "flex", flexDirection: "row", columnGap: "5px" }}>
             <Tooltip
               content="Expression preferences"
               position="bottom"
               hoverOpenDelay={globals.tooltipHoverOpenDelay}
             >
-                <AnchorButton icon="cog" style={{marginBottom: "16px"}}
+                <AnchorButton icon="cog"
                   onClick={openPreferences}
                 />
             </Tooltip>                
@@ -205,7 +170,7 @@ class QuickGene extends React.Component {
                 placeholder: "Add gene(s)",
                 leftIcon: IconNames.SEARCH,
                 fill: true,
-                autoFocus: commaModeActivated
+                autoFocus: inputString!=="" && commaModeActivated
               }}
               onQueryChange={this.handleTextChange}
               query={inputString}
@@ -225,56 +190,61 @@ class QuickGene extends React.Component {
                 onKeyDown: (e)=>{
                   if (e.key==="Enter"){
                     this.handleAddGenes(e.target.value)
+                    this.setState({
+                      inputString: ""
+                    })                    
+                    e.target.blur();
+                  } else if (e.key === "Escape") {
+                    e.target.blur();
                   }
                 }
               }}
               label={inputString}
               
             />}
-            {/*<Popover2 position="bottom-right" content={<div style={{display: 'flex', flexDirection: 'column'}}
-            >
-              <AnchorButton
-                onClick={(e) => {
-                  this.addGeneSet();
-                  const { parentElement } = e.target
-                  parentElement.classList.add(Classes.POPOVER_DISMISS)
-                  parentElement.click()                  
-                }}
-                text={<span style={{color: "gray"}}>Gene Set</span>}
-                minimal
-              />
-              <AnchorButton
-                onClick={(e) => {
-                  this.addGeneSetGroup(); 
-                  const { parentElement } = e.target
-                  parentElement.classList.add(Classes.POPOVER_DISMISS)
-                  parentElement.click()                  
-                }}
-                text={<span style={{color: "gray"}}>Gene Set Group</span>}
-                minimal
-              />              
+            <Popover2 isOpen={isPopoverOpen} position="bottom-right" content={
+              <div style={{display: 'flex', flexDirection: 'row', justifyContent: "left", textAlign: "left", width: 200}}>
+                <LabelInput
+                  onChange={(e) => {
+                    this.setState({newDescription: e})
+                  }}
+                  inputProps={{
+                    placeholder: "New group",
+                    style: {border: 0, boxShadow: 'none'},
+                    fill: true,
+                    autoFocus: true,
+                    onBlur: (e) => {
+                      if (e.relatedTarget?.id !== "add-group-button") {
+                        this.setState({isPopoverOpen: false})
+                      }                      
+                    },
+                    onKeyDown: (e)=>{
+                      const { dispatch } = this.props;
+                      const { newDescription } = this.state;
+                      if (e.key==="Enter" && e.target.value !== ""){
+                        dispatch({
+                          type: "geneset: create",
+                          genesetName: null,
+                          genesetDescription: newDescription
+                        });
+                        
+                        this.setState({newDescription: "", isPopoverOpen: false})
+                      } else if (e.key==="Escape") {
+                        this.setState({isPopoverOpen: false})
+                      }
+                    },
+                  }}
+                /> 
             </div>}>
-                <Button style={{color: "gray", width: "10%"}} 
+                <Button id="add-group-button" style={{color: "gray", width: "10%"}} active={isPopoverOpen} onClick={()=>this.setState({isPopoverOpen: !isPopoverOpen})}
                         icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
                 </Button>      
-            </Popover2>*/}
-            <Tooltip
-              content="Create group"
-              position="bottom"
-              hoverOpenDelay={globals.tooltipHoverOpenDelay}
-            >
-              <Button style={{color: "gray", width: "10%"}} 
-                      onClick={this.addFolder}
-                      icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
-              </Button> 
-            </Tooltip>                                    
+            </Popover2>                                  
                     
           </div>
-          <div style={{position: "absolute", left: 5}}>
-          <QuickGenes dispatch={dispatch} userDefinedGenes={userDefinedGenes} rightWidth={rightWidth}/>
+          <div>
           </div>    
         </>
-      {newFolder}        
     </div>    
       );
   }

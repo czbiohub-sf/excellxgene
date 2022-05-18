@@ -78,7 +78,6 @@ class App extends React.Component {
           <Layout>
             <LeftSideBar />
             {(viewportRef) => {
-              
               return (
               <>
               

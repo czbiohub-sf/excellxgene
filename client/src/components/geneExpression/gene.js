@@ -30,6 +30,7 @@ class Gene extends React.Component {
     super(props);
     this.state = {
       geneIsExpanded: false,
+      isHovered: false
     };
   }
 
@@ -97,17 +98,19 @@ class Gene extends React.Component {
       varMetadata,
       geneInfo,
       userLoggedIn,
+      group,
       isSelected,
       rightWidth,
       allGenes,
       leftWidth,
       onRemoveClick,
       isObs,
+      geneset,
       multiGeneSelect,
       parentGenes,
       lastClickedGene      
     } = this.props;
-    const { geneIsExpanded } = this.state;
+    const { geneIsExpanded, isHovered } = this.state;
     let geneSymbolWidth;
     if (isObs) {
       geneSymbolWidth = 60 + (geneIsExpanded ? MINI_HISTOGRAM_WIDTH : 40) + Math.max(0,(leftWidth - globals.leftSidebarWidth));
@@ -120,17 +123,20 @@ class Gene extends React.Component {
     } else {
       trashHandler = removeGene ? removeGene(gene,isColorAccessor,dispatch) : this.handleDeleteGeneFromSet;
     }
-    // Geneset is Droppable if the dragged is a gene.
-    // Geneset folder is Droppable if the dragged is a geneset.
-    // Empty folder can be either a geneset or a geneset folder.
-    // Creating empty folder is possible, but i have to get rid of "grouped genesets" demarcation. 
-    // Differential expression genesets are draggable but only copied.
 
     return (
-      <div draggable onDragStart={(e)=>{
-        e.dataTransfer.setData("text",gene)
+      <div draggable 
+      onMouseOver={(e)=>this.setState({isHovered: true})}
+      onMouseLeave={(e)=>this.setState({isHovered: false})}
+      onDragStart={(e)=>{
+        e.dataTransfer.setData("text",`${group}@@${geneset}@@@${gene}`)
         e.stopPropagation();
-      }} style={{cursor: "move", backgroundColor: isSelected && !isObs ? "#B4D5FE" : null}} onClick={(e)=>{
+      }} style={{
+          cursor: "move", 
+          backgroundColor: isSelected && !isObs ? "#B4D5FE" : null,
+          marginLeft: group !== "" ? globals.indentPaddingGeneset : 0,
+        }}
+        onClick={(e)=>{
         if ((!multiGeneSelect || !lastClickedGene) && !isSelected) {
           dispatch({type: "last clicked gene",gene})
         } else if(multiGeneSelect && !isSelected) {
@@ -153,7 +159,7 @@ class Gene extends React.Component {
       }}>
         <div
           style={{
-            marginLeft: 5,
+            marginLeft: 0,
             marginRight: 0,
             marginTop: 2,
             display: "flex",
@@ -175,24 +181,7 @@ class Gene extends React.Component {
               margin: "auto 0"
             }}
           >
-            <div style={{display: "flex", marginTop: "2px"}}>           
-            {/*userLoggedIn && !isObs && 
-              <input
-                id={`${gene}-checkbox-selection`}
-                className={`${Classes.CONTROL} ${Classes.CHECKBOX}`}
-
-                onChange={isSelected ? this.toggleOff : this.toggleOn}
-                data-testclass="gene-value-select"
-                data-testid={`gene-value-select-${gene}`}
-                checked={isSelected}
-                type="checkbox"
-                style={{
-                  marginRight: 7,
-                  position: "relative",
-                  top: -1,
-                }}                
-              />
-            */}   
+            <div style={{display: "flex", marginTop: "2px"}}>            
             <Truncate
               tooltipAddendum={geneDescription && !isObs && `: ${geneDescription}`}
             >
@@ -226,9 +215,9 @@ class Gene extends React.Component {
               minimal
               small
               data-testid={`delete-from-geneset-${gene}`}
-              onClick={trashHandler}
+              onClick={(e) => {trashHandler(); e.stopPropagation()}}
               intent="none"
-              style={{ fontWeight: 700, marginRight: 2 }}
+              style={{ fontWeight: 700, marginRight: 2, visibility: isHovered ? undefined : "hidden" }}
               icon={<Icon icon="trash" iconSize={10} />}
             />}
             <Button
@@ -238,7 +227,7 @@ class Gene extends React.Component {
               onClick={this.handleSetGeneAsScatterplotX}
               active={isScatterplotXXaccessor}
               intent={isScatterplotXXaccessor ? "primary" : "none"}
-              style={{ fontWeight: 700, marginRight: 2 }}
+              style={{ fontWeight: 700, marginRight: 2, visibility: isHovered || isScatterplotXXaccessor  ? undefined : "hidden" }}
             >
               <span className={styles.unselectable}>x</span>
             </Button>
@@ -249,7 +238,7 @@ class Gene extends React.Component {
               onClick={this.handleSetGeneAsScatterplotY}
               active={isScatterplotYYaccessor}
               intent={isScatterplotYYaccessor ? "primary" : "none"}
-              style={{ fontWeight: 700, marginRight: 2 }}
+              style={{ fontWeight: 700, marginRight: 2, visibility: isHovered || isScatterplotYYaccessor ? undefined : "hidden" }}
             >
               <span className={styles.unselectable}>y</span>
             </Button>
@@ -262,7 +251,7 @@ class Gene extends React.Component {
               active={geneIsExpanded}
               intent="none"
               icon={<Icon icon="maximize" iconSize={10} />}
-              style={{ marginRight: 2 }}
+              style={{ marginRight: 2, visibility: isHovered || geneIsExpanded ? undefined : "hidden" }}
             />
             <Button
               minimal
@@ -272,6 +261,7 @@ class Gene extends React.Component {
               onClick={this.onColorChangeClick}
               active={isColorAccessor}
               intent={isColorAccessor ? "primary" : "none"}
+              style={{visibility: isHovered || isColorAccessor ? undefined : "hidden"}}
               icon={<Icon icon="tint" iconSize={12} />}
             />
           </div>
