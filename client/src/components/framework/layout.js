@@ -1,3 +1,4 @@
+import { Classes } from "@blueprintjs/core";
 import React from "react";
 import * as globals from "../../globals";
 
@@ -114,6 +115,7 @@ class Layout extends React.Component {
     //console.log(window.innerWidth - leftWidth - rightWidth)
     return (
       <div
+        className={Classes.POPOVER_DISMISS}
         style={{
           display: "grid",
           gridTemplateColumns: `

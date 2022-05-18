@@ -53,7 +53,7 @@ class GeneSet extends React.Component {
   updateGeneMetadatas = () => {
     const { dispatch, varMetadata, setGenes } = this.props;
     const { sortDirection } = this.state;
-    if (varMetadata !== ""){
+    if (varMetadata !== "" && setGenes && setGenes?.length > 0){
       dispatch(actions.fetchGeneInfoBulk(setGenes, varMetadata)).then((res)=>{
         this.setState({
           ...this.state,
@@ -215,7 +215,6 @@ class GeneSet extends React.Component {
 
   onSortGenes = (reset=false) => {
     const { sortDirection } = this.state;
-
     if (reset) {
       this.onSortGenesReset(true)
     } else {
@@ -311,7 +310,7 @@ class GeneSet extends React.Component {
       sortIcon="chevron-down"
     }
     return (
-      <div draggable={setMode === "genes"} onDragStart={(e)=>{
+      <div id={`${genesetDescription}@@${setName}-geneset`} draggable={setMode === "genes" && !allGenes} onDragStart={(e)=>{
         e.dataTransfer.setData("text",`${genesetDescription}@@${setName}`)
         e.stopPropagation();
       }} onDragOver={(e)=>{
@@ -357,16 +356,37 @@ class GeneSet extends React.Component {
             },
             isDragging: true
           });
-          dispatch({type: "track set", group: genesetDescription, set: setname})         
+          dispatch({type: "track set", group: genesetDescription, set: setname})       
+          e.stopPropagation();  
         }
-      }}>
+      }}
+      onKeyDown={(e)=>{
+        if (e.metaKey && e.code === "KeyA" && isOpen) {
+          if (setGenes && setGenes.length > 0){
+            dispatch({type: "select genes", genes:  setGenes})
+          }
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onMouseEnter={(e)=>{
+        const el = document.getElementById(`${genesetDescription}@@${setName}-geneset`)
+        el.tabIndex=-1;
+        document.activeElement.blur();
+        el.style.border = "none";
+        el.style.outline = "none";
+        el.focus();
+        e.preventDefault();
+        e.stopPropagation();        
+      }}     
+      >
         {setMode === "genes" ? 
         (<>
           {setName !== "Gene search results" && <div onMouseOver={()=>{
             this.setState({isHovered: true})
           }} onMouseLeave={()=>{
             this.setState({isHovered: false})
-          }} style={{cursor: contentEditable ? undefined : "move", display: "flex", paddingTop: 5, paddingBottom: 5}}>  
+          }} style={{cursor: contentEditable || allGenes ? undefined : "move", display: "flex", paddingTop: 5, paddingBottom: 5}}>  
           <div
             style={{
               display: "flex",
@@ -404,7 +424,7 @@ class GeneSet extends React.Component {
 
             <div
                 onMouseOver={()=>{
-                  if (!diffExp) {
+                  if (!diffExp && !allGenes) {
                     const el = document.getElementById(`${displayLabel}-editable-set-span`)
                     el.style.outlineWidth = "2px";
                     el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
@@ -414,7 +434,7 @@ class GeneSet extends React.Component {
                   }                 
                 }}                  
                 onMouseLeave={()=>{
-                  if (!diffExp) {
+                  if (!diffExp && !allGenes) {
                     const el = document.getElementById(`${displayLabel}-editable-set-span`)                             
                     if (!contentEditable || document.activeElement.children[0] !== el) {
                       el.style.outline = "none";   
@@ -424,14 +444,14 @@ class GeneSet extends React.Component {
                   }
                 }}
                 onClick={(e)=>{
-                  if (!diffExp) {
+                  if (!diffExp && !allGenes) {
                     this.setState({contentEditable: true})
                   }
                 }}
                 contentEditable={contentEditable}
                 suppressContentEditableWarning
                 onBlur={()=>{
-                  if (!diffExp) {
+                  if (!diffExp && !allGenes) {
                     const el = document.getElementById(`${displayLabel}-editable-set-span`)          
                     if (mouseLeft) {
                       el.style.outline = "none";                    
@@ -455,7 +475,7 @@ class GeneSet extends React.Component {
                   }
                 }} // this callback, or "Enter" keypress will trigger the name change in reducers.   
                 onKeyDown={(e)=>{
-                  if (!diffExp) {
+                  if (!diffExp && !allGenes) {
                     if (e.key === "Enter" || e.key === "Escape"){
                       e.target.blur();
                     }
@@ -489,7 +509,7 @@ class GeneSet extends React.Component {
                 this.setState({...this.state,removeHistZeros: !removeHistZeros})
                 }
               } 
-              onSortGenes={this.onSortGenes}
+              onSortGenes={()=>this.onSortGenes()}
               selectCellsFromGroup={this.selectCellsFromGroup}
               volcanoClick={() => {
                 if (`${genesetDescription};;${setName}`===volcanoAccessor) {

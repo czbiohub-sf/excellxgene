@@ -1409,7 +1409,7 @@ class Graph extends React.Component {
         <svg
           id="lasso-layer"
           data-testid="layout-overlay"
-          className="graph-svg"
+          className={`graph-svg`}
           style={{
             position: "absolute",
             top: 0,
@@ -1428,7 +1428,7 @@ class Graph extends React.Component {
         >
           <svg
             id="lidar-layer"
-            className="graph-svg"
+            className={`graph-svg`}
             style={{
               position: "absolute",
               top: 0,
@@ -1456,7 +1456,7 @@ class Graph extends React.Component {
             margin: 0,
             shapeRendering: "crispEdges",
           }}
-          className="graph-canvas"
+          className={`graph-canvas`}
           id="embedding-layout"
           data-testid="layout-graph"
           ref={this.setReglCanvas}

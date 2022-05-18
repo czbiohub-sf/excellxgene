@@ -1,6 +1,7 @@
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
+import { Classes } from "@blueprintjs/core";
 import Container from "./framework/container";
 import Layout from "./framework/layout";
 import LeftSideBar from "./leftSidebar";

@@ -355,8 +355,6 @@ def pickle_loader(fn):
 
 @ray.remote
 def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm, shm_csc):
-     #direc        
-
     fnames = glob(f"{userID}/emb/*.p")
 
 
@@ -376,16 +374,39 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm
                 embs[n] = pickle_loader(f)
     
     X = embs[currentLayout]
-    f = np.isnan(X).sum(1)==0    
-    filt = np.logical_and(f,obs_mask)
+    currParams = params.get(currentLayout,{})  
+    
 
-    mode = userID.split("/")[-1].split("\\")[-1]
-    X = _read_shmem(shm,shm_csc,"X",format="csr",mode=mode)
+    OBS_KEYS = ["name_0","sam_weights"]
+    batchKey = currParams.get("batchKey","")
+    if batchKey != "":
+        OBS_KEYS.append(batchKey)
+        
+    obs = pd.DataFrame()
+    for k in OBS_KEYS:
+        try:
+            obs[k] = pickle_loader(f"{userID}/obs/{k}.p")
+        except:
+            pass
+    obs.index = pd.Index(np.arange(obs.shape[0]))
 
+    var = pd.DataFrame()
     v = pickle_loader(f"{userID}/var/name_0.p")
-    adata = AnnData(X = X[filt])
+    var['name_0'] = v
+
+    obs_mask2 = np.zeros(v.size,dtype='bool')
+    obs_mask2[:]=True
+
+    AnnDataDict["obs"] = obs
+    AnnDataDict["var"] = var
+    AnnDataDict["obs_mask"] = obs_mask
+    AnnDataDict["obs_mask2"] = obs_mask2
+    mode = userID.split("/")[-1].split("\\")[-1]
+    
+    adata = compute_preprocess(AnnDataDict, currParams, userID, mode, shm, shm_csc)
+    index = np.array(list(adata.obs_names)).astype('int')
     adata.var_names = pd.Index(v)
-    adata.obs_names = pd.Index(cids[filt])
+    adata.obs_names = pd.Index(cids[index])
 
     for k in AnnDataDict['varm'].keys():
         adata.varm[k] = AnnDataDict['varm'][k]
@@ -393,7 +414,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm
 
     if labelNames:
         for n in labelNames:
-            l = pickle_loader(f"{userID}/obs/{n}.p")[filt]
+            l = pickle_loader(f"{userID}/obs/{n}.p")[index]
             if n != "name_0":
                 adata.obs[n] = pd.Categorical(l)        
 
@@ -430,7 +451,7 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm
             tlay = ""
 
         if name == tlay:
-            l = pickle_loader(f"{userID}/pca/{n}.p")[filt]
+            l = pickle_loader(f"{userID}/pca/{n}.p")[index]
             adata.obsm[f"X_latent_{n.split(';;')[0]}"] = l
     
     
@@ -439,23 +460,23 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm
         n = f.split('/')[-1].split('\\')[-1][:-2]
         if ';;' not in n:
             if n not in vkeys:
-                l = pickle_loader(f"{userID}/pca/{n}.p")[filt]
+                l = pickle_loader(f"{userID}/pca/{n}.p")[index]
                 adata.obsm[f"X_latent_{n}"] = l
 
     temp = {}
     for key in nnms.keys():
-        temp[key] = nnms[key][filt][:,filt]
+        temp[key] = nnms[key][index][:,index]
     for key in temp.keys():
         adata.obsp["N_"+key.split(';;')[-1]] = temp[key]
     for key in params.keys():
         adata.uns["N_"+key.split(';;')[-1]+"_params"]=params[key]
     for key in embs.keys():
-        adata.obsm["X_"+key.split(';;')[-1]] = embs[key][filt] 
+        adata.obsm["X_"+key.split(';;')[-1]] = embs[key][index] 
                 
     for k in AnnDataDict["Xs"]:
         if k != "X":
             X = _read_shmem(shm,shm_csc,k,format="csr",mode=mode)
-            adata.layers[k] = X[filt]
+            adata.layers[k] = X[index]
 
     if ihm:
         if not os.path.exists("output/"):
@@ -465,8 +486,8 @@ def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm
         adata.write_h5ad(f"output/{ID}_{currentLayout.replace(';','_')}.h5ad")
         return f"output/{ID}_{currentLayout.replace(';','_')}.h5ad"
     else:
-        adata.write_h5ad(f"{userID}/output/{currentLayout.replace(';','_')}.h5ad")
-        return f"{userID}/output/{currentLayout.replace(';','_')}.h5ad"
+        adata.write_h5ad(f"{currentLayout.replace(';','_')}.h5ad")
+        return f"{currentLayout.replace(';','_')}.h5ad"
 
 def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
     for k in list(adata.obsm.keys()):
@@ -1405,7 +1426,7 @@ def compute_sankey_df_coclustering(labels, obs_mask, numEdges,shm,shm_csc):
     cs = list(cs)     
     return {"edges":ps,"weights":cs}
 
-def compute_preprocess(AnnDataDict, reembedParams, userID, mode, shm, shm_csc, other=True):
+def compute_preprocess(AnnDataDict, reembedParams, userID, mode, shm, shm_csc, other=False):
     layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
     var = AnnDataDict['var']
@@ -1785,7 +1806,7 @@ def initialize_socket(da):
                 varm = {}
                 for k in da.data.varm.keys():
                     varm[k] = da.data.varm[k]
-
+                    
                 AnnDataDict={"Xs":layers, "varm": varm}
                 name_0 = pickle_loader(f"{userID}/obs/name_0.p")
                 _multiprocessing_wrapper(da,ws,save_data, "downloadAnndata",data,None,AnnDataDict,labelNames,name_0,currentLayout,obs_mask,userID, current_app.hosted_mode)

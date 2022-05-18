@@ -65,7 +65,7 @@ class GenesetMenus extends React.PureComponent {
   };
 
   render() {
-    const { group, geneset, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros, writeSort, disableWriteSort,
+    const { group, geneset, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros, writeSort, disableWriteSort, isOpen,
            diffExp, volcanoClick, selectCellsFromGroup, sortIcon, sortDirection, onSortGenes, varMetadata, volcanoAccessor, activeSelection, isHovered, setMode } = this.props;
     const { popoverOpen } = this.state;
     const isColorBy = `${group}::${geneset}` === colorAccessor;

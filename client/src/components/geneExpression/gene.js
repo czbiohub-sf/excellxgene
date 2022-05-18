@@ -132,7 +132,7 @@ class Gene extends React.Component {
         e.dataTransfer.setData("text",`${group}@@${geneset}@@@${gene}`)
         e.stopPropagation();
       }} style={{
-          cursor: "move", 
+          cursor: "pointer", 
           backgroundColor: isSelected && !isObs ? "#B4D5FE" : null,
           marginLeft: group !== "" ? globals.indentPaddingGeneset : 0,
         }}
