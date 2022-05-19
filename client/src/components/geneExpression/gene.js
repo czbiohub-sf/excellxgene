@@ -85,11 +85,17 @@ class Gene extends React.Component {
     const { dispatch, gene } = this.props;
     dispatch({type: "select gene",gene})
   }  
+
+  onDragStart = (e) => {
+    const { dispatch, group, geneset, gene } = this.props;
+    dispatch({type: "currently dragging", dragged: `${group}@@${geneset}@@@${gene}`})    
+    e.dataTransfer.setData("text",`${group}@@${geneset}@@@${gene}`)
+    e.stopPropagation();    
+  }  
   render() {
     const {
       dispatch,
       gene,
-      geneDescription,
       isColorAccessor,
       isScatterplotXXaccessor,
       isScatterplotYYaccessor,
@@ -97,7 +103,6 @@ class Gene extends React.Component {
       removeGene,
       varMetadata,
       geneInfo,
-      userLoggedIn,
       group,
       isSelected,
       rightWidth,
@@ -128,13 +133,11 @@ class Gene extends React.Component {
       <div draggable 
       onMouseOver={(e)=>this.setState({isHovered: true})}
       onMouseLeave={(e)=>this.setState({isHovered: false})}
-      onDragStart={(e)=>{
-        e.dataTransfer.setData("text",`${group}@@${geneset}@@@${gene}`)
-        e.stopPropagation();
-      }} style={{
+      onDragStart={this.onDragStart} 
+      style={{
           cursor: "pointer", 
           backgroundColor: isSelected && !isObs ? "#B4D5FE" : null,
-          marginLeft: group !== "" ? globals.indentPaddingGeneset : 0,
+          marginLeft: group !== "" ? globals.indentPaddingGeneset : 0
         }}
         onClick={(e)=>{
         if ((!multiGeneSelect || !lastClickedGene) && !isSelected) {
@@ -182,21 +185,18 @@ class Gene extends React.Component {
             }}
           >
             <div style={{display: "flex", marginTop: "2px"}}>            
-            <Truncate
-              tooltipAddendum={geneDescription && !isObs && `: ${geneDescription}`}
+
+            <span
+              style={{
+                width: geneSymbolWidth,
+                display: "inline-block",
+                paddingRight: "5px"
+              }}
+              className={styles.unselectable}
+              data-testid={`${gene}:gene-label`}
             >
-              <span
-                style={{
-                  width: geneSymbolWidth,
-                  display: "inline-block",
-                  paddingRight: "5px"
-                }}
-                className={styles.unselectable}
-                data-testid={`${gene}:gene-label`}
-              >
-                {gene}
-              </span>
-            </Truncate>
+              {gene}
+            </span>
             {!geneIsExpanded ? (
               <HistogramBrush
                 isUserDefined

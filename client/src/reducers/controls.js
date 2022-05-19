@@ -41,6 +41,7 @@ const Controls = (
     multiGeneSelect: false,
     lastClickedGene: null,
     lastClickedGeneset: null,
+    currentlyDragged: null
   },
   action
 ) => {
@@ -129,6 +130,12 @@ const Controls = (
         ...state,
         setTracker
       };
+    }
+    case "currently dragging": {
+      return {
+        ...state,
+        currentlyDragged: action.dragged
+      }
     }
     case "autosave: genesets complete": {
       let setTracker = state.setTracker;

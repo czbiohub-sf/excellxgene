@@ -17,13 +17,13 @@ import * as globals from "../../globals"
   return {
     annoMatrix: state.annoMatrix,
     userDefinedGenes: state.controls.userDefinedGenes,
-    userDefinedGenesLoading: state.controls.userDefinedGenesLoading
+    genesets: state.genesets.genesets
   };
 })
 class QuickGene extends React.Component {
   constructor(props){
     super(props);
-    this.state={ geneNames: [], status: "pending", inputString: "", commaModeActivated: false, newDescription: "", isPopoverOpen: false};
+    this.state={ geneNames: [], status: "pending", inputString: "", commaModeActivated: false};
   }
   
   componentDidMount = () => {
@@ -139,8 +139,8 @@ class QuickGene extends React.Component {
   };
 
   render() {
-    const { dispatch, userDefinedGenes, userDefinedGenesLoading, rightWidth, openPreferences } = this.props;
-    const { geneNames, inputString, commaModeActivated, isPopoverOpen } = this.state;
+    const { dispatch, openPreferences, genesets } = this.props;
+    const { geneNames, inputString, commaModeActivated } = this.state;
     const noCommaInput = !inputString.includes(",")
 
     return (
@@ -159,7 +159,7 @@ class QuickGene extends React.Component {
             {noCommaInput ? <Suggest
               resetOnSelect
               closeOnSelect
-              itemDisabled={userDefinedGenesLoading ? () => true : () => false}
+              itemDisabled={() => false}
               noResults={<MenuItem disabled text="No matching genes." />}
               onItemSelect={(g) => {
                 this.handleClick(g);
@@ -201,46 +201,35 @@ class QuickGene extends React.Component {
               }}
               label={inputString}
               
-            />}
-            <Popover2 isOpen={isPopoverOpen} position="bottom-right" content={
-              <div style={{display: 'flex', flexDirection: 'row', justifyContent: "left", textAlign: "left", width: 200}}>
-                <LabelInput
-                  onChange={(e) => {
-                    this.setState({newDescription: e})
-                  }}
-                  inputProps={{
-                    placeholder: "New group",
-                    style: {border: 0, boxShadow: 'none'},
-                    fill: true,
-                    autoFocus: true,
-                    onBlur: (e) => {
-                      if (e.relatedTarget?.id !== "add-group-button") {
-                        this.setState({isPopoverOpen: false})
-                      }                      
-                    },
-                    onKeyDown: (e)=>{
-                      const { dispatch } = this.props;
-                      const { newDescription } = this.state;
-                      if (e.key==="Enter" && e.target.value !== ""){
-                        dispatch({
-                          type: "geneset: create",
-                          genesetName: null,
-                          genesetDescription: newDescription
-                        });
-                        
-                        this.setState({newDescription: "", isPopoverOpen: false})
-                      } else if (e.key==="Escape") {
-                        this.setState({isPopoverOpen: false})
+            />}                                 
+            <Button id="add-group-button"
+                    style={{color: "gray", width: "10%"}}
+                    onClick={()=>{
+                      const groupNames = Object.keys(genesets);
+                      const nms = [];
+                      groupNames.forEach((item)=>{
+                        const gs = item.split(" ").at(0);
+                        const num = item.split(" ").at(1);
+                        const len = item.split(" ").length;
+                        if (gs==="Geneset" && !isNaN(num) && len === 2 && !item.includes(".") ) {
+                          nms.push(parseInt(num))
+                        }
+                      })
+                      let i;
+                      if (nms.length === 0) {
+                        i = 1;
+                      } else {
+                        i = Math.max(...nms)+1;
                       }
-                    },
-                  }}
-                /> 
-            </div>}>
-                <Button id="add-group-button" style={{color: "gray", width: "10%"}} active={isPopoverOpen} onClick={()=>this.setState({isPopoverOpen: !isPopoverOpen})}
-                        icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
-                </Button>      
-            </Popover2>                                  
-                    
+                      const name = `Geneset ${i}`;
+                      dispatch({
+                        type: "geneset: create",
+                        genesetName: null,
+                        genesetDescription: name
+                      });                    
+                    }}
+                    icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
+            </Button>                          
           </div>
           <div>
           </div>    

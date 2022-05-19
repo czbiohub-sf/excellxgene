@@ -11,11 +11,11 @@ import store from "./reducers";
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
-document.addEventListener('keydown', (e) => {
+/*document.addEventListener('keydown', (e) => {
   if (e.code === "KeyA" && e.metaKey) {
     e.preventDefault();
   } 
-});
+});*/
 
 ReactDOM.render(
   <Provider store={store}>

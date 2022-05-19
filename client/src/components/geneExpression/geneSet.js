@@ -25,7 +25,9 @@ import styles from "./gene.css"
     currentSelectionDEG: state.controls.currentSelectionDEG,
     volcanoAccessor: state.controls.volcanoAccessor,
     cxgMode: state.controls.cxgMode,
-    geneSelection: state.geneSelection.genes
+    geneSelection: state.geneSelection.genes,
+    currentlyDragged: state.controls.currentlyDragged,
+    genesets: state.genesets.genesets
   };
 })
 class GeneSet extends React.Component {
@@ -49,7 +51,6 @@ class GeneSet extends React.Component {
       mouseLeft: false
     };
   }
-
   updateGeneMetadatas = () => {
     const { dispatch, varMetadata, setGenes } = this.props;
     const { sortDirection } = this.state;
@@ -291,11 +292,95 @@ class GeneSet extends React.Component {
       );
     });
   }
+  onDragStart = (e) => {
+    const { dispatch, genesetDescription, setName } = this.props;
+    dispatch({type: "currently dragging", dragged: `${genesetDescription}@@${setName}`})
+    e.dataTransfer.setData("text",`${genesetDescription}@@${setName}`)
+    e.stopPropagation();
+  }
+  onDragOver = (e) => {
+    e.stopPropagation();
+    e.preventDefault();    
+  }
+  onDragEnd = (e) => {
+    const { dispatch } = this.props;
+    dispatch({type: "currently dragging", dragged: null})    
+  }
+  onDrop = (e) => {
+    const { dispatch, genesetDescription, setName, geneSelection, setMode } = this.props;
+    const el = document.getElementById(`${genesetDescription}@@${setName}-geneset`);
+    el.style.border = "none";
+    dispatch({type: "currently dragging", dragged: null})  
+    dispatch({type: "clear gene selection"})
+    const name = e.dataTransfer.getData("text");   
+    const setgroup = name.split("@@").at(0)
+    const setname = name.split("@@").at(1)                     
+    if (name.includes("@@@") && setMode !== "genesets") { 
+      const _gene = name.split("@@@").at(1);
+      let genesToAdd = [...geneSelection];
+      if (!geneSelection.has(_gene)) {
+        genesToAdd = [_gene,...genesToAdd];
+      }         
+      if (setgroup === "" && setname === "Gene search results") {
+        dispatch(actions.genesetDeleteGenes(setgroup, setname, genesToAdd));          
+      }                  
 
+      if (setMode === "unset") {
+        dispatch({
+          type: "geneset: update",
+          genesetDescription,
+          genesetName: null,
+          update: {
+            genesetName: setName,
+            genesetDescription: "",
+          },
+        });
+        dispatch(actions.genesetAddGenes("", setName, genesToAdd)); 
+      } else {
+        dispatch(actions.genesetAddGenes(genesetDescription, setName, genesToAdd));
+      }
+    } else if (!name.includes("@@@") && setMode !== "genes") {
+      dispatch({
+        type: "geneset: update",
+        genesetDescription: setgroup,
+        genesetName: setname,
+        update: {
+          genesetName: setname,
+          genesetDescription: genesetDescription,
+        },
+        isDragging: true
+      });
+      dispatch({type: "track set", group: genesetDescription, set: setname})       
+      e.stopPropagation();  
+    }    
+  }
+  onKeyDown = (e) => {
+    const { dispatch, setGenes, isOpen } = this.props;
+    if (e.metaKey && e.code === "KeyA" && isOpen && document.activeElement.contentEditable === "inherit") {
+      if (setGenes && setGenes.length > 0){
+        dispatch({type: "select genes", genes:  setGenes})
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }    
+  }
+  onMouseEnter = (e) => {
+    const { genesetDescription, setName } = this.props;
+    const el = document.getElementById(`${genesetDescription}@@${setName}-geneset`)
+    el.tabIndex=-1;
+    if (document.activeElement.contentEditable === "inherit") {
+      document.activeElement.blur();
+      el.style.border = "none";
+      el.style.outline = "none";
+      el.focus();
+      e.preventDefault();
+      e.stopPropagation();  
+    }    
+  }
   render() {
-    const { dispatch, setName, setGenes, genesetDescription, deleteGroup,
+    const { dispatch, setName, setGenes, genesetDescription, deleteGroup,currentlyDragged, genesets,
             displayLabel, varMetadata, allGenes, currentSelectionDEG, volcanoAccessor, cxgMode,
-            set, geneSelection } = this.props;
+            set } = this.props;
     const diffExp = genesetDescription?.includes("//;;//")
     const cOrG = cxgMode === "OBS" ? "genes" : "cells";
     const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
@@ -309,80 +394,41 @@ class GeneSet extends React.Component {
     } else if (sortDirection === "descending"){
       sortIcon="chevron-down"
     }
-    return (
-      <div id={`${genesetDescription}@@${setName}-geneset`} draggable={setMode === "genes" && !allGenes} onDragStart={(e)=>{
-        e.dataTransfer.setData("text",`${genesetDescription}@@${setName}`)
-        e.stopPropagation();
-      }} onDragOver={(e)=>{
-        e.stopPropagation();
-        e.preventDefault();
-      }} onDrop={(e)=>{
-        dispatch({type: "clear gene selection"})
-        const name = e.dataTransfer.getData("text");   
-        const setgroup = name.split("@@").at(0)
-        const setname = name.split("@@").at(1)             
-        if (name.includes("@@@") && setMode !== "genesets") { 
-          const _gene = name.split("@@@").at(1);
-          let genesToAdd = [...geneSelection];
-          if (!geneSelection.has(_gene)) {
-            genesToAdd = [_gene,...genesToAdd];
-          }         
-          if (setgroup === "" && setname === "Gene search results") {
-            dispatch(actions.genesetDeleteGenes(setgroup, setname, genesToAdd));          
-          }                  
 
-          if (setMode === "unset") {
-            dispatch({
-              type: "geneset: update",
-              genesetDescription,
-              genesetName: null,
-              update: {
-                genesetName: setName,
-                genesetDescription: "",
-              },
-            });
-            dispatch(actions.genesetAddGenes("", setName, genesToAdd)); 
-          } else {
-            dispatch(actions.genesetAddGenes(genesetDescription, setName, genesToAdd));
-          }
-        } else if (!name.includes("@@@") && setMode !== "genes") {
-          dispatch({
-            type: "geneset: update",
-            genesetDescription: setgroup,
-            genesetName: setname,
-            update: {
-              genesetName: setname,
-              genesetDescription: genesetDescription,
-            },
-            isDragging: true
-          });
-          dispatch({type: "track set", group: genesetDescription, set: setname})       
-          e.stopPropagation();  
-        }
-      }}
-      onKeyDown={(e)=>{
-        if (e.metaKey && e.code === "KeyA" && isOpen) {
-          if (setGenes && setGenes.length > 0){
-            dispatch({type: "select genes", genes:  setGenes})
-          }
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }}
-      onMouseEnter={(e)=>{
-        const el = document.getElementById(`${genesetDescription}@@${setName}-geneset`)
-        el.tabIndex=-1;
-        document.activeElement.blur();
-        el.style.border = "none";
-        el.style.outline = "none";
-        el.focus();
-        e.preventDefault();
-        e.stopPropagation();        
-      }}     
+    const setgroup = currentlyDragged?.split("@@")?.at(0)
+    const setname = currentlyDragged?.split("@@")?.at(1)
+    const setgene = currentlyDragged?.split("@@@")?.at(1)
+    const genesetDragging = !currentlyDragged?.includes("@@@");
+    const genesDragging = currentlyDragged?.includes("@@@");
+
+    /*
+    You are enabled IF
+    1) We are dragging a geneset and the current group name is not the dragged geneset's group name.
+    2) We are dragging a gene and the current group name is not the dragged gene's group name and set name
+    3) We are not dragging a gene.
+    */
+    const colorDrop = (
+      !currentlyDragged ||
+      currentlyDragged && (setgroup !== genesetDescription) && genesetDragging && (setMode === "genesets") && !Object.keys(genesets[genesetDescription]).includes(setname) ||
+      currentlyDragged && genesDragging && !((setgroup === genesetDescription) && (setname === setName)) && (setMode==="genes") && !genesets?.[genesetDescription]?.[setName]?.includes(setgene) ||
+      currentlyDragged && (setMode === "unset") ||
+      setName === "Gene search results"
+    ) && !(setName === "All genes" && currentlyDragged);
+
+    const enableDrop = colorDrop && (setName !== "Gene search results");
+    return ( // set all genesets to faded when dragging geneset, set all geneset folders to faded when dragging gene, unset always active. set onDrop to undefined if target is invalid. put all these actions in separate functions to clean up render.
+      <div id={`${genesetDescription}@@${setName}-geneset`} draggable={setMode === "genes" && !allGenes}
+        onDragStart={this.onDragStart} 
+        onDragOver={enableDrop ? this.onDragOver : null}
+        onDragEnd={this.onDragEnd}
+        onDrop={enableDrop ? this.onDrop : null}
+        onKeyDown={this.onKeyDown}
+        onMouseEnter={this.onMouseEnter}  
       >
         {setMode === "genes" ? 
-        (<>
-          {setName !== "Gene search results" && <div onMouseOver={()=>{
+        (<div style={{opacity: colorDrop ? 1.0 : 0.4}}>
+          {setName !== "Gene search results" && 
+          <div onMouseOver={()=>{
             this.setState({isHovered: true})
           }} onMouseLeave={()=>{
             this.setState({isHovered: false})
@@ -426,10 +472,7 @@ class GeneSet extends React.Component {
                 onMouseOver={()=>{
                   if (!diffExp && !allGenes) {
                     const el = document.getElementById(`${displayLabel}-editable-set-span`)
-                    el.style.outlineWidth = "2px";
-                    el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
-                    el.style.outlineStyle = "auto";
-                    el.style.outlineOffset = "2px"; 
+                    el.style.cursor="text";
                     this.setState({mouseLeft: false})   
                   }                 
                 }}                  
@@ -438,6 +481,7 @@ class GeneSet extends React.Component {
                     const el = document.getElementById(`${displayLabel}-editable-set-span`)                             
                     if (!contentEditable || document.activeElement.children[0] !== el) {
                       el.style.outline = "none";   
+                      el.style.cursor = undefined;   
                       this.setState({contentEditable: false})
                     }
                     this.setState({mouseLeft: true})
@@ -445,6 +489,13 @@ class GeneSet extends React.Component {
                 }}
                 onClick={(e)=>{
                   if (!diffExp && !allGenes) {
+                    if (contentEditable) {
+                      const el = document.getElementById(`${displayLabel}-editable-set-span`)                             
+                      el.style.outlineWidth = "2px";
+                      el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
+                      el.style.outlineStyle = "auto";
+                      el.style.outlineOffset = "2px";                       
+                    }
                     this.setState({contentEditable: true})
                   }
                 }}
@@ -460,18 +511,20 @@ class GeneSet extends React.Component {
                     this.setState({contentEditable: false})
 
                     const newName = `${el.textContent}`
-                    dispatch({type: "geneset: update",
-                              genesetDescription,
-                              genesetName: setName,
-                              update: {genesetDescription: genesetDescription, genesetName: newName}})
-                    
-                    let groupName;
-                    if (genesetDescription === "") {
-                      groupName = "__blank__";
-                    } else {
-                      groupName = genesetDescription;
+                    if (newName !== setName) {
+                      dispatch({type: "geneset: update",
+                                genesetDescription,
+                                genesetName: setName,
+                                update: {genesetDescription: genesetDescription, genesetName: newName}})
+                      
+                      let groupName;
+                      if (genesetDescription === "") {
+                        groupName = "__blank__";
+                      } else {
+                        groupName = genesetDescription;
+                      }
+                      dispatch(actions.requestGeneSetRename(groupName,groupName,setName,newName));
                     }
-                    dispatch(actions.requestGeneSetRename(groupName,groupName,setName,newName));
                   }
                 }} // this callback, or "Enter" keypress will trigger the name change in reducers.   
                 onKeyDown={(e)=>{
@@ -592,7 +645,7 @@ class GeneSet extends React.Component {
             parentGenesetDescription={genesetDescription}
           />
         </div>
-        </>) :           
+        </div>) :           
         <div style={{paddingTop: 5, paddingBottom: 5}}>
           <div onMouseOver={()=>this.setState({trashShown: true})}
         onMouseLeave={()=>this.setState({trashShown: false})} style={{display: "flex", flexDirection: "row", columnGap: 30}}>
@@ -603,7 +656,8 @@ class GeneSet extends React.Component {
                 data-testid={`${genesetDescription}:geneset-folder-expand`}
                 style={{
                   userSelect: "none",
-                  display: "flex"
+                  display: "flex",
+                  opacity: colorDrop ? 1.0 : 0.4
                 }}
               >
                 <div onClick={this.onGenesetFolderClick} style={{cursor: "pointer"}}>
@@ -622,21 +676,26 @@ class GeneSet extends React.Component {
                 <div
                   onMouseOver={()=>{
                     const el = document.getElementById(`${setName}-editable-span`)
-                    el.style.outlineWidth = "2px";
-                    el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
-                    el.style.outlineStyle = "auto";
-                    el.style.outlineOffset = "2px"; 
+                    el.style.cursor = "text";
                     this.setState({mouseLeft: false})                    
                   }}                  
                   onMouseLeave={()=>{
                     const el = document.getElementById(`${setName}-editable-span`)                               
                     if (!contentEditable || document.activeElement.children[0] !== el) {
                       el.style.outline = "none";   
+                      el.style.cursor = undefined;
                       this.setState({contentEditable: false})
                     }
                     this.setState({mouseLeft: true})
                   }}
                   onClick={(e)=>{
+                    if (contentEditable) {
+                      const el = document.getElementById(`${setName}-editable-span`)                      
+                      el.style.outlineWidth = "2px";
+                      el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
+                      el.style.outlineStyle = "auto";
+                      el.style.outlineOffset = "2px"; 
+                    }
                     this.setState({contentEditable: true})
                   }}
                   contentEditable={contentEditable}
