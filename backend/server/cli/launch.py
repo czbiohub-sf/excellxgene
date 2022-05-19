@@ -25,6 +25,9 @@ from functools import wraps
 import yaml
 import ray
 from dotenv import load_dotenv, find_dotenv
+from waitress import serve
+
+
 ENV_FILE = find_dotenv()
 if ENV_FILE:
     load_dotenv(ENV_FILE)
@@ -574,14 +577,18 @@ def launch(
     
     try:
         server.app.config['SESSION_COOKIE_NAME'] = 'session_cookie'
-        server.app.run(
-            host=server_config.app__host,
-            debug=False,
-            port=server_config.app__port,
-            threaded=True,
-            use_debugger=False,
-            use_reloader=False,
-        )
+        if hosted:
+            serve(server.app,host=server_config.app__host,
+                port=server_config.app__port)
+        else:
+            server.app.run(
+                host=server_config.app__host,
+                debug=False,
+                port=server_config.app__port,
+                threaded=True,
+                use_debugger=False,
+                use_reloader=False,
+            )
     except OSError as e:
         if e.errno == errno.EADDRINUSE:
             raise click.ClickException("Port is in use, please specify an open port using the --port flag.") from e
