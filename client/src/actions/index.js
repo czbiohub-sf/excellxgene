@@ -29,7 +29,6 @@ import * as genesetActions from "./geneset";
 import { defaultReembedParams } from "../reducers/reembed";
 import { _switchEmbedding } from "./embedding";
 import { Dataframe } from "../util/dataframe";
-import { group } from "d3";
 
 /*
 return promise fetching user-configured colors
@@ -706,44 +705,38 @@ const setupWebSockets = (dispatch,getState,loggedIn,hostedMode) => {
   let wsSankey;
   let wsLeiden;
   let wsDownloadAnndata;
+  const urlschema = hostedMode ? "wss://" : "ws://";
   try{
     if (loggedIn || !hostedMode){
-      wsDiffExp = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
+      wsDiffExp = new WebSocket(`${urlschema}${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/diffexp`)
       wsDiffExp.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsDiffExp, name: "wsDiffExp"})    
     }
   } catch (e) {}
   try{
     if (loggedIn || !hostedMode){
-      wsReembedding = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
+      wsReembedding = new WebSocket(`${urlschema}${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/reembedding`)
       wsReembedding.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsReembedding, name: "wsReembedding"})
     }
   } catch (e) {}
-  /*try{
-    if (!hostedMode){
-      const wsPreprocessing = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/preprocessing`)
-      wsPreprocessing.onmessage = onMessage
-      dispatch({type: "init: set up websockets",ws: wsPreprocessing, name: "wsPreprocessing"})
-    }
-  } catch (e) {}*/
   try{
     if (loggedIn || !hostedMode){
-      wsSankey = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
+      wsSankey = new WebSocket(`${urlschema}${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/sankey`)
       wsSankey.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsSankey, name: "wsSankey"})
     }
   } catch (e) {}
   try{
     if (loggedIn || !hostedMode){
-      wsLeiden = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
+      wsLeiden = new WebSocket(`${urlschema}${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/leiden`)
       wsLeiden.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsLeiden, name: "wsLeiden"})
     }
   } catch (e) {}
   try{
     if (loggedIn || !hostedMode){
-      wsDownloadAnndata = new WebSocket(`ws://${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
+      wsDownloadAnndata = new WebSocket(`${urlschema}${globals.API.prefix.split('/api').at(0).split('://').at(-1)}/downloadAnndata`)
       wsDownloadAnndata.onmessage = onMessage
       dispatch({type: "init: set up websockets",ws: wsDownloadAnndata, name: "wsDownloadAnndata"})
     }
