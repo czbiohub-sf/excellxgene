@@ -33,7 +33,7 @@ const SECOND_HALF_INNER_STYLE = {
 };
 
 export default (props) => {
-  const { children, tooltipAddendum = "" } = props;
+  const { children, tooltipAddendum = "", showTooltip } = props;
   // Truncate only support a single child with a text child
   if (
     React.Children.count(children) !== 1 ||
@@ -84,8 +84,8 @@ export default (props) => {
       "aria-label": originalString,
     })
   );
-  return (
-    <Tooltip2
+  return (<Tooltip2
+      disabled={!showTooltip}
       content={`${originalString}${tooltipAddendum}`}
       hoverOpenDelay={tooltipHoverOpenDelayQuick}
       targetProps={{ style: children.props.style }}

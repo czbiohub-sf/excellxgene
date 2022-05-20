@@ -185,7 +185,7 @@ class Gene extends React.Component {
             }}
           >
             <div style={{display: "flex", marginTop: "2px"}}>            
-
+            <Truncate>
             <span
               style={{
                 width: geneSymbolWidth,
@@ -197,6 +197,7 @@ class Gene extends React.Component {
             >
               {gene}
             </span>
+            </Truncate>
             {!geneIsExpanded ? (
               <HistogramBrush
                 isUserDefined
