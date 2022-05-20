@@ -270,7 +270,7 @@ export const downloadMetadata = () => async (
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
-
+    postAsyncSuccessToast("Downloaded cell metadata successfully");
     dispatch({
       type: "output data: request completed"
     });    
@@ -329,7 +329,7 @@ export const downloadVarMetadata = () => async (
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
-
+    postAsyncSuccessToast("Downloaded gene metadata successfully");
     dispatch({
       type: "output data: request completed"
     });    
@@ -381,7 +381,7 @@ export const downloadGenedata = () => async (
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
-
+    postAsyncSuccessToast("Downloaded gene sets successfully");
     dispatch({
       type: "output data: request completed"
     });    
