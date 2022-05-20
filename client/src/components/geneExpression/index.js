@@ -29,7 +29,6 @@ import QuickGene from "./quickGene";
     reembedParams: state.reembedParameters,
     userLoggedIn: state.controls.userInfo ? true : false,
     cxgMode: state.controls.cxgMode,
-    currentlyDragged: state.controls.currentlyDragged
   };
 })
 class GeneExpression extends React.Component {
@@ -237,50 +236,15 @@ class GeneExpression extends React.Component {
     dispatch({ type: "geneset: activate add new geneset mode" });
   };
 
-  onDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();    
-  }
-  onDrop = (e) => {
-    const { dispatch } = this.props;
-    dispatch({type: "clear gene selection"})
-    const name = e.dataTransfer.getData("text");   
-    const setgroup = name.split("@@").at(0)
-    const setname = name.split("@@").at(1)             
-    if (!name.includes("@@@")) {
-      dispatch({
-        type: "geneset: update",
-        genesetDescription: setgroup,
-        genesetName: setname,
-        update: {
-          genesetName: setname,
-          genesetDescription: "",
-        },
-        isDragging: true
-      });
-      dispatch({type: "track set", group: "", set: setname})   
-      e.stopPropagation();      
-    }    
-  }
   render() {
-    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, cxgMode, rightWidth, currentlyDragged } = this.props;
+    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, cxgMode, rightWidth } = this.props;
     const { isEditingSetName, newNameText, nameBeingEdited, varMetadata, preferencesDialogOpen } = this.state;
     const [nogroupElements,genesetElements,diffExpElements]=this.renderGeneSets();
     const cOrG = cxgMode === "OBS" ? "gene" : "cell";
     
-    const setgroup = currentlyDragged?.split("@@")?.at(0)
-    const setname = currentlyDragged?.split("@@")?.at(1)
-    const genesetDragging = !currentlyDragged?.includes("@@@");    
-
-    const enableDrop = (
-      !currentlyDragged ||
-      currentlyDragged && (setgroup !== "") && genesetDragging && !Object.keys(genesets[""]).includes(setname)
-    );
 
     return (
       <div
-        onDragOver={enableDrop ? this.onDragOver : null}
-        onDrop={enableDrop ? this.onDrop : null}
       >
        {userLoggedIn ?  <GenesetHotkeys
           dispatch={dispatch}

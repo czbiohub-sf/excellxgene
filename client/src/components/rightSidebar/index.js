@@ -14,6 +14,7 @@ class RightSidebar extends React.Component {
     const { rightWidth, volcanoAccessor } = this.props;
     
     const width = rightWidth < globals.rightSidebarWidth ? globals.rightSidebarWidth : "inherit";
+    
 
     return (
       <div

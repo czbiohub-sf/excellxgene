@@ -48,7 +48,8 @@ class GeneSet extends React.Component {
       setMode: props.setMode,
       trashShown: false,
       contentEditable: false,
-      mouseLeft: false
+      mouseLeft: false,
+      padderHeight: 8
     };
   }
   updateGeneMetadatas = () => {
@@ -302,7 +303,7 @@ class GeneSet extends React.Component {
     e.stopPropagation();
     e.preventDefault();    
   }
-  onDragEnd = (e) => {
+  onDragEnd = () => {
     const { dispatch } = this.props;
     dispatch({type: "currently dragging", dragged: null})    
   }
@@ -339,6 +340,7 @@ class GeneSet extends React.Component {
       } else {
         dispatch(actions.genesetAddGenes(genesetDescription, setName, genesToAdd));
       }
+      this.setState({setMode: "genes"})
     } else if (!name.includes("@@@") && setMode !== "genes") {
       dispatch({
         type: "geneset: update",
@@ -352,6 +354,7 @@ class GeneSet extends React.Component {
       });
       dispatch({type: "track set", group: genesetDescription, set: setname})       
       e.stopPropagation();  
+      this.setState({setMode: "genesets"})
     }    
   }
   onKeyDown = (e) => {
@@ -385,7 +388,7 @@ class GeneSet extends React.Component {
     const cOrG = cxgMode === "OBS" ? "genes" : "cells";
     const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
 
-    const { isOpen, maxGenePage, mouseLeft, genePage, removeHistZeros, queryGene, sortDirection, isGensetFolderOpen, isHovered, setMode, trashShown, contentEditable } = this.state;
+    const { isOpen, padderHeight, maxGenePage, mouseLeft, genePage, removeHistZeros, queryGene, sortDirection, isGensetFolderOpen, isHovered, setMode, trashShown, contentEditable } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes?.length === 0;
     let sortIcon = "expand-all";
@@ -754,7 +757,49 @@ class GeneSet extends React.Component {
 
             {isGensetFolderOpen && set}
           </div>
-          } {/* wrap set with geneset folder*/}
+          }
+      {(setMode === "genesets" || genesetDescription === "") && <div 
+        onDragOver={(e)=>{
+          this.onDragOver(e)
+          this.setState({
+            padderHeight: 8
+          })
+        }}
+        onDragLeave={(e)=>{
+          this.setState({
+            padderHeight: 8
+          })
+        }}
+        onDragEnd={(e)=>this.setState({padderHeight: 8})}
+        onDrop={(e)=>{
+          const { dispatch } = this.props;
+          this.setState({isDragging: false})
+          dispatch({type: "clear gene selection"})
+          const name = e.dataTransfer.getData("text");   
+          const setgroup = name.split("@@").at(0)
+          const setname = name.split("@@").at(1)             
+          if (!name.includes("@@@")) {
+            dispatch({
+              type: "geneset: update",
+              genesetDescription: setgroup,
+              genesetName: setname,
+              update: {
+                genesetName: setname,
+                genesetDescription: "",
+              },
+              isDragging: true
+            });
+            this.setState({
+              padderHeight: 8
+            })            
+            dispatch({type: "track set", group: "", set: setname})   
+            e.stopPropagation();      
+          }          
+        }}
+        style={{height: padderHeight,
+        }}
+              
+      />}
       </div>
     );
   }
