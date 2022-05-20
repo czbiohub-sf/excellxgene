@@ -156,24 +156,10 @@ export const GenesetHotkeys = (props) => {
   const inputRef = createRef();
   const hotkeys = useMemo(
     () => [
-      /*{
-        combo: "SHIFT+Q",
-        global: true,
-        label: "Delete the most recent geneset group.",
-        onKeyDown: async () => {
-          const group = Object.keys(genesets).filter(item => item !== "")[0];
-          if (group) {
-            dispatch({
-              type: "color by nothing"
-            });
-            dispatch(actions.genesetDeleteGroup(group));
-          }
-        },
-      },*/
       {
         combo: "SHIFT+Q",
         global: true,
-        label: "Delete the most recent ungrouped geneset.",
+        label: "Delete the most recent geneset.",
         onKeyDown: async () => {
           let geneset;
           if ("" in genesets && Object.keys(genesets[""]).length >= 2) {
@@ -181,12 +167,35 @@ export const GenesetHotkeys = (props) => {
             if (geneset === "Gene search results") {
               geneset = Object.keys(genesets[""])[1];
             }
-          }
-          if (geneset) {
+            if (geneset) {
+              dispatch({
+                type: "color by nothing"
+              });
+              dispatch(actions.genesetDelete("", geneset));
+            }            
+          } else if (Object.keys(genesets).length > 1) {
+            
+            let keys = Object.keys(genesets);
+            const nondiff = [];
+            const diff = [];
+            const empty = [];
+            keys.forEach((i)=>{
+              if (i === "")
+                empty.push(i)
+              else if (!i.includes("//;;//"))
+                nondiff.push(i)
+              else
+                diff.push(i)
+            })
+            keys = empty.concat(nondiff.concat(diff));
+            const diffexp = keys[1].includes("//;;//");
             dispatch({
               type: "color by nothing"
-            });
-            dispatch(actions.genesetDelete("", geneset));
+            });            
+            dispatch(actions.genesetDeleteGroup(keys[1]));
+            if (diffexp)
+              dispatch(actions.requestDiffDelete(keys[1]))
+
           }
         },
       },      

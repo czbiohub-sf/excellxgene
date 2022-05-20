@@ -104,7 +104,6 @@ class GeneExpression extends React.Component {
     }
     
     const { dispatch, genesets, rightWidth } = this.props;    
-    
     const nogroups = [];
     if ("" in genesets) {
       for (const name in genesets[""]) {
@@ -125,7 +124,9 @@ class GeneExpression extends React.Component {
     }
     const sets = {};
     const sets2 = {};
-    for (const group in genesets) {
+    const groupnames = Object.keys(genesets);
+    groupnames.sort();
+    for (const group of groupnames) {
       if (group !== "") {
         if (Object.keys(genesets[group]).length===0) {
           sets[group] = (

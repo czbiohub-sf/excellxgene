@@ -162,7 +162,6 @@ const GeneSets = (
             }
           }
           
-          
           for (const key2 in genesets[key]) {
             if (key === genesetDescription && key2 === genesetName) {
               //const x =  key.includes('//;;//') ? '//;;//' : '';
@@ -174,9 +173,6 @@ const GeneSets = (
             } else {
               newGenesets[key][`${key2}`] = genesets[key][key2]
             }
-          }
-          if (Object.keys(newGenesets[key]).length === 0) {
-            delete newGenesets[key];
           }
         }
         return {

@@ -226,7 +226,8 @@ class QuickGene extends React.Component {
                         type: "geneset: create",
                         genesetName: null,
                         genesetDescription: name
-                      });                    
+                      });   
+                      dispatch({type: "track set", group: name, set: null})                    
                     }}
                     icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
             </Button>                          
