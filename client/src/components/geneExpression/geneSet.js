@@ -25,8 +25,7 @@ import styles from "./gene.css"
     cxgMode: state.controls.cxgMode,
     geneSelection: state.geneSelection.genes,
     currentlyDragged: state.controls.currentlyDragged,
-    genesets: state.genesets.genesets,
-    //genesetOrder: state.genesets.genesetOrder
+    genesets: state.genesets.genesets
   };
 })
 class GeneSet extends React.Component {
@@ -429,23 +428,12 @@ class GeneSet extends React.Component {
       currentlyDragged && (setMode === "unset")
     ) && !(setName === "All genes" && currentlyDragged) && !(setgroup==setname && currentlyDragged);
 
-    /*
-    Rearrange if:
-    1) (Dragged is group "" OR dragged is a folder) and (target is group "" or target group = target name)
-    OR
-    2) Dragged is group !== "" and dragged is not a folder and target group = dragged group
-    */
-    const rearrangeParentSets = currentlyDragged && (
-      ((setgroup === "" || setgroup === setname) && (genesetDescription === "" || genesetDescription === setName)) ||
-      (setgroup !== "" && setgroup !== setname && setgroup === genesetDescription && !setFolder)                                              
-    ) && false;
-    
-    //(setgroup === genesetDescription || setgroup === setname || setgroup === "" && (genesetDescription === setName) && (setgroup === genesetDescription));
+
     const enableDrag = !allGenes && !quickGenes;
-    const enableParentDrop = ((
+    const enableParentDrop = (
       !currentlyDragged ||
       currentlyDragged && (setgroup !== "") && genesetDragging && !Object.keys(genesets[""]).includes(setname)
-    ) || rearrangeParentSets) && !quickGenes && (setgroup !== setname || rearrangeParentSets);    
+    ) && !quickGenes && (setgroup !== setname);    
     return ( 
       <>
       <div id={`${genesetDescription}@@${setName}-geneset`} draggable={enableDrag}
@@ -845,34 +833,34 @@ class GeneSet extends React.Component {
         const name = e.dataTransfer.getData("text");   
         const setgroup = name.split("@@").at(0)
         const setname = name.split("@@").at(1)  
-        if (!rearrangeParentSets) {
-          // if we aren't simply rearranging, then we need to actually change around the genesets
-          dispatch({
-            type: "geneset: update",
-            genesetDescription: setgroup,
+      
+        dispatch({
+          type: "geneset: update",
+          genesetDescription: setgroup,
+          genesetName: setname,
+          update: {
             genesetName: setname,
-            update: {
-              genesetName: setname,
-              genesetDescription: "",
-            },
-            isDragging: true
-          });
-          if (!name.includes("//;;//")) {
-            dispatch(actions.genesetDelete(setgroup, setname));
-          }                           
-          dispatch({type: "track set", group: "", set: setname})   
-          e.stopPropagation();      
-          if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging) {
-            dispatch(actions.genesetDeleteGroup(setgroup))
-          }           
-        } 
-        
-        /*const desc =  (setgroup === "" || setgroup === setname) ? "-1" : genesetDescription;
+            genesetDescription: "",
+          },
+          isDragging: true
+        });
+        if (!name.includes("//;;//")) {
+          dispatch(actions.genesetDelete(setgroup, setname));
+        }                           
+        dispatch({type: "track set", group: "", set: setname})   
+        e.stopPropagation();      
+        if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging) {
+          dispatch(actions.genesetDeleteGroup(setgroup))
+        }           
+
+        /*
+        const desc =  (setgroup === "" || setgroup === setname) ? "-1" : genesetDescription;
         const index = genesetOrder[desc].indexOf(`${genesetDescription}@@${setName}`);
         const newOrder = genesetOrder[desc].filter(i=>i!==name);
         newOrder.splice(index+1,0,name);
         genesetOrder[desc] = newOrder;
-        dispatch({type: "set geneset ordering", genesetOrder})*/        
+        dispatch({type: "set geneset ordering", genesetOrder}) 
+        */       
       }: null}
       style={{height: globals.geneSetPadderHeight
       }}

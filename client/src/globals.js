@@ -80,6 +80,7 @@ export const geneSetPadderHeight = 2;
 
 export const numInterpolationSteps = 50;
 export const animationFPS = 3*numInterpolationSteps;
+export const animationLength = 1000
 
 export const maxUserDefinedGenes = 25;
 export const maxGenes = 100;

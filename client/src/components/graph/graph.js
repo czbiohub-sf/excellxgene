@@ -31,40 +31,6 @@ import {
   flagInvisible
 } from "../../util/glHelpers";
 
-async function animate(asyncProps, context) {
-  //const ti =(new Date()).getTime();
-  const newPos = [...asyncProps.positions];
-  const oldPos = context.cachedAsyncProps.positions;
-  const oldIndices = context.cachedAsyncProps.layoutDf?.rowIndex?.rindex ?? null;
-  const newIndices = asyncProps.layoutDf?.rowIndex?.rindex ?? null;
-  for (let timesRun = 1; timesRun <= globals.numInterpolationSteps; timesRun +=1) {
-    if (oldIndices && !newIndices) {
-      for (let i = 0; i < oldIndices.length; i +=1 ) {
-        const x = 2*oldIndices[i]
-        const y = 2*oldIndices[i]+1
-        asyncProps.positions[x] = oldPos[2*i] + (newPos[x] - oldPos[2*i]) * timesRun / globals.numInterpolationSteps
-        asyncProps.positions[y] = oldPos[2*i+1] + (newPos[y] - oldPos[2*i+1]) * timesRun / globals.numInterpolationSteps
-      }
-    } else if (!oldIndices && newIndices) {
-      for (let i = 0; i < newIndices.length; i +=1 ) {
-        const x = 2*newIndices[i]
-        const y = 2*newIndices[i]+1
-        asyncProps.positions[2*i] = oldPos[x] + (newPos[2*i] - oldPos[x]) * timesRun / globals.numInterpolationSteps
-        asyncProps.positions[2*i+1] = oldPos[y] + (newPos[2*i+1] - oldPos[y]) * timesRun / globals.numInterpolationSteps
-      }                      
-    } else {
-      for (let i = 0; i < oldPos.length; i +=1 ) {
-        asyncProps.positions[i] = oldPos[i] + (newPos[i] - oldPos[i]) * timesRun / globals.numInterpolationSteps
-      }                      
-    }
-    context.updateReglAndRender(asyncProps, context.cachedAsyncProps);    
-    await new Promise(r => setTimeout(r, 1000 / globals.animationFPS ));
-  } 
-  //const tf =(new Date()).getTime();
-  //console.log((tf-ti)/1000)
-  context.cachedAsyncProps = asyncProps;
-}
-
 function withinPolygon(polygon, x, y) {
   const n = polygon.length;
   let p = polygon[n - 1];
@@ -172,14 +138,16 @@ class Graph extends React.Component {
     const drawPoints = _drawPoints(regl);
 
     // preallocate webgl buffers
-    const pointBuffer = regl.buffer();
+    const pointBufferStart = regl.buffer();
+    const pointBufferEnd = regl.buffer();
     const colorBuffer = regl.buffer();
     const flagBuffer = regl.buffer();
     return {
       camera,
       regl,
       drawPoints,
-      pointBuffer,
+      pointBufferStart,
+      pointBufferEnd,
       colorBuffer,
       flagBuffer,
     };
@@ -304,6 +272,7 @@ class Graph extends React.Component {
     const viewport = this.getViewportDimensions();
     this.reglCanvas = null;
     this.cachedAsyncProps = null;
+    this.duration = 0;
     const modelTF = createModelTF();
 
     this.state = {
@@ -325,7 +294,8 @@ class Graph extends React.Component {
       // regl state
       regl: null,
       drawPoints: null,
-      pointBuffer: null,
+      pointBufferStart: null,
+      pointBufferEnd: null,
       colorBuffer: null,
       flagBuffer: null,
       nPoints: null,
@@ -438,6 +408,7 @@ class Graph extends React.Component {
     const { camera, projectionTF } = this.state;
     if (e.type !== "wheel") e.preventDefault();
     if (camera.handleEvent(e, projectionTF)) {
+      this.duration = 0;
       this.renderCanvas();
       this.setState((state) => {
         return { ...state, updateOverlay: !state.updateOverlay };
@@ -1068,7 +1039,8 @@ class Graph extends React.Component {
       regl,
       drawPoints,
       colorBuffer,
-      pointBuffer,
+      pointBufferStart,
+      pointBufferEnd,
       flagBuffer,
       camera,
       projectionTF,
@@ -1079,7 +1051,9 @@ class Graph extends React.Component {
       regl,
       drawPoints,
       colorBuffer,
-      pointBuffer,
+      pointBufferStart,
+      pointBufferEnd,
+      this.duration,
       flagBuffer,
       camera,
       projectionTF,
@@ -1103,16 +1077,49 @@ class Graph extends React.Component {
   }
 
   updateReglAndRender(asyncProps, prevAsyncProps) {
-    const { positions, colors, flags, height, width, screenCap, pointScaler, chromeKeyCategorical, chromeKeyContinuous, jointEmbeddingFlag } = asyncProps;
-
-    const { pointBuffer, colorBuffer, flagBuffer } = this.state;
+    const { positions: positionsEnd, colors, flags, height, width, screenCap, pointScaler, chromeKeyCategorical, chromeKeyContinuous, jointEmbeddingFlag, layoutChoice } = asyncProps;
+    const positionsStart = prevAsyncProps?.positions ?? positionsEnd;
+    const prevLayoutChoice = prevAsyncProps?.layoutChoice;
+    this.duration = (layoutChoice.current !== prevLayoutChoice?.current) && prevAsyncProps?.positions ? globals.animationLength : 0;
+    this.cachedAsyncProps = asyncProps;
+    
+    const { pointBufferStart, pointBufferEnd, colorBuffer, flagBuffer } = this.state;
     let needToRenderCanvas = false;
 
     if (height !== prevAsyncProps?.height || width !== prevAsyncProps?.width) {
       needToRenderCanvas = true;
     }
-    if (positions !== prevAsyncProps?.positions) {
-      pointBuffer({ data: positions, dimension: 2 });
+    if (positionsEnd !== prevAsyncProps?.positions) {
+
+      const newPos = positionsEnd;
+      const pos2 = positionsStart;
+      
+      const oldIndices = prevAsyncProps?.layoutDf?.rowIndex?.rindex ?? null;
+      const newIndices = asyncProps?.layoutDf?.rowIndex?.rindex ?? null;
+    
+      let oldPos;
+      if (oldIndices && !newIndices) { 
+        oldPos = [...newPos]; 
+        for (let i = 0; i < oldIndices.length; i +=1 ) { 
+          const x = 2*oldIndices[i]
+          const y = 2*oldIndices[i]+1
+          oldPos[x] = pos2[2*i]
+          oldPos[y] = pos2[2*i+1]
+        }
+      } else if (!oldIndices && newIndices) { 
+        oldPos = [];
+        for (let i = 0; i < newIndices.length; i +=1 ) {
+          const x = 2*newIndices[i]
+          const y = 2*newIndices[i]+1
+          oldPos.push(pos2[x])
+          oldPos.push(pos2[y])
+        }
+      } else {
+        oldPos = pos2;
+      }   
+
+      pointBufferStart({ data: oldPos, dimension: 2 });
+      pointBufferEnd({ data: newPos, dimension: 2 });
       needToRenderCanvas = true;
     }
     if (colors !== prevAsyncProps?.colors) {
@@ -1335,7 +1342,9 @@ class Graph extends React.Component {
     regl,
     drawPoints,
     colorBuffer,
-    pointBuffer,
+    pointBufferStart,
+    pointBufferEnd,
+    duration,
     flagBuffer,
     camera,
     projectionTF,
@@ -1348,45 +1357,59 @@ class Graph extends React.Component {
     const cameraTF = camera.view();
     const projView = mat3.multiply(mat3.create(), projectionTF, cameraTF);
     const { width, height } = this.reglCanvas;
-    regl.poll();
-    regl.clear({
-      depth: 1,
-      color: [1, 1, 1, 1],
-    });
-    drawPoints({
-      distance: camera.distance(),
-      color: colorBuffer,
-      position: pointBuffer,
-      flag: flagBuffer,
-      count: nPoints,
-      projView,
-      nPoints: nPoints,
-      minViewportDimension: Math.min(width, height),
-    }, pointScaler
-    );
-    if (screenCap) {  
-      const graph = regl._gl.canvas;//document.getElementById("embedding-layout");
-      const legend = document.getElementById("continuous_legend");
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(graph, 0, 0);
-      const H2C = new Html2Canvas();
-      const canvas_new = await H2C.h2c.html2canvas(legend);      
-      try {
-        ctx.drawImage(canvas_new, 0, 0);
-      } catch {}
+
+    let startTime;
+    const frameLoop = regl.frame(async ({ time }) => {
+      if (!startTime) {
+        startTime = time;
+      }
+      regl.clear({
+        depth: 1,
+        color: [1, 1, 1, 1],
+      });      
+      drawPoints({
+        distance: camera.distance(),
+        color: colorBuffer,
+        positionsStart: pointBufferStart,
+        positionsEnd: pointBufferEnd,
+        flag: flagBuffer,
+        count: nPoints,
+        projView,
+        nPoints: nPoints,
+        minViewportDimension: Math.min(width, height),
+        duration,
+        startTime
+      }, pointScaler
+      );
       
-      const blob = await canvas.convertToBlob();
-      var a = document.createElement("a");      
-      document.body.appendChild(a);
-      a.style = "display: none";
-      var url = window.URL.createObjectURL(blob);
-      a.href = url;
-      a.download = `${layoutChoice.current.split(';;').at(-1)}_emb.png`;
-      a.click();
-      window.URL.revokeObjectURL(url); 
-      dispatch({type: "graph: screencap end"}) 
-    } 
+      if (time - startTime > duration / 1000) {
+        frameLoop.cancel();
+        if (screenCap) {  
+          const graph = regl._gl.canvas;//document.getElementById("embedding-layout");
+          const legend = document.getElementById("continuous_legend");
+          const canvas = new OffscreenCanvas(width, height);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(graph, 0, 0);
+          const H2C = new Html2Canvas();
+          const canvas_new = await H2C.h2c.html2canvas(legend);      
+          try {
+            ctx.drawImage(canvas_new, 0, 0);
+          } catch {}
+          
+          const blob = await canvas.convertToBlob();
+          var a = document.createElement("a");      
+          document.body.appendChild(a);
+          a.style = "display: none";
+          var url = window.URL.createObjectURL(blob);
+          a.href = url;
+          a.download = `${layoutChoice.current.split(';;').at(-1)}_emb.png`;
+          a.click();
+          window.URL.revokeObjectURL(url); 
+          dispatch({type: "graph: screencap end"}) 
+        }         
+      }      
+    })  
+    
     regl._gl.flush();
     if (nPoints <= annoMatrix.nObs) {
       this.setState({...this.state,positions2: null, selectedOther: []})
@@ -1577,12 +1600,7 @@ class Graph extends React.Component {
             {(asyncProps) => {
               
               if (regl && !shallowEqual(asyncProps, this.cachedAsyncProps)) {
-                if (this.cachedAsyncProps && this.cachedAsyncProps?.layoutChoice?.current !== asyncProps.layoutChoice.current) {
-                  animate(asyncProps, this);
-                } else {
-                  this.updateReglAndRender(asyncProps, this.cachedAsyncProps);          
-                  this.cachedAsyncProps = asyncProps;
-                }
+                this.updateReglAndRender(asyncProps, this.cachedAsyncProps);          
               }
               
               return null;
