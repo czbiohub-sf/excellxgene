@@ -1082,7 +1082,7 @@ class Graph extends React.Component {
     const prevLayoutChoice = prevAsyncProps?.layoutChoice;
     this.duration = (layoutChoice.current !== prevLayoutChoice?.current) && prevAsyncProps?.positions ? globals.animationLength : 0;
     this.cachedAsyncProps = asyncProps;
-    
+
     const { pointBufferStart, pointBufferEnd, colorBuffer, flagBuffer } = this.state;
     let needToRenderCanvas = false;
 
@@ -1114,8 +1114,20 @@ class Graph extends React.Component {
           oldPos.push(pos2[x])
           oldPos.push(pos2[y])
         }
-      } else {
+      } else if (!oldIndices && !newIndices) {
         oldPos = pos2;
+      } else {
+        oldPos = []; 
+        for (let i = 0; i < newIndices.length; i +=1 ) { 
+          if (oldIndices.includes(newIndices[i])) {
+            const index = oldIndices.indexOf(newIndices[i]);
+            oldPos.push(pos2[2*index]);
+            oldPos.push(pos2[2*index+1]);
+          } else {
+            oldPos.push(newPos[2*i]);
+            oldPos.push(newPos[2*i+1]);
+          }
+        }
       }   
 
       pointBufferStart({ data: oldPos, dimension: 2 });
