@@ -429,7 +429,7 @@ class GeneSet extends React.Component {
     ) && !(setName === "All genes" && currentlyDragged) && !(setgroup==setname && currentlyDragged);
 
 
-    const enableDrag = !allGenes && !quickGenes;
+    const enableDrag = !allGenes && !quickGenes && (setMode === "genes");
     const enableParentDrop = (
       !currentlyDragged ||
       currentlyDragged && (setgroup !== "") && genesetDragging && !Object.keys(genesets[""]).includes(setname)

@@ -69,7 +69,7 @@ class GenesetMenus extends React.PureComponent {
            diffExp, volcanoClick, selectCellsFromGroup, sortIcon, sortDirection, onSortGenes, varMetadata, volcanoAccessor, activeSelection, isHovered, setMode } = this.props;
     const { popoverOpen } = this.state;
     const isColorBy = `${group}::${geneset}` === colorAccessor;
-    // add trash function to the menu if setMode === "genesets"
+
     return (
       <div id={`genesetMenu-${group}@@${geneset}`} style={{display: "flex", columnGap: 20, justifyContent: "space-between", paddingRight: 30}}>         
             <Tooltip2
@@ -77,7 +77,7 @@ class GenesetMenus extends React.PureComponent {
               position={Position.BOTTOM_RIGHT}
               hoverOpenDelay={globals.tooltipHoverOpenDelay}
             >
-              {(isHovered || popoverOpen) && <AnchorButton
+              {(isHovered || popoverOpen || isColorBy) && <AnchorButton
                 active={isColorBy}
                 intent={isColorBy ? "primary" : "none"}
                 style={{padding: 0, minHeight: 0, minWidth: 0}}

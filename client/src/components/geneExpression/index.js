@@ -248,7 +248,9 @@ class GeneExpression extends React.Component {
             />
           )
         } else {
-          for (const name in genesets[group]) {
+          const setnames = Object.keys(genesets[group]);
+          setnames.sort();
+          for (const name of setnames) {
             const set = (
               <GeneSet
                 key={name}
