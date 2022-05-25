@@ -1,3 +1,5 @@
+import * as globals from "../globals";
+
 /*
 we have a UI heuristic to pick the default layout, based on assumptions
 about commonly used names.  Preferentially, pick in the following order:
@@ -32,7 +34,7 @@ const LayoutChoice = (
     current: undefined, // name of the current layout, eg, 'umap'
     currentDimNames: [], // dimension name
     layoutNameBeingEdited: "",
-    isEditingLayoutName: false,
+    isEditingLayoutName: false
   },
   action,
   nextSharedState
@@ -76,7 +78,7 @@ const LayoutChoice = (
       available = available.filter(e => e !== action.embName);
       return {
         ...state,
-        available,
+        available
       };
     }
     case "reembed: rename reembedding": {

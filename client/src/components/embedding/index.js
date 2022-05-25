@@ -35,7 +35,7 @@ import LabelInput from "../labelInput";
 class Embedding extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {newLayoutText: "", isEmbeddingExpanded: {"": true}};
+    this.state = {newLayoutText: "", isEmbeddingExpanded: {"": true}, embeddingChoiceOpen: false};
   }
   
   handleChangeOrSelect = (name) => {
@@ -126,7 +126,8 @@ class Embedding extends React.Component {
     const { isEmbeddingExpanded } = this.state
     if (layoutChoice.available.includes(e.currentTarget.value) && !layoutChoice.isEditingLayoutName) {
       this.setState({
-        isEmbeddingExpanded: {...isEmbeddingExpanded, [e.currentTarget.value]: true}
+        isEmbeddingExpanded: {...isEmbeddingExpanded, [e.currentTarget.value]: true},
+        embeddingChoiceOpen: false
       })
       dispatch(actions.reembedParamsObsmFetch(e.currentTarget.value));
       dispatch(actions.layoutChoiceAction(e.currentTarget.value));
@@ -156,7 +157,7 @@ class Embedding extends React.Component {
   }
   render() {
     const { layoutChoice, schema, crossfilter, cOrG } = this.props;
-    const { newLayoutText, isEmbeddingExpanded } = this.state;
+    const { newLayoutText, isEmbeddingExpanded, embeddingChoiceOpen } = this.state;
     const { annoMatrix } = crossfilter;
     return (
       <ButtonGroup
@@ -169,6 +170,7 @@ class Embedding extends React.Component {
         }}
       >
         <Popover
+          isOpen={embeddingChoiceOpen}
           target={
             <Tooltip
               content="Select embedding for visualization"
@@ -184,6 +186,7 @@ class Embedding extends React.Component {
                 style={{
                   cursor: "pointer",
                 }}
+                onClick = {()=>this.setState({embeddingChoiceOpen: !embeddingChoiceOpen})}
               >
                 {layoutChoice?.current.split(";;").at(-1)}: {crossfilter.countSelected()} out of{" "}
                 {crossfilter.size()} {cOrG}s

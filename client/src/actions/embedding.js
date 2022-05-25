@@ -6,7 +6,7 @@ import { AnnoMatrixObsCrossfilter } from "../annoMatrix";
 import { _setEmbeddingSubset, _userSubsetAnnoMatrix } from "../util/stateManager/viewStackHelpers";
 import { API } from "../globals";
 import { resetSubsetAction } from "./viewStack";
-import _ from "lodash";
+import * as globals from "../globals";
 
 export async function _switchEmbedding(
   prevAnnoMatrix,
@@ -169,7 +169,6 @@ export const layoutChoiceAction = (newLayoutChoice) => async (
     obsCrossfilter: prevCrossfilter,
     layoutChoice,
   } = getState();  
-  
   dispatch({
     type: "reset subset"
   })  
@@ -189,5 +188,4 @@ export const layoutChoiceAction = (newLayoutChoice) => async (
     annoMatrix,
   });
   dispatch({type: "refresh var metadata"}) 
-   
 };

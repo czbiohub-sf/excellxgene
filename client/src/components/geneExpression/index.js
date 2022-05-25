@@ -83,7 +83,114 @@ class GeneExpression extends React.Component {
     dispatch({type: "track set", group: newName, set: null})   
     this.disableEditNameMode()
   }
+  /*
+    renderGeneSets2 = (isGenes=false) => {
+    if (isGenes) {
+      const { allGenes, rightWidth, cxgMode } = this.props;
+      const name = cxgMode==="OBS" ? `All genes` : `All cells`
+      return (
+        <GeneSet
+          key={name}
+          setGenes={allGenes}
+          displayLabel={name}
+          setName={name}
+          allGenes
+          rightWidth={rightWidth}
+          setMode="genes"
+          genesetDescription={""}
+        />
+      );  
+    }
+    
+    const { dispatch, genesets, rightWidth, genesetOrder } = this.props;    
+    const els = [];
+    const els2 = [];
 
+    const groupnames = genesetOrder?.["-1"] ?? [];
+    for (const name of groupnames) {
+      const group = name.split("@@").at(0);
+      const set = name.split("@@").at(1);
+      if (group === "") {
+        if (set !== "Gene search results"){
+          els.push(
+            <GeneSet
+              key={set}
+              setGenes={genesets[""][set]}
+              displayLabel={set}
+              setName={set}
+              genesetDescription={""}
+              rightWidth={rightWidth}
+              setMode="genes"
+            />
+          );   
+        }         
+      } else {
+        if (Object.keys(genesets[group]).length===0) {
+          els.push(
+            <GeneSet
+              key={group}
+              setName={group}
+              genesetDescription={group}
+              rightWidth={rightWidth}
+              setMode="unset"
+              deleteGroup={() => {
+                dispatch(actions.genesetDeleteGroup(group))
+              }}
+            />
+          )
+        } else {
+          const sets = [];
+          for (const n in genesetOrder[group]) {
+            sets.push(
+              <GeneSet
+                key={n}
+                setGenes={genesets[group][n]}
+                displayLabel={n}
+                setName={n}
+                genesetDescription={group}
+                rightWidth={rightWidth}
+                setMode="genes"
+              />
+            );
+          }
+          if (group.includes("//;;//")) {
+            els2.push(
+              <GeneSet
+                key={group}
+                setName={group}
+                genesetDescription={group}
+                set={sets}
+                rightWidth={rightWidth}
+                setMode="genesets"
+                noPaddedDropzones
+                deleteGroup={() => {
+                  dispatch(actions.genesetDeleteGroup(group))
+                  dispatch(actions.requestDiffDelete(group))
+                }}
+              />
+            ); 
+          } else {
+            els.push(
+              <GeneSet
+                key={group}
+                setName={group}
+                genesetDescription={group}
+                set={sets[group]}
+                rightWidth={rightWidth}
+                setMode="genesets"
+                deleteGroup={() => {
+                  dispatch(actions.genesetDeleteGroup(group))
+                }}
+              />
+            );
+          }         
+        }
+      }
+
+    }
+    return [els, els2];      
+  };
+  */
   renderGeneSets = (isGenes=false) => {
     if (isGenes) {
       const { allGenes, rightWidth, cxgMode } = this.props;
@@ -177,6 +284,7 @@ class GeneExpression extends React.Component {
                 set={sets2[group]}
                 rightWidth={rightWidth}
                 setMode="genesets"
+                noPaddedDropzones
                 deleteGroup={() => {
                   dispatch(actions.genesetDeleteGroup(group))
                   dispatch(actions.requestDiffDelete(group))

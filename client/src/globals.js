@@ -76,6 +76,10 @@ export const indentPaddingGeneset = 20;
 export const categoryLabelDisplayStringLongLength = 27;
 export const categoryLabelDisplayStringShortLength = 11;
 export const categoryDisplayStringMaxLength = 33;
+export const geneSetPadderHeight = 2;
+
+export const numInterpolationSteps = 50;
+export const animationFPS = 3*numInterpolationSteps;
 
 export const maxUserDefinedGenes = 25;
 export const maxGenes = 100;

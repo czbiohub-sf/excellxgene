@@ -1,7 +1,6 @@
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { Classes } from "@blueprintjs/core";
 import Container from "./framework/container";
 import Layout from "./framework/layout";
 import LeftSideBar from "./leftSidebar";
@@ -20,8 +19,7 @@ import actions from "../actions";
   loading: state.controls.loading,
   error: state.controls.error,
   graphRenderCounter: state.controls.graphRenderCounter,
-  layoutChoice: state.layoutChoice,
-  refresher: state.controls.refresher
+  sankey: state.layoutChoice.sankey,
 }))
 class App extends React.Component {
   componentDidMount() {
@@ -32,13 +30,7 @@ class App extends React.Component {
     dispatch(actions.doInitialDataLoad(window.location.search))
     this.forceUpdate();
   }
-  componentDidUpdate(prevProps) {
-    const { dispatch, refresher } = this.props
-    if (refresher !== prevProps.refresher){
-      dispatch(actions.doInitialDataLoad(window.location.search));
-      window.location.reload(true)
-    }
-  }
+
   _onURLChanged() {
     const { dispatch } = this.props;
 
@@ -46,8 +38,9 @@ class App extends React.Component {
   }
 
   render() {
-    const { dispatch, layoutChoice } = this.props;
+    const { dispatch, sankey } = this.props;
     const { loading, error, graphRenderCounter } = this.props;
+
     return (
       <Container>        
         <Helmet title="cellxgene" />
@@ -88,7 +81,7 @@ class App extends React.Component {
                 <Autosave />
                 <TermsOfServicePrompt />
                 <Legend viewportRef={viewportRef} />
-                {layoutChoice.sankey &&                 <div style={{
+                {sankey && <div style={{
                     zIndex: 0,
                     gridArea: "top / graph-start / bottom / graph-end",
                     position: "relative",
@@ -99,10 +92,10 @@ class App extends React.Component {
                     zIndex: 0,
                     gridArea: "top / graph-start / bottom / graph-end",
                     position: "relative",
-                    height: layoutChoice.sankey ? "0px" : "inherit",
+                    height: sankey ? "0px" : "inherit",
                     overflowX: "auto"
                   }}>
-                <Graph sankeyPlotMode={layoutChoice.sankey} key={graphRenderCounter} graphWidth={viewportRef?.clientWidth} viewportRef={viewportRef} />
+                <Graph sankeyPlotMode={sankey} key={graphRenderCounter} graphWidth={viewportRef?.clientWidth} viewportRef={viewportRef} />
                 </div>
               </>
             )}}

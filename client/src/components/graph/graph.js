@@ -11,7 +11,7 @@ import setupSVGandBrushElements from "./setupSVGandBrush";
 import _camera from "../../util/camera";
 import _drawPoints from "./drawPointsRegl";
 import { Html2Canvas } from "../../html2canvasPruned";
-
+import _ from "lodash";
 import {
   createColorTable,
   createColorQuery,
@@ -30,6 +30,40 @@ import {
   flagHalfSelected,
   flagInvisible
 } from "../../util/glHelpers";
+
+async function animate(asyncProps, context) {
+  //const ti =(new Date()).getTime();
+  const newPos = [...asyncProps.positions];
+  const oldPos = context.cachedAsyncProps.positions;
+  const oldIndices = context.cachedAsyncProps.layoutDf?.rowIndex?.rindex ?? null;
+  const newIndices = asyncProps.layoutDf?.rowIndex?.rindex ?? null;
+  for (let timesRun = 1; timesRun <= globals.numInterpolationSteps; timesRun +=1) {
+    if (oldIndices && !newIndices) {
+      for (let i = 0; i < oldIndices.length; i +=1 ) {
+        const x = 2*oldIndices[i]
+        const y = 2*oldIndices[i]+1
+        asyncProps.positions[x] = oldPos[2*i] + (newPos[x] - oldPos[2*i]) * timesRun / globals.numInterpolationSteps
+        asyncProps.positions[y] = oldPos[2*i+1] + (newPos[y] - oldPos[2*i+1]) * timesRun / globals.numInterpolationSteps
+      }
+    } else if (!oldIndices && newIndices) {
+      for (let i = 0; i < newIndices.length; i +=1 ) {
+        const x = 2*newIndices[i]
+        const y = 2*newIndices[i]+1
+        asyncProps.positions[2*i] = oldPos[x] + (newPos[2*i] - oldPos[x]) * timesRun / globals.numInterpolationSteps
+        asyncProps.positions[2*i+1] = oldPos[y] + (newPos[2*i+1] - oldPos[y]) * timesRun / globals.numInterpolationSteps
+      }                      
+    } else {
+      for (let i = 0; i < oldPos.length; i +=1 ) {
+        asyncProps.positions[i] = oldPos[i] + (newPos[i] - oldPos[i]) * timesRun / globals.numInterpolationSteps
+      }                      
+    }
+    context.updateReglAndRender(asyncProps, context.cachedAsyncProps);    
+    await new Promise(r => setTimeout(r, 1000 / globals.animationFPS ));
+  } 
+  //const tf =(new Date()).getTime();
+  //console.log((tf-ti)/1000)
+  context.cachedAsyncProps = asyncProps;
+}
 
 function withinPolygon(polygon, x, y) {
   const n = polygon.length;
@@ -158,9 +192,6 @@ class Graph extends React.Component {
   myRef = React.createRef();
 
   computePointPositions = memoize((X, Y, modelTF) => {
-    /*
-    compute the model coordinate for each point
-    */
     const positions = new Float32Array(2 * X.length);
     for (let i = 0, len = X.length; i < len; i += 1) {
       const p = vec2.fromValues(X[i], Y[i]);
@@ -269,6 +300,7 @@ class Graph extends React.Component {
 
   constructor(props) {
     super(props);
+    this.init=false;
     const viewport = this.getViewportDimensions();
     this.reglCanvas = null;
     this.cachedAsyncProps = null;
@@ -643,7 +675,7 @@ class Graph extends React.Component {
   };
 
   getViewportDimensions = () => {
-    const { viewportRef, graphWidth } = this.props;
+    const { viewportRef } = this.props;
     return {
       height: viewportRef.clientHeight,
       width: viewportRef.clientWidth,
@@ -719,6 +751,7 @@ class Graph extends React.Component {
       jointEmbeddingFlag
     } = props.watchProps;
     if (!(modifyingLayouts)){
+      this.init = true;
       const { modelTF } = this.state;
       const [layoutDf, layoutDf2, colorDf, pointDilationDf] = await this.fetchData(
         annoMatrix,
@@ -726,7 +759,6 @@ class Graph extends React.Component {
         colorsProp,
         pointDilation
       );
-      
       const doJointLayout = !(layoutDf2.__columns[0][0]===0.5 && layoutDf2.__columns[0][1]===0.5 &&
           layoutDf2.__columns[1][0]===0.5 && layoutDf2.__columns[1][1]===0.5);
 
@@ -735,8 +767,10 @@ class Graph extends React.Component {
       }
       
       const { currentDimNames } = layoutChoice;
+      
       const X = layoutDf.col(currentDimNames[0]).asArray();
       const Y = layoutDf.col(currentDimNames[1]).asArray();
+
       let positions = this.computePointPositions(X, Y, modelTF);
       const colorTable = this.updateColorTable(colorsProp, colorDf);
       let colors = this.computePointColors(colorTable.rgb, annoMatrix.nObs);
@@ -816,7 +850,7 @@ class Graph extends React.Component {
       this.setState((state) => {
         return { ...state, colorState: { colors, colorDf, colorTable }, nPoints: nPoints };
       });
-
+      this.init = false;
       return {
         positions,
         colors,
@@ -828,7 +862,8 @@ class Graph extends React.Component {
         chromeKeyCategorical,
         chromeKeyContinuous,
         jointEmbeddingFlag,
-        layoutChoice
+        layoutChoice,
+        layoutDf
       };
     } else {
       return this.cachedAsyncProps;
@@ -1053,9 +1088,22 @@ class Graph extends React.Component {
     );
   });
 
+  shouldComponentUpdate = (nextProps, nextState) => {
+    const currprops = this.props;
+    const newprops = nextProps;
+    return (!shallowEqual(currprops,newprops) || 
+            this.state.viewport !== nextState.viewport || 
+            this.state.renderedMetadata !== nextState.renderedMetadata ||
+            this.state.pointX !== nextState.pointX ||
+            this.state.pointY !== nextState.pointY ||
+            this.state.lidarCrossfilter !== nextState.lidarCrossfilter ||
+            this.state.lidarRadius !== nextState.lidarRadius ||
+            this.state.lidarFocused !== nextState.lidarFocused
+          );
+  }
+
   updateReglAndRender(asyncProps, prevAsyncProps) {
     const { positions, colors, flags, height, width, screenCap, pointScaler, chromeKeyCategorical, chromeKeyContinuous, jointEmbeddingFlag } = asyncProps;
-    this.cachedAsyncProps = asyncProps;
 
     const { pointBuffer, colorBuffer, flagBuffer } = this.state;
     let needToRenderCanvas = false;
@@ -1090,7 +1138,9 @@ class Graph extends React.Component {
     if (jointEmbeddingFlag !== prevAsyncProps?.jointEmbeddingFlag) {
       needToRenderCanvas = true;
     }        
-    if (needToRenderCanvas) this.renderCanvas();
+    if (needToRenderCanvas){
+      this.renderCanvas();
+    }
   }
 
   updateColorTable(colors, colorDf) {
@@ -1525,9 +1575,16 @@ class Graph extends React.Component {
           </Async.Rejected>
           <Async.Fulfilled>
             {(asyncProps) => {
+              
               if (regl && !shallowEqual(asyncProps, this.cachedAsyncProps)) {
-                this.updateReglAndRender(asyncProps, this.cachedAsyncProps);          
+                if (this.cachedAsyncProps && this.cachedAsyncProps?.layoutChoice?.current !== asyncProps.layoutChoice.current) {
+                  animate(asyncProps, this);
+                } else {
+                  this.updateReglAndRender(asyncProps, this.cachedAsyncProps);          
+                  this.cachedAsyncProps = asyncProps;
+                }
               }
+              
               return null;
             }}
           </Async.Fulfilled>
