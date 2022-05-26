@@ -1,6 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import { Tooltip2, Popover2 } from "@blueprintjs/popover2";
+import { Tooltip2 } from "@blueprintjs/popover2";
 
 import {
   Button,
@@ -15,7 +15,6 @@ import {
 
 import * as globals from "../../../globals";
 import actions from "../../../actions";
-import AddGeneToGenesetDialogue from "./addGeneToGenesetDialogue";
 
 @connect((state) => {
   return {
@@ -66,7 +65,7 @@ class GenesetMenus extends React.PureComponent {
 
   render() {
     const { group, geneset, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros, writeSort, disableWriteSort, isOpen,
-           diffExp, volcanoClick, selectCellsFromGroup, sortIcon, sortDirection, onSortGenes, varMetadata, volcanoAccessor, activeSelection, isHovered, setMode } = this.props;
+           diffExp, volcanoClick, selectCellsFromGroup, sortIcon, sortDirection, onSortGenes, varMetadata, volcanoAccessor, activeSelection, isHovered } = this.props;
     const { popoverOpen } = this.state;
     const isColorBy = `${group}::${geneset}` === colorAccessor;
 

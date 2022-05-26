@@ -2,7 +2,8 @@ import React from "react";
 import { connect } from "react-redux";
 import { AnchorButton, Tooltip, Icon } from "@blueprintjs/core";
 import LabelInput from "../labelInput";
-import { FaChevronRight, FaChevronDown } from "react-icons/fa";
+import { FaRegFolder, FaRegFolderOpen } from "react-icons/fa";
+import { BiChevronRightCircle, BiChevronDownCircle } from "react-icons/bi";
 import actions from "../../actions";
 import Gene from "./gene";
 import * as globals from "../../globals";
@@ -25,14 +26,15 @@ import styles from "./gene.css"
     cxgMode: state.controls.cxgMode,
     geneSelection: state.geneSelection.genes,
     currentlyDragged: state.controls.currentlyDragged,
-    genesets: state.genesets.genesets
+    genesets: state.genesets.genesets,
+    justCreatedGeneset: state.controls.justCreatedGeneset
   };
 })
 class GeneSet extends React.Component {
   
   constructor(props) {
     super(props);
-    const { setGenes, setName } = props;
+    const { setGenes, setName, setMode } = props;
     this.counter = 0;
     this.counterPadder = 0;
     this.state = {
@@ -43,12 +45,11 @@ class GeneSet extends React.Component {
       queryGene: "",
       sortDirection: null,
       geneMetadatas: null,
-      isGensetFolderOpen: false,
+      isGensetFolderOpen: setMode === "unset",
       isHovered: false,
       setMode: props.setMode,
       trashShown: false,
       contentEditable: false,
-      mouseLeft: false,
     };
   }
   updateGeneMetadatas = () => {
@@ -71,7 +72,37 @@ class GeneSet extends React.Component {
     }
   }
   componentDidMount() {
-    const { varMetadata } = this.props;
+    const { dispatch, setMode, varMetadata, justCreatedGeneset, genesetDescription } = this.props;
+    if (justCreatedGeneset && setMode === "unset") {
+      this.setState({contentEditable: true})
+      const el = document.getElementById(`${genesetDescription}-editable-span`)                        
+      el.style.outlineWidth = "2px";
+      el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
+      el.style.outlineStyle = "auto";
+      el.style.outlineOffset = "2px";                       
+      el.onclick = function() {
+        window.setTimeout(function() {
+            var sel, range;
+            if (window.getSelection && document.createRange) {
+                range = document.createRange();
+                range.selectNodeContents(el);
+                sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            } else if (document.body.createTextRange) {
+                range = document.body.createTextRange();
+                range.moveToElementText(el);
+                range.select();
+            }
+        }, 1);
+      };                    
+      el.click();  
+      el.onclick = null;     
+      dispatch({type: "geneset just created", bool: false})
+    } else if (justCreatedGeneset) {
+      this.setState({isOpen: true, isGensetFolderOpen: true})
+      dispatch({type: "geneset just created", bool: false})
+    }
     if (varMetadata !== "") {
       this.updateGeneMetadatas()
     }
@@ -121,8 +152,9 @@ class GeneSet extends React.Component {
     this.setState({ isOpen: !isOpen });
   };
   onGenesetFolderClick = (e) => {
-    const { isGensetFolderOpen } = this.state;
-    this.setState({ isGensetFolderOpen: !isGensetFolderOpen });
+    const { isGensetFolderOpen, setMode } = this.state;
+    if (setMode !== "unset")
+      this.setState({ isGensetFolderOpen: !isGensetFolderOpen });
   };  
   onSortGenesReset = (sortD=false) => {
     const { setGenes } = this.props;
@@ -137,7 +169,7 @@ class GeneSet extends React.Component {
       sortDirection: sortD ? null : sortDirection    
     })
   }
-
+  
   onSortGenesDescending = (sortD=false) => {
     const { setGenes } = this.props;
     const { geneMetadatas, sortDirection } = this.state;
@@ -261,7 +293,7 @@ class GeneSet extends React.Component {
       genes = setGenesSorted;
       genesM = geneMetadatasSorted;
     }
-    return genes.slice(genePage*10,(genePage+1)*10).map((gene,i) => {
+    return genes?.slice(genePage*10,(genePage+1)*10).map((gene,i) => {
       let geneDescription;
       if (setGenesWithDescriptions) {
         const { geneDescription: x } = setGenesWithDescriptions.get(gene);
@@ -290,7 +322,7 @@ class GeneSet extends React.Component {
           parentGenes={genes}
         />
       );
-    });
+    }) ?? [];
   }
   onDragStart = (e) => {
     const { dispatch, genesetDescription, setName } = this.props;
@@ -309,10 +341,11 @@ class GeneSet extends React.Component {
   onDrop = (e) => {
     const { dispatch, genesets, genesetDescription, setName, geneSelection, setMode } = this.props;
     const el = document.getElementById(`${genesetDescription}@@${setName}-geneset`);
+    const setFolder = setMode === "genesets";
     dispatch({type: "currently dragging", dragged: null})  
     dispatch({type: "clear gene selection"})
 
-    this.setState({isGensetFolderOpen: true})
+    
     el.style.boxShadow= "none";
     const name = e.dataTransfer.getData("text");   
     const setgroup = name.split("@@").at(0)
@@ -325,7 +358,7 @@ class GeneSet extends React.Component {
         genesToAdd = [_gene,...genesToAdd];
       }         
       if (!name.includes("//;;//")) {
-        if (genesets[setgroup][setname].length === 1) {
+        if (genesets[setgroup][setname].length === 1 && !quickGenesDragging) {
           dispatch(actions.genesetDelete(setgroup, setname));          
         } else {
           dispatch(actions.genesetDeleteGenes(setgroup, setname, genesToAdd));          
@@ -344,10 +377,11 @@ class GeneSet extends React.Component {
         });
         dispatch(actions.genesetAddGenes("", setName, genesToAdd)); 
         dispatch(actions.genesetDeleteGroup(genesetDescription))
+        dispatch({type: "geneset just created", bool: true})
       } else {
         dispatch(actions.genesetAddGenes(genesetDescription, setName, genesToAdd));
       }
-      this.setState({setMode: "genes"})
+      this.setState({setMode: "genes", isOpen: true})
     } else if (!name.includes("@@@") && setMode !== "genes" ) {
       dispatch({
         type: "geneset: update",
@@ -364,8 +398,11 @@ class GeneSet extends React.Component {
       }      
       dispatch({type: "track set", group: genesetDescription, set: setname})       
       e.stopPropagation();  
-      this.setState({setMode: "genesets"})
+      this.setState({setMode: "genesets", isGensetFolderOpen: true})
       this.counter = 0;
+      if (setMode === "unset") {
+        dispatch({type: "geneset just created", bool: true})
+      }
     } 
     if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging) {
       dispatch(actions.genesetDeleteGroup(setgroup))
@@ -397,13 +434,12 @@ class GeneSet extends React.Component {
   }
   render() {
     const { dispatch, setName, setGenes, genesetDescription, deleteGroup,currentlyDragged, genesets,
-            displayLabel, varMetadata, allGenes, currentSelectionDEG, volcanoAccessor, cxgMode, noPaddedDropzones,
+            displayLabel, varMetadata, allGenes, currentSelectionDEG, volcanoAccessor, cxgMode,
             set } = this.props;
     const diffExp = genesetDescription?.includes("//;;//")
     const cOrG = cxgMode === "OBS" ? "genes" : "cells";
     const activeSelection = currentSelectionDEG === `${genesetDescription?.split('//;;//').at(0)}::${setName}`;    
-
-    const { isOpen, styleDrop, maxGenePage, mouseLeft, genePage, removeHistZeros, queryGene, sortDirection, isGensetFolderOpen, isHovered, setMode, trashShown, contentEditable } = this.state;
+    const { isOpen, styleDrop, maxGenePage, genePage, removeHistZeros, queryGene, sortDirection, isGensetFolderOpen, isHovered, setMode, trashShown, contentEditable } = this.state;
     const genesetNameLengthVisible = 150; /* this magic number determines how much of a long geneset name we see */
     const genesetIsEmpty = setGenes?.length === 0;
     let sortIcon = "expand-all";
@@ -419,7 +455,6 @@ class GeneSet extends React.Component {
     const setgene = currentlyDragged?.split("@@@")?.at(1)
     const genesetDragging = !currentlyDragged?.includes("@@@");
     const genesDragging = currentlyDragged?.includes("@@@");
-    const quickGenesDragging = setgroup === "" && setname === "Gene search results";
     const setFolder = setMode === "genesets";
     const enableDrop = (
       !currentlyDragged ||
@@ -430,12 +465,7 @@ class GeneSet extends React.Component {
 
 
     const enableDrag = !allGenes && !quickGenes && (setMode === "genes");
-    const enableParentDrop = (
-      !currentlyDragged ||
-      currentlyDragged && (setgroup !== "") && genesetDragging && !Object.keys(genesets[""]).includes(setname)
-    ) && !quickGenes && (setgroup !== setname);    
     return ( 
-      <>
       <div id={`${genesetDescription}@@${setName}-geneset`} draggable={enableDrag}
         onDragStart={this.onDragStart} 
         onDragOver={enableDrop ? this.onDragOver : null}
@@ -448,6 +478,10 @@ class GeneSet extends React.Component {
           this.counter+=1;            
           if (enableDrop) {     
             el.style.boxShadow= "inset 0px 0px 0px 2px #000";
+          }
+          if (genesetDescription !== "") {
+            const el2 = document.getElementById("ungrouped-genesets-wrapper")
+            el2.style.boxShadow="none"
           }
           e.preventDefault();
           e.stopPropagation();
@@ -463,9 +497,9 @@ class GeneSet extends React.Component {
 
         }}        
       >
-        {quickGenes && <div style={{padding: 2.5}} onDrop={enableDrop ? this.onDrop : null}>
+        {/*quickGenes && <div style={{padding: 2.5}} onDrop={enableDrop ? this.onDrop : null}>
             <span style={{color: "gray", fontStyle: "italic"}}> Gene search results...</span>
-          </div>}
+        </div>*/}
         {setMode === "genes" ? 
         (<div  style={{opacity: enableDrop ? 1.0 : 0.4, padding: 2.5}}
         >
@@ -474,7 +508,7 @@ class GeneSet extends React.Component {
             this.setState({isHovered: true})
           }} onMouseLeave={()=>{
             this.setState({isHovered: false})
-          }} style={{cursor: contentEditable || allGenes ? undefined : "move", display: "flex", paddingTop: 5, paddingBottom: 5}}>  
+          }} style={{display: "flex"}}>  
           <div
             style={{
               display: "flex",
@@ -498,47 +532,46 @@ class GeneSet extends React.Component {
           >
             <div style={{cursor: "pointer"}} onClick={this.onGenesetMenuClick}>
             {isOpen ? (
-              <FaChevronDown
+              <BiChevronDownCircle
                 data-testclass="geneset-expand-is-expanded"
-                style={{ fontSize: 10, marginRight: 5, marginLeft: genesetDescription !== "" ? globals.indentPaddingGeneset : 0 }}
+                style={{ fontSize: 13, marginTop: 1.8, marginRight: 5, marginLeft: genesetDescription !== "" ? globals.indentPaddingGeneset : 0 }}
               />
             ) : (
-              <FaChevronRight
+              <BiChevronRightCircle
                 data-testclass="geneset-expand-is-not-expanded"
-                style={{ fontSize: 10, marginRight: 5, marginLeft: genesetDescription !== "" ? globals.indentPaddingGeneset : 0 }}
+                style={{ fontSize: 13, marginTop: 1.8, marginRight: 5, marginLeft: genesetDescription !== "" ? globals.indentPaddingGeneset : 0 }}
               />
             )}
             </div>
 
             <div
-                onMouseOver={()=>{
+                onDoubleClick={(e)=>{
                   if (!diffExp && !allGenes) {
-                    const el = document.getElementById(`${genesetDescription}@@${setName}-${displayLabel}-editable-set-span`)
-                    el.style.cursor="text";
-                    this.setState({mouseLeft: false})   
-                  }                 
-                }}                  
-                onMouseLeave={()=>{
-                  if (!diffExp && !allGenes) {
-                    const el = document.getElementById(`${genesetDescription}@@${setName}-${displayLabel}-editable-set-span`)                             
-                    if (!contentEditable || document.activeElement.children[0] !== el) {
-                      el.style.outline = "none";   
-                      el.style.cursor = undefined;   
-                      this.setState({contentEditable: false})
-                    }
-                    this.setState({mouseLeft: true})
-                  }
-                }}
-                onClick={(e)=>{
-                  if (!diffExp && !allGenes) {
-                    if (contentEditable) {
-                      const el = document.getElementById(`${genesetDescription}@@${setName}-${displayLabel}-editable-set-span`)                             
-                      el.style.outlineWidth = "2px";
-                      el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
-                      el.style.outlineStyle = "auto";
-                      el.style.outlineOffset = "2px";                       
-                    }
                     this.setState({contentEditable: true})
+                  
+                    const el = document.getElementById(`${genesetDescription}@@${setName}-${displayLabel}-editable-set-span`)                             
+                    el.style.outlineWidth = "2px";
+                    el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
+                    el.style.outlineStyle = "auto";
+                    el.style.outlineOffset = "2px";                       
+                    el.onclick = function() {
+                      window.setTimeout(function() {
+                          var sel, range;
+                          if (window.getSelection && document.createRange) {
+                              range = document.createRange();
+                              range.selectNodeContents(el);
+                              sel = window.getSelection();
+                              sel.removeAllRanges();
+                              sel.addRange(range);
+                          } else if (document.body.createTextRange) {
+                              range = document.body.createTextRange();
+                              range.moveToElementText(el);
+                              range.select();
+                          }
+                      }, 1);
+                    };                    
+                    el.click();  
+                    el.onclick = null;     
                   }
                 }}
                 contentEditable={contentEditable}
@@ -546,9 +579,7 @@ class GeneSet extends React.Component {
                 onBlur={()=>{
                   if (!diffExp && !allGenes) {
                     const el = document.getElementById(`${genesetDescription}@@${setName}-${displayLabel}-editable-set-span`)          
-                    if (mouseLeft) {
-                      el.style.outline = "none";                    
-                    }
+                    el.style.outline = "none";                    
                     
                     this.setState({contentEditable: false})
 
@@ -688,7 +719,7 @@ class GeneSet extends React.Component {
           />
         </div>
         </div>) :           
-        <div className={styleDrop ? styles.droppable : undefined} style={{paddingTop: 5, paddingBottom: 5}}>
+        <div className={styleDrop ? styles.droppable : undefined} style={{padding: 2.5}}>
           <div onMouseOver={()=>this.setState({trashShown: true})}
         onMouseLeave={()=>this.setState({trashShown: false})} style={{display: "flex", flexDirection: "row", columnGap: 30}}>
             <span
@@ -702,51 +733,51 @@ class GeneSet extends React.Component {
                   opacity: enableDrop ? 1.0 : 0.4
                 }}
               >
-                <div onClick={this.onGenesetFolderClick} style={{cursor: "pointer"}}>
+                <div onClick={this.onGenesetFolderClick} style={{cursor: setMode !== "unset" ? "pointer" : null}}>
                 {isGensetFolderOpen ? (
-                  <FaChevronDown
+                  <FaRegFolderOpen
                     data-testclass="geneset-folder-expand-is-expanded"
-                    style={{ fontSize: 10, marginRight: 5}}
+                    style={{ fontSize: 12, marginRight: 5}}
                   />
                 ) : (
-                  <FaChevronRight
+                  <FaRegFolder
                     data-testclass="geneset-folder-expand-is-not-expanded"
-                    style={{ fontSize: 10, marginRight: 5}}
+                    style={{ fontSize: 12, marginRight: 5}}
                   />
                 )}
                 </div>
                 <div
-                  onMouseOver={()=>{
-                    const el = document.getElementById(`${setName}-editable-span`)
-                    el.style.cursor = "text";
-                    this.setState({mouseLeft: false})                    
-                  }}                  
-                  onMouseLeave={()=>{
-                    const el = document.getElementById(`${setName}-editable-span`)                               
-                    if (!contentEditable || document.activeElement.children[0] !== el) {
-                      el.style.outline = "none";   
-                      el.style.cursor = undefined;
-                      this.setState({contentEditable: false})
-                    }
-                    this.setState({mouseLeft: true})
-                  }}
-                  onClick={(e)=>{
-                    if (contentEditable) {
-                      const el = document.getElementById(`${setName}-editable-span`)                      
-                      el.style.outlineWidth = "2px";
-                      el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
-                      el.style.outlineStyle = "auto";
-                      el.style.outlineOffset = "2px"; 
-                    }
+                  onDoubleClick={(e)=>{
                     this.setState({contentEditable: true})
+                    const el = document.getElementById(`${genesetDescription}-editable-span`)                        
+                    el.style.outlineWidth = "2px";
+                    el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
+                    el.style.outlineStyle = "auto";
+                    el.style.outlineOffset = "2px";                       
+                    el.onclick = function() {
+                      window.setTimeout(function() {
+                          var sel, range;
+                          if (window.getSelection && document.createRange) {
+                              range = document.createRange();
+                              range.selectNodeContents(el);
+                              sel = window.getSelection();
+                              sel.removeAllRanges();
+                              sel.addRange(range);
+                          } else if (document.body.createTextRange) {
+                              range = document.body.createTextRange();
+                              range.moveToElementText(el);
+                              range.select();
+                          }
+                      }, 1);
+                    };                    
+                    el.click();  
+                    el.onclick = null;                  
                   }}
                   contentEditable={contentEditable}
                   suppressContentEditableWarning
                   onBlur={()=>{
-                    const el = document.getElementById(`${setName}-editable-span`)            
-                    if (mouseLeft) {
-                      el.style.outline = "none";                    
-                    }
+                    const el = document.getElementById(`${genesetDescription}-editable-span`)            
+                    el.style.outline = "none";                    
                     
                     this.setState({contentEditable: false})
                     const x = diffExp ? "//;;//" : "";
@@ -769,7 +800,7 @@ class GeneSet extends React.Component {
                     maxWidth: globals.leftSidebarWidth - genesetNameLengthVisible
                   }}
                 >
-                  <span id={`${setName}-editable-span`}>{setName ? setName.split('//;;//').at(0) : ""}</span>
+                  <span id={`${genesetDescription}-editable-span`}>{setName ? setName.split('//;;//').at(0) : ""}</span>
                 </div>
             </span> 
             {trashShown && <div style={{marginTop: -2}}>
@@ -797,76 +828,7 @@ class GeneSet extends React.Component {
             {isGensetFolderOpen && set}
           </div>
           }
-      </div>
-      <div 
-      id={`${genesetDescription}@@${setName}-geneset-padder`}
-      onDragOver={enableParentDrop && !noPaddedDropzones ? (e)=>{
-        this.onDragOver(e);
-      } : null}
-      onDragEnter={enableParentDrop && !noPaddedDropzones ? (e)=>{
-        const el = document.getElementById(`${genesetDescription}@@${setName}-geneset-padder`)   
-        this.counterPadder+=1;            
-        if (enableParentDrop) {     
-          el.style.boxShadow= "inset 0px 0px 0px 2px #000";
-        }
-        e.preventDefault();
-        e.stopPropagation();
-      } : null}
-      onDragLeave={enableParentDrop && !noPaddedDropzones ? (e)=>{
-        const el = document.getElementById(`${genesetDescription}@@${setName}-geneset-padder`)
-        this.counterPadder-=1;
-        if (this.counterPadder === 0)
-          el.style.boxShadow="none";
-        e.preventDefault();
-        e.stopPropagation();
-
-      }: null}
-      onDrop={enableParentDrop && !noPaddedDropzones ? (e)=>{
-        const el = document.getElementById(`${genesetDescription}@@${setName}-geneset-padder`)
-        el.style.boxShadow="none";
-        const { dispatch } = this.props;
-        this.setState({isDragging: false})
-        this.counterPadder = 0;
-        dispatch({type: "clear gene selection"})
-        dispatch({type: "currently dragging", dragged: null})  
-    
-        const name = e.dataTransfer.getData("text");   
-        const setgroup = name.split("@@").at(0)
-        const setname = name.split("@@").at(1)  
-      
-        dispatch({
-          type: "geneset: update",
-          genesetDescription: setgroup,
-          genesetName: setname,
-          update: {
-            genesetName: setname,
-            genesetDescription: "",
-          },
-          isDragging: true
-        });
-        if (!name.includes("//;;//")) {
-          dispatch(actions.genesetDelete(setgroup, setname));
-        }                           
-        dispatch({type: "track set", group: "", set: setname})   
-        e.stopPropagation();      
-        if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging) {
-          dispatch(actions.genesetDeleteGroup(setgroup))
-        }           
-
-        /*
-        const desc =  (setgroup === "" || setgroup === setname) ? "-1" : genesetDescription;
-        const index = genesetOrder[desc].indexOf(`${genesetDescription}@@${setName}`);
-        const newOrder = genesetOrder[desc].filter(i=>i!==name);
-        newOrder.splice(index+1,0,name);
-        genesetOrder[desc] = newOrder;
-        dispatch({type: "set geneset ordering", genesetOrder}) 
-        */       
-      }: null}
-      style={{height: globals.geneSetPadderHeight
-      }}
-            
-    />
-    </>      
+      </div> 
     );
   }
 }

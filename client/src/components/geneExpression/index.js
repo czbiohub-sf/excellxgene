@@ -7,9 +7,23 @@ import GeneSet from "./geneSet";
 import { GenesetHotkeys } from "../hotkeys";
 import actions from "../../actions";
 import * as globals from "../../globals";
-import AnnoDialog from "../annoDialog";
-import LabelInput from "../labelInput";
 import QuickGene from "./quickGene";
+import styles from "./gene.css"
+
+const Chevron = ({onClick, isOpen, text}) => {
+  return (
+      <div className={styles.unselectable}
+      style={{
+        display: "flex",
+        cursor: "pointer",
+        margin: "0 auto",
+        flexDirection: "row",
+      }}
+      onClick={onClick}>
+        <b style={{fontSize: 16, color: isOpen ? "black" : "gray"}}>{text}</b>
+      </div>
+  );
+}
 
 @connect((state) => {
   let var_keys = state.annoMatrix?.schema?.annotations?.varByName ?? {};
@@ -29,17 +43,24 @@ import QuickGene from "./quickGene";
     reembedParams: state.reembedParameters,
     userLoggedIn: state.controls.userInfo ? true : false,
     cxgMode: state.controls.cxgMode,
+    currentlyDragged: state.controls.currentlyDragged
   };
 })
 class GeneExpression extends React.Component {
   constructor(props){
     super(props);
+    this.counterPadder = 0;
     this.state={
       geneSetsExpanded: true,
       isEditingSetName: false,
       newNameText: "",
       nameBeingEdited: "",
       varMetadata: "",
+      unsetShown: true,
+      nogroupShown: true,
+      diffShown: true,
+      genesetShown: true,
+      quickShown: true
     };
   }
 
@@ -83,8 +104,8 @@ class GeneExpression extends React.Component {
     dispatch({type: "track set", group: newName, set: null})   
     this.disableEditNameMode()
   }
-  /*
-    renderGeneSets2 = (isGenes=false) => {
+
+  renderGeneSets = (isGenes=false) => {
     if (isGenes) {
       const { allGenes, rightWidth, cxgMode } = this.props;
       const name = cxgMode==="OBS" ? `All genes` : `All cells`
@@ -102,31 +123,18 @@ class GeneExpression extends React.Component {
       );  
     }
     
-    const { dispatch, genesets, rightWidth, genesetOrder } = this.props;    
+    const { dispatch, genesets, rightWidth } = this.props;    
+    const nogroups = [];
     const els = [];
     const els2 = [];
+    const unsets = [];
 
-    const groupnames = genesetOrder?.["-1"] ?? [];
-    for (const name of groupnames) {
-      const group = name.split("@@").at(0);
-      const set = name.split("@@").at(1);
-      if (group === "") {
-        if (set !== "Gene search results"){
-          els.push(
-            <GeneSet
-              key={set}
-              setGenes={genesets[""][set]}
-              displayLabel={set}
-              setName={set}
-              genesetDescription={""}
-              rightWidth={rightWidth}
-              setMode="genes"
-            />
-          );   
-        }         
-      } else {
+    const groupnames = Object.keys(genesets);
+    groupnames.sort();
+    for (const group of groupnames) {
+      if (group !== "") {
         if (Object.keys(genesets[group]).length===0) {
-          els.push(
+          unsets.push(
             <GeneSet
               key={group}
               setName={group}
@@ -137,16 +145,18 @@ class GeneExpression extends React.Component {
                 dispatch(actions.genesetDeleteGroup(group))
               }}
             />
-          )
+          );
         } else {
+          const setnames = Object.keys(genesets[group]);
+          setnames.sort();
           const sets = [];
-          for (const n in genesetOrder[group]) {
+          for (const name of setnames) {
             sets.push(
               <GeneSet
-                key={n}
-                setGenes={genesets[group][n]}
-                displayLabel={n}
-                setName={n}
+                key={name}
+                setGenes={genesets[group][name]}
+                displayLabel={name}
+                setName={name}
                 genesetDescription={group}
                 rightWidth={rightWidth}
                 setMode="genes"
@@ -175,7 +185,7 @@ class GeneExpression extends React.Component {
                 key={group}
                 setName={group}
                 genesetDescription={group}
-                set={sets[group]}
+                set={sets}
                 rightWidth={rightWidth}
                 setMode="genesets"
                 deleteGroup={() => {
@@ -185,147 +195,27 @@ class GeneExpression extends React.Component {
             );
           }         
         }
-      }
-
-    }
-    return [els, els2];      
-  };
-  */
-  renderGeneSets = (isGenes=false) => {
-    if (isGenes) {
-      const { allGenes, rightWidth, cxgMode } = this.props;
-      const name = cxgMode==="OBS" ? `All genes` : `All cells`
-      return (
-        <GeneSet
-          key={name}
-          setGenes={allGenes}
-          displayLabel={name}
-          setName={name}
-          allGenes
-          rightWidth={rightWidth}
-          setMode="genes"
-          genesetDescription={""}
-        />
-      );  
-    }
-    
-    const { dispatch, genesets, rightWidth } = this.props;    
-    const nogroups = [];
-    if ("" in genesets) {
-      for (const name in genesets[""]) {
-        if (name !== "Gene search results"){
-          nogroups.push(
-            <GeneSet
-              key={name}
-              setGenes={genesets[""][name]}
-              displayLabel={name}
-              setName={name}
-              genesetDescription={""}
-              rightWidth={rightWidth}
-              setMode="genes"
-            />
-          );   
-        }     
-      }
-    }
-    const sets = {};
-    const sets2 = {};
-    const groupnames = Object.keys(genesets);
-    groupnames.sort();
-    for (const group of groupnames) {
-      if (group !== "") {
-        if (Object.keys(genesets[group]).length===0) {
-          sets[group] = (
-            <GeneSet
-              key={group}
-              setName={group}
-              genesetDescription={group}
-              rightWidth={rightWidth}
-              setMode="unset"
-              deleteGroup={() => {
-                dispatch(actions.genesetDeleteGroup(group))
-              }}
-            />
-          )
-        } else {
-          const setnames = Object.keys(genesets[group]);
-          setnames.sort();
-          for (const name of setnames) {
-            const set = (
+      } else {
+        const nogroupnames = Object.keys(genesets[""]);
+        nogroupnames.sort();
+        for (const name of nogroupnames) {
+          if (name !== "Gene search results"){
+            nogroups.push(
               <GeneSet
                 key={name}
-                setGenes={genesets[group][name]}
+                setGenes={genesets[""][name]}
                 displayLabel={name}
                 setName={name}
-                genesetDescription={group}
+                genesetDescription={""}
                 rightWidth={rightWidth}
                 setMode="genes"
               />
-            );
-  
-            if (!group.includes("//;;//")){
-              if ( group in sets ){
-                sets[group].push(set)
-              } else {
-                sets[group] = [set]
-              } 
-            } else {
-              if ( group in sets2 ){
-                sets2[group].push(set)
-              } else {
-                sets2[group] = [set]
-              }             
-            }
-          }
-          if (group.includes("//;;//")) {
-            sets2[group] = (
-              <GeneSet
-                key={group}
-                setName={group}
-                genesetDescription={group}
-                set={sets2[group]}
-                rightWidth={rightWidth}
-                setMode="genesets"
-                noPaddedDropzones
-                deleteGroup={() => {
-                  dispatch(actions.genesetDeleteGroup(group))
-                  dispatch(actions.requestDiffDelete(group))
-                }}
-              />
-            ); 
-          } else {
-            sets[group] = (
-              <GeneSet
-                key={group}
-                setName={group}
-                genesetDescription={group}
-                set={sets[group]}
-                rightWidth={rightWidth}
-                setMode="genesets"
-                deleteGroup={() => {
-                  dispatch(actions.genesetDeleteGroup(group))
-                }}
-              />
-            );
-          }         
-        }
+            );   
+          }     
+        }        
       }
     }
-
-    const els = [];
-    for ( const key in sets ){
-      els.push(
-        sets[key]        
-      )
-    }
-
-    const els2 = [];
-    for ( const key in sets2 ){
-      els2.push(
-        sets2[key]
-      )
-    }
-    return [nogroups, els, els2];      
+    return [unsets, nogroups, els, els2];      
   };
   
   handleSaveGenedata = () => {
@@ -341,21 +231,58 @@ class GeneExpression extends React.Component {
   };
 
 
-  handleActivateCreateGenesetMode = () => {
-    const { dispatch } = this.props;
-    dispatch({ type: "geneset: activate add new geneset mode" });
-  };
+  onDrop = (e) => {
+    const { dispatch, genesets } = this.props;
 
+    const el = document.getElementById("ungrouped-genesets-wrapper")
+    el.style.boxShadow="none";
+    
+    this.counterPadder = 0;
+    dispatch({type: "clear gene selection"})
+    dispatch({type: "currently dragging", dragged: null})  
+
+    const name = e.dataTransfer.getData("text");   
+    const setgroup = name.split("@@").at(0)
+    const setname = name.split("@@").at(1)  
+    const quickGenesDragging = setgroup === "" && setname === "Gene search results";
+
+    dispatch({
+      type: "geneset: update",
+      genesetDescription: setgroup,
+      genesetName: setname,
+      update: {
+        genesetName: setname,
+        genesetDescription: "",
+      },
+      isDragging: true
+    });
+    this.setState({nogroupShown: true})
+    if (!name.includes("//;;//")) {
+      dispatch(actions.genesetDelete(setgroup, setname));
+    }                           
+    dispatch({type: "track set", group: "", set: setname})   
+    e.stopPropagation();      
+    if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging) {
+      dispatch(actions.genesetDeleteGroup(setgroup))
+    }   
+  }
   render() {
-    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, cxgMode, rightWidth } = this.props;
-    const { isEditingSetName, newNameText, nameBeingEdited, varMetadata, preferencesDialogOpen } = this.state;
-    const [nogroupElements,genesetElements,diffExpElements]=this.renderGeneSets();
-    const cOrG = cxgMode === "OBS" ? "gene" : "cell";
+    const { dispatch, genesets, annoMatrix, userLoggedIn, var_keys, rightWidth, currentlyDragged } = this.props;
+    const { varMetadata, preferencesDialogOpen, diffShown, nogroupShown, genesetShown, unsetShown } = this.state;
+    const [unsetElements,nogroupElements,genesetElements,diffExpElements]=this.renderGeneSets();
+    
+    
+    const setgroup = currentlyDragged?.split("@@")?.at(0)
+    const setname = currentlyDragged?.split("@@")?.at(1)
+    const genesetDragging = !currentlyDragged?.includes("@@@");
     
 
+    const enableParentDrop = (
+      !currentlyDragged ||
+      currentlyDragged && (setgroup !== "") && genesetDragging && !Object.keys(genesets[""]).includes(setname)
+    );        
     return (
-      <div
-      >
+      <div>
        {userLoggedIn ?  <GenesetHotkeys
           dispatch={dispatch}
           genesets={genesets}
@@ -382,9 +309,6 @@ class GeneExpression extends React.Component {
               justifyContent: "left",
               columnGap: "10px"
             }}>   
-            {/*<span style={{margin: "auto 0", paddingRight: "10px"}}>
-            <b>{"Expression options:"}</b>
-            </span>*/}    
             <ParameterInput
               label="Scale genes"
               param="scaleExpr"
@@ -446,89 +370,50 @@ class GeneExpression extends React.Component {
             </Tooltip>}            
           </div>
         </Dialog>           
-        <QuickGene rightWidth={rightWidth} openPreferences={()=>{this.setState({preferencesDialogOpen: true})}}/>  
+        <QuickGene rightWidth={rightWidth} onAddGene={()=>this.setState({quickShown: true})} openPreferences={()=>{this.setState({preferencesDialogOpen: true})}}/>
         </div>                 
-        {userLoggedIn && <div>
-          <div style={{ display: "flex", flexDirection: "row", justifyContent: "right" }}>      
-            <div style={{
-              marginBottom: 10, position: "relative", top: -2
-            }}>           
-            {/*<Button
-              data-testid="open-create-geneset-dialog"
-              onClick={this.handleActivateCreateGenesetMode}
-              intent="primary"
-              disabled={!userLoggedIn}
-            >
-              Create new
-            </Button>*/}
+        {userLoggedIn && 
+        <div>
+            <div style={{paddingBottom: 1}} onDragEnter={(e)=>{
+              const el = document.getElementById("ungrouped-genesets-wrapper")
+              el.style.boxShadow="none"        
+              e.stopPropagation();
+              e.preventDefault();
+            }}>
+            {("" in genesets) && 
+                  <GeneSet
+                    key={"Gene search results"}
+                    setGenes={genesets[""]["Gene search results"]}
+                    displayLabel={"Gene search results"}
+                    setName={"Gene search results"}
+                    genesetDescription={""}
+                    rightWidth={rightWidth}
+                    setMode="genes"
+                  />}
+            </div>
+            <div id="ungrouped-genesets-wrapper"
+              onDragOver={enableParentDrop ? (e)=>{
+                const el = document.getElementById("ungrouped-genesets-wrapper")
+                if (enableParentDrop)
+                  el.style.boxShadow= "inset 0px 0px 0px 2px #000";
+                e.stopPropagation();
+                e.preventDefault();
+              } : null}
+              onDrop={enableParentDrop ? this.onDrop : null}>
+              {this.renderGeneSets(true)}                
+              {nogroupShown && nogroupElements}                     
             </div>    
-          </div>
-          {/*<CreateGenesetDialogue />*/}
+            {unsetShown && unsetElements}
+            {genesetShown && genesetElements}
 
-          
-          <div>
-            <div style={{marginBottom: 10}}>    
-            {("" in genesets) && <GeneSet
-                key={"Gene search results"}
-                setGenes={genesets[""]["Gene search results"]}
-                displayLabel={"Gene search results"}
-                setName={"Gene search results"}
-                genesetDescription={""}
-                rightWidth={rightWidth}
-                setMode="genes"
-            />}
+            <div className={styles.unselectable} style={{paddingBottom: "5px",paddingTop: "5px", cursor: "default"}}>
+              <b>Differential expression</b>
+              {diffShown && diffExpElements}              
             </div>
-            {this.renderGeneSets(true)}
-            {nogroupElements}                     
-            {genesetElements}
-            {(diffExpElements.length > 0) && <div style={{paddingBottom: "5px",paddingTop: "5px"}}>
-              <b>Differential expression {cOrG} sets</b>
-            </div> }                         
-            {diffExpElements}              
-            </div>
+
             
 
-        </div>}
-        {userLoggedIn && <AnnoDialog
-          isActive={
-            isEditingSetName
-          }
-          inputProps={{
-            "data-testid": `edit-set-name-dialog`,
-          }}
-          primaryButtonProps={{
-            "data-testid": `submit-set-name-edit`,
-          }}
-          title={`Edit ${cOrG} set group name`}
-          instruction={`Choose a new ${cOrG} set group name`}
-          cancelTooltipContent="Close this dialog without editing the name."
-          primaryButtonText={`Edit ${cOrG} set group name`}
-          text={newNameText}
-          handleSubmit={this.handleEditName}
-          handleCancel={this.disableEditNameMode}
-          validationError={newNameText===nameBeingEdited}
-          allowEmpty
-          annoInput={
-            <LabelInput
-              label={newNameText.split('//;;//').at(0)}
-              inputProps={{
-                "data-testid": `edit-set-name-text`,
-                leftIcon: "tag",
-                intent: "none",
-                autoFocus: true,
-              }}
-              onChange={this.handleChangeOrSelect}
-              onSelect={this.handleChangeOrSelect}                    
-              newLabelMessage="New layout name"
-            />
-          }
-        /> } 
-        {/*<div style={{
-          paddingTop: '50px',
-          paddingBottom: '20px'
-        }}>
-          {this.renderGeneSets(true)}
-        </div>*/}               
+        </div>}          
       </div>
     );
   }

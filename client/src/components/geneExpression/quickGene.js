@@ -56,7 +56,7 @@ class QuickGene extends React.Component {
   };
 
   handleClick = (g) => {
-    const { dispatch, userDefinedGenes } = this.props;
+    const { dispatch, userDefinedGenes, onAddGene } = this.props;
     const { geneNames } = this.state;
     if (!g) return;
     const gene = g.target;
@@ -67,6 +67,7 @@ class QuickGene extends React.Component {
     } else {
       dispatch(actions.genesetAddGenes("", "Gene search results", [gene]));
       dispatch({type: "track set", group: "", set: "Gene search results"})
+      onAddGene();
     }
   };
 
@@ -112,7 +113,7 @@ class QuickGene extends React.Component {
     }
   }
   handleAddGenes = () => {
-    const { dispatch } = this.props;
+    const { dispatch, onAddGene } = this.props;
     const { inputString: genesToPopulateGeneset, geneNames } = this.state;
 
     const genesArrayFromString = pull(
@@ -128,6 +129,7 @@ class QuickGene extends React.Component {
     });
     dispatch(actions.genesetAddGenes("", "Gene search results", genesToAdd));
     dispatch({type: "track set", group: "", set: "Gene search results"})
+    onAddGene();
   }
   handleTextChange = (e) => {
     this.setState({inputString: e})
@@ -228,6 +230,7 @@ class QuickGene extends React.Component {
                         genesetDescription: name
                       });   
                       dispatch({type: "track set", group: name, set: null})                    
+                      dispatch({type: "geneset just created", bool: true})
                     }}
                     icon={<Icon icon="plus" style={{ color: "gray", padding: 0, margin: 0 }} />}>
             </Button>                          

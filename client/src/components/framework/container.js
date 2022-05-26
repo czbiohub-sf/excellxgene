@@ -11,6 +11,12 @@ function Container(props) {
         top: 0,
         left: 0,
       }}
+      onDragEnter={(e)=>{
+        const el = document.getElementById("ungrouped-genesets-wrapper")
+        el.style.boxShadow="none"        
+        e.stopPropagation();
+        e.preventDefault();
+      }}
     >
       {children}
     </div>

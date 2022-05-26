@@ -131,6 +131,12 @@ class Gene extends React.Component {
 
     return (
       <div draggable 
+      onDragEnter={geneset==="Gene search results" && group === "" ? (e)=>{
+        const el = document.getElementById("ungrouped-genesets-wrapper")
+        el.style.boxShadow="none"        
+        e.stopPropagation();
+        e.preventDefault();
+      } : null}      
       onMouseOver={(e)=>this.setState({isHovered: true})}
       onMouseLeave={(e)=>this.setState({isHovered: false})}
       onDragStart={this.onDragStart} 

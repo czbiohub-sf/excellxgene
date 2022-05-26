@@ -30,7 +30,6 @@ const GeneSets = (
     diffExpListsNames: [],
     selectedGenesLasso: [],
     selectedGenesLassoIndices: [],
-    //genesetOrder: {},
   },
   action
 ) => {
@@ -43,7 +42,6 @@ const GeneSets = (
      * }
      */
     case "geneset: initial load": {
-      const { genesetOrder } = state;
       const { data } = action;
 
       const { genesets } = data;
@@ -53,28 +51,13 @@ const GeneSets = (
       if (!("Gene search results" in genesets[""])) {
         genesets[""]["Gene search results"] = [];
       }
-      /*genesetOrder["-1"] = Object.keys(genesets[""]).filter(i=>i!=="Gene search results").map((val)=>`@@${val}`)
-      genesetOrder["-1"] = genesetOrder["-1"].concat(Object.keys(genesets).filter(i=>i!=="").map((val)=>`${val}@@${val}`));
-      for (const i in genesets) {
-        if (i !== "") {
-          genesetOrder[i] = {};
-          for (const j in genesets[i]) {
-            genesetOrder[i][j] = Object.keys(genesets[i]).map((val)=>`${i}@@${val}`);
-          }
-        }
-      }*/
       return {
         ...state,
         initialized: true,
         genesets
       };
     }
-    /*case "set geneset ordering": {
-      return {
-        ...state,
-        genesetOrder: action.genesetOrder
-      }
-    }*/
+
     /**
      * Creates a new & empty geneset with the given name and description.
      * {
@@ -92,20 +75,13 @@ const GeneSets = (
         throw new Error("geneset: create -- name or description unspecified.");
 
       const genesets = {...state.genesets};
-      const { genesetOrder } = state;
       const gs = genesets?.[genesetDescription] ?? {};
       const symbols = gs?.[genesetName] ?? [];
       
       genesets[genesetDescription] = gs;
-      genesetOrder[genesetDescription] = Object.keys(gs);
-      
-      if (!genesetOrder["-1"].includes(`${genesetDescription}@@${genesetDescription}`)) {
-        genesetOrder["-1"].push(`${genesetDescription}@@${genesetDescription}`);
-      }
-      
+ 
       if (genesetName) {
         genesets[genesetDescription][genesetName] = symbols;
-        //genesetOrder[`${genesetDescription}@@${genesetDescription}`]
 
       }
       

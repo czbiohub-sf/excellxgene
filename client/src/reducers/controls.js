@@ -40,7 +40,8 @@ const Controls = (
     multiGeneSelect: false,
     lastClickedGene: null,
     lastClickedGeneset: null,
-    currentlyDragged: null
+    currentlyDragged: null,
+    justCreatedGeneset: false,
   },
   action
 ) => {
@@ -122,6 +123,12 @@ const Controls = (
         annoTracker
       };
     } 
+    case "geneset just created": {
+      return {
+        ...state,
+        justCreatedGeneset: action.bool
+      }
+    }
     case "track set": {
       const { setTracker } = state;
       setTracker.push([action.group,action.set]);
