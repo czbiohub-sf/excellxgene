@@ -90,6 +90,7 @@ class Gene extends React.Component {
     const { dispatch, group, geneset, gene } = this.props;
     dispatch({type: "currently dragging", dragged: `${group}@@${geneset}@@@${gene}`})    
     e.dataTransfer.setData("text",`${group}@@${geneset}@@@${gene}`)
+    e.dataTransfer.effectAllowed = "all";
     e.stopPropagation();    
   }  
   render() {

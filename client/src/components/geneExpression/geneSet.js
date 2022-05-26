@@ -27,7 +27,7 @@ import styles from "./gene.css"
     geneSelection: state.geneSelection.genes,
     currentlyDragged: state.controls.currentlyDragged,
     genesets: state.genesets.genesets,
-    justCreatedGeneset: state.controls.justCreatedGeneset
+    justCreatedGeneset: state.controls.justCreatedGeneset,
   };
 })
 class GeneSet extends React.Component {
@@ -327,6 +327,7 @@ class GeneSet extends React.Component {
   onDragStart = (e) => {
     const { dispatch, genesetDescription, setName } = this.props;
     dispatch({type: "currently dragging", dragged: `${genesetDescription}@@${setName}`})
+    e.dataTransfer.effectAllowed = "all";
     e.dataTransfer.setData("text",`${genesetDescription}@@${setName}`)
     e.stopPropagation();
   }
@@ -339,7 +340,7 @@ class GeneSet extends React.Component {
     dispatch({type: "currently dragging", dragged: null})    
   }
   onDrop = (e) => {
-    const { dispatch, genesets, genesetDescription, setName, geneSelection, setMode } = this.props;
+    const { dispatch, genesets, genesetDescription, setName, geneSelection, setMode, allGenes } = this.props;
     const el = document.getElementById(`${genesetDescription}@@${setName}-geneset`);
     const setFolder = setMode === "genesets";
     dispatch({type: "currently dragging", dragged: null})  
@@ -351,13 +352,14 @@ class GeneSet extends React.Component {
     const setgroup = name.split("@@").at(0)
     const setname = name.split("@@").at(1)                         
     const quickGenesDragging = setgroup === "" && setname === "Gene search results";
+    const allGenesDragging = setgroup === "" && setname === "All genes";
     if (name.includes("@@@") && !setFolder) { 
       const _gene = name.split("@@@").at(1);
       let genesToAdd = [...geneSelection];
       if (!geneSelection.has(_gene)) {
         genesToAdd = [_gene,...genesToAdd];
       }         
-      if (!name.includes("//;;//")) {
+      if (!name.includes("//;;//") && !e.shiftKey && !allGenesDragging) {
         if (genesets[setgroup][setname].length === 1 && !quickGenesDragging) {
           dispatch(actions.genesetDelete(setgroup, setname));          
         } else {
@@ -393,7 +395,7 @@ class GeneSet extends React.Component {
         },
         isDragging: true
       });
-      if (!name.includes("//;;//")) {
+      if (!name.includes("//;;//") && !e.shiftKey) {
         dispatch(actions.genesetDelete(setgroup, setname));
       }      
       dispatch({type: "track set", group: genesetDescription, set: setname})       
@@ -404,7 +406,7 @@ class GeneSet extends React.Component {
         dispatch({type: "geneset just created", bool: true})
       }
     } 
-    if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging) {
+    if (Object.keys(genesets[setgroup]).length === 1 && !name.includes("//;;//") && !quickGenesDragging && !e.shiftKey) {
       dispatch(actions.genesetDeleteGroup(setgroup))
     }           
 
@@ -648,6 +650,7 @@ class GeneSet extends React.Component {
               toggleText={removeHistZeros ? "Include zeros in histograms." : "Exclude zeros in histograms."}
               removeHistZeros={removeHistZeros}
               group={genesetDescription}
+              allGenes={allGenes}
             />
           </div>
           </div>

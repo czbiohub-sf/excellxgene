@@ -64,7 +64,7 @@ class GenesetMenus extends React.PureComponent {
   };
 
   render() {
-    const { group, geneset, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros, writeSort, disableWriteSort, isOpen,
+    const { group, geneset, colorAccessor, histToggler, toggleText, disableToggle, removeHistZeros, writeSort, disableWriteSort, isOpen, allGenes,
            diffExp, volcanoClick, selectCellsFromGroup, sortIcon, sortDirection, onSortGenes, varMetadata, volcanoAccessor, activeSelection, isHovered } = this.props;
     const { popoverOpen } = this.state;
     const isColorBy = `${group}::${geneset}` === colorAccessor;
@@ -76,7 +76,7 @@ class GenesetMenus extends React.PureComponent {
               position={Position.BOTTOM_RIGHT}
               hoverOpenDelay={globals.tooltipHoverOpenDelay}
             >
-              {(isHovered || popoverOpen || isColorBy) && <AnchorButton
+              {(isHovered || popoverOpen || isColorBy) && !allGenes && <AnchorButton
                 active={isColorBy}
                 intent={isColorBy ? "primary" : "none"}
                 style={{padding: 0, minHeight: 0, minWidth: 0}}
@@ -103,14 +103,14 @@ class GenesetMenus extends React.PureComponent {
                     onClick={this.activateEditGenesetNameMode}
                     text={`Edit ${cOrG} set name and grouping`}
                   />*/} {/* this should be deleted in favor of double clicking on text and editing it directly*/}
-                  <MenuItem
+                  {!allGenes && <MenuItem
                     icon={"filter-keep"}
                     data-testclass="write-sorting"
                     data-testid={`${group}-${geneset}:write-sorting`}
                     onClick={writeSort}
                     text={"Set default ordering"}
                     disabled={disableWriteSort}
-                  />
+                  />}
                   {diffExp && <MenuItem
                     icon={"scatter-plot"}
                     data-testid={`${group}-${geneset}:volcano-plot`}
@@ -144,7 +144,7 @@ class GenesetMenus extends React.PureComponent {
                     disabled={disableToggle}
                     active={removeHistZeros}
                   />                                   
-                  {!diffExp && <MenuItem
+                  {!diffExp && !allGenes && <MenuItem
                     icon="trash"
                     intent="danger"
                     data-testclass="handleDeleteCategory"

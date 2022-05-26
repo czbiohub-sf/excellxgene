@@ -564,16 +564,19 @@ export const saveGenesetsAction = () => async (dispatch, getState) => {
   } else {
     ota = {};
     sets.forEach((item)=>{
+      
       const [group, name] = item;
-      if (!(group in ota)){
-        ota[group] = {}
-      }
-      if (name) {
-        ota[group][name] = genesets[group][name];
-      } else {
-        Object.keys(genesets[group]).forEach((n)=>{
-          ota[group][n] = genesets[group][n];
-        })
+      if (group in genesets) {
+        if (!(group in ota)){
+          ota[group] = {}
+        }
+        if (name) {
+          ota[group][name] = genesets[group][name];
+        } else {
+          Object.keys(genesets?.[group] ?? {}).forEach((n)=>{
+            ota[group][n] = genesets[group][n];
+          })
+        }
       }
     })
   }

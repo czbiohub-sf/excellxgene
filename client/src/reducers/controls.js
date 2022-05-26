@@ -41,7 +41,7 @@ const Controls = (
     lastClickedGene: null,
     lastClickedGeneset: null,
     currentlyDragged: null,
-    justCreatedGeneset: false,
+    justCreatedGeneset: false
   },
   action
 ) => {
@@ -128,7 +128,7 @@ const Controls = (
         ...state,
         justCreatedGeneset: action.bool
       }
-    }
+    }    
     case "track set": {
       const { setTracker } = state;
       setTracker.push([action.group,action.set]);
