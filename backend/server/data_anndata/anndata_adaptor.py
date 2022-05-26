@@ -1430,8 +1430,8 @@ def compute_preprocess(AnnDataDict, reembedParams, userID, mode, shm, shm_csc, o
     layers = AnnDataDict['Xs'] 
     obs = AnnDataDict['obs']
     var = AnnDataDict['var']
-    obs_mask = AnnDataDict['obs_mask']
-    obs_mask2 = AnnDataDict['obs_mask2']
+    obs_mask = AnnDataDict['obs_mask'].copy()
+    obs_mask2 = AnnDataDict['obs_mask2'].copy()
     kkk=layers[0]
     if np.all(obs_mask2):
         X = _read_shmem(shm,shm_csc,kkk,format="csr",mode=mode)[obs_mask]
