@@ -23,7 +23,6 @@ from backend.server.data_anndata.anndata_adaptor import initialize_socket
 DEFAULT_CONFIG = AppConfig()
 from functools import wraps
 import yaml
-import ray
 from dotenv import load_dotenv, find_dotenv
 
 
@@ -516,7 +515,9 @@ def launch(
         global in_handler
         if not in_handler:
             in_handler = True
-            ray.shutdown()        
+            if hosted:
+                import ray                
+                ray.shutdown()        
             sys.exit(0)
 
     signal.signal(signal.SIGINT, handler)

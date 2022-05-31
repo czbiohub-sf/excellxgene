@@ -44,9 +44,11 @@ from numba.typed import Dict
 from sklearn.utils import check_array, check_random_state, sparsefuncs as sf
 from sklearn.utils.validation import _check_psd_eigenvalues
 from sklearn.utils.extmath import svd_flip
-import ray, threading
+import threading
 import psutil
 
+global HOSTED_MODE
+HOSTED_MODE=True
 global process_count
 process_count = 0
 
@@ -190,18 +192,19 @@ def _multiprocessing_wrapper(da,ws,fn,cfn,data,post_processing,*args):
     _new_error_fn = partial(_error_callback,ws=ws, cfn=cfn)
     args+=(shm,shm_csc)
 
-    if ray.is_initialized():
+    if HOSTED_MODE:
+        import ray
         def _ray_getter(i):
             try:
                 _new_callback_fn(ray.get(i))
             except Exception as e:
                 _new_error_fn(e)
 
-        thread = threading.Thread(target=_ray_getter,args=(fn.remote(*args),))
+        thread = threading.Thread(target=_ray_getter,args=(ray.remote(num_cpus=1)(fn).remote(*args),))
         thread.start()
     else:
         try:
-            _new_callback_fn(fn._function(*args))
+            _new_callback_fn(fn(*args))
         except Exception as e:
             _new_error_fn(e)
     
@@ -234,7 +237,6 @@ def _sp_scaler(X, mu):
     X.data[X.data<0]=0
     X.eliminate_zeros()
 
-@ray.remote    
 def compute_diffexp_ttest(layer,tMean,tMeanSq,obs_mask_A,obs_mask_B,fname, multiplex, userID, scale, tMeanObs, tMeanSqObs,shm,shm_csc):
     iA = np.where(obs_mask_A)[0]
     iB = np.where(obs_mask_B)[0]
@@ -353,7 +355,6 @@ def pickle_loader(fn):
         x = pickle.load(f)
     return x
 
-@ray.remote
 def save_data(AnnDataDict,labelNames,cids,currentLayout,obs_mask,userID,ihm, shm, shm_csc):
     fnames = glob(f"{userID}/emb/*.p")
 
@@ -603,7 +604,6 @@ def embed(adata,reembedParams, umap=True, kernelPca=False, nobatch=False):
     else:
         return nnm,obsm,sam, vn
 
-@ray.remote
 def compute_embedding(AnnDataDict, reembedParams, parentName, embName, currentLayout, userID, jointMode,shm,shm_csc):
     mode = userID.split("/")[-1].split("\\")[-1]
     ID = userID.split("/")[0].split("\\")[0]
@@ -1098,7 +1098,6 @@ def pickle_dumper(x,fn):
     with open(fn,"wb") as f:
         pickle.dump(x,f)
 
-@ray.remote
 def compute_leiden(obs_mask,name,resolution,userID,shm,shm_csc):
      #direc 
     try:
@@ -1135,7 +1134,6 @@ def compute_leiden(obs_mask,name,resolution,userID,shm,shm_csc):
     clusters[obs_mask] = result.astype('str')
     return list(result)
 
-@ray.remote
 def compute_sankey_df(labels, name, obs_mask, userID, numEdges,shm,shm_csc):
     def reducer(a, b):
         result_a, inv_ndx = np.unique(a, return_inverse=True)
@@ -1280,7 +1278,6 @@ def generate_correlation_map(x, y):
         cov = np.dot(x, y.T) - n * np.dot(mu_x[:, None], mu_y[None, :])
         return cov / np.dot(s_x[:, None], s_y[None, :])
 
-@ray.remote
 def compute_sankey_df_corr(labels, obs_mask, params, var, userID,shm,shm_csc):    
     mode = userID.split("/")[-1].split("\\")[-1]
     adata = AnnData(X=_read_shmem(shm,shm_csc,params["dataLayer"],format="csr",mode=mode)[obs_mask],var=var)
@@ -1329,7 +1326,6 @@ def get_avgs(X,c,cu):
         Xs.append(X[c==i].mean(0).A.flatten())
     return np.vstack(Xs)
 
-@ray.remote
 def compute_sankey_df_corr_sg(labels, obs_mask, params, var, userID,shm,shm_csc):
     mode = userID.split("/")[-1].split("\\")[-1]
     adata = AnnData(X=_read_shmem(shm,shm_csc,params["dataLayer"],format="csr",mode=mode)[obs_mask])    
@@ -1395,7 +1391,6 @@ def generate_coclustering_matrix(cl1,cl2):
     
     return (V.dot(v2.T) + ( V2.dot(v.T) ).T)/2
 
-@ray.remote
 def compute_sankey_df_coclustering(labels, obs_mask, numEdges,shm,shm_csc):
     cl=[]
     clu = []
@@ -1910,7 +1905,8 @@ def fmt_swapper(X):
     return ra"""
 
 def _create_shm_from_data(X):
-    if ray.is_initialized():
+    if HOSTED_MODE:
+        import ray
         a = ray.put(X.indices)
         gc.collect()
         b = ray.put(X.indptr)
@@ -1936,7 +1932,8 @@ def _read_shmem(shm,shm_csc,layer,format="csr",mode="OBS"):
             return _create_data_from_shm(*shm[layer]).T        
 
 def _create_data_from_shm(indices,indptr,data,Xsh):
-    if ray.is_initialized():
+    if HOSTED_MODE:
+        import ray
         indices = ray.get(indices)
         indptr = ray.get(indptr)
         data = ray.get(data)
@@ -1944,7 +1941,8 @@ def _create_data_from_shm(indices,indptr,data,Xsh):
     return sp.sparse.csr_matrix((data,indices,indptr),shape=Xsh)
 
 def _create_data_from_shm_csc(indices,indptr,data,Xsh):
-    if ray.is_initialized():
+    if HOSTED_MODE:
+        import ray
         indices = ray.get(indices)
         indptr = ray.get(indptr)
         data = ray.get(data)
@@ -2020,6 +2018,7 @@ class AnndataAdaptor(DataAdaptor):
         self._joint_mode = app_config.joint_mode
 
         if app_config.hosted_mode:
+            import ray as ray
             os.environ["RAY_ENABLE_MAC_LARGE_OBJECT_STORE"]="1"
             os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"]="1"
 
@@ -2027,10 +2026,13 @@ class AnndataAdaptor(DataAdaptor):
                 if not os.path.exists(os.getcwd()+"/tmp/"):
                     os.makedirs(os.getcwd()+"/tmp/")
                 mem = psutil.virtual_memory().total
-                mem_tot = psutil.virtual_memory().total
+                mem_tot = psutil.virtual_memory().total    
                 ray.init(num_cpus=os.cpu_count()-2,object_store_memory=mem, _memory=mem_tot,_redis_max_memory=mem,_temp_dir=os.getcwd()+"/tmp/")
             except RuntimeError:
-                pass        
+                pass  
+        else:
+            global HOSTED_MODE
+            HOSTED_MODE=False                  
 
         self._load_data(data_locator, root_embedding=app_config.root_embedding, sam_weights=app_config.sam_weights, preprocess=app_config.preprocess)    
         #self._create_pool()
