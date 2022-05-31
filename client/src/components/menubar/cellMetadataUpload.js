@@ -267,7 +267,7 @@ class CellMetadataUploadButton extends React.Component {
     return (
     <>
         <input type="file" id="dealCsv" style={{display: "none"}}/>
-        <Button minimal onClick={()=>{
+        <Button style={{justifyContent: "left"}} minimal onClick={()=>{
           this.setupFileInput()
           const up = document.getElementById("dealCsv")
           up.click();

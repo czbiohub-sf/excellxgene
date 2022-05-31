@@ -9,7 +9,8 @@ const SankeySelection = (
          currCacheKey: null,
          maxLink: 0,
          selectedCategories: [],
-        alignmentThreshold: 0},
+        alignmentThreshold: 0,
+        screenCap: false},
   action
 ) => {
   switch (action.type) {
@@ -129,6 +130,14 @@ const SankeySelection = (
       state.dataRefresher=!state.dataRefresher;
       return state;
     }
+    case "sankey: screencap start": {
+      state.screenCap=true;
+      return state;
+    }
+    case "sankey: screencap end": {
+      state.screenCap=false;
+      return state;
+    }    
     default:
       return state;
   }

@@ -160,7 +160,7 @@ function prefetchEmbeddings(annoMatrix) {
   const { schema } = annoMatrix;
   const available = schema.layout.obs.map((v) => v.name);
   available.forEach((embName) => annoMatrix.prefetch("emb", embName));
-  available.forEach((embName) => annoMatrix.prefetch("jemb", embName));
+  //available.forEach((embName) => annoMatrix.prefetch("jemb", embName));
 }
 
 function abortableFetch(request, opts, timeout = 0) {

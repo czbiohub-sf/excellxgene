@@ -42,7 +42,7 @@ class VarMetadataUpload extends React.Component {
     return (
       <>
         <input type="file" id="dealCsv3" style={{display: "none"}}/>
-        <Button minimal className={Classes.POPOVER_DISMISS} onClick={()=>{
+        <Button style={{justifyContent: "left"}} minimal className={Classes.POPOVER_DISMISS} onClick={()=>{
           this.setupFileInput()
           const up = document.getElementById("dealCsv3")
           up.click();

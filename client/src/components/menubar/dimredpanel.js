@@ -219,7 +219,7 @@ class DimredPanel extends React.PureComponent {
                 </Tooltip>    
               } value="Run UMAP"/> 
             : null}
-              <Radio label={
+              {false && <Radio label={
                 <Tooltip
                 content="Calculate a joint embedding for both cells and genes."
                 position={Position.BOTTOM}
@@ -234,7 +234,7 @@ class DimredPanel extends React.PureComponent {
                 >  
                   Cell and gene embedding
                 </Tooltip>    
-              } value="Cell and gene embedding"/>            
+              } value="Cell and gene embedding"/>}            
           </RadioGroup>
           <ControlGroup vertical={true}>
           {(cxgMode === "VAR" && annoMatrix.nVar > 50000 &&

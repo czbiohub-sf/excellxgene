@@ -81,7 +81,7 @@ class GeneSetsUpload extends React.Component {
     return (
       <>
         <input type="file" id="dealCsv2" style={{display: "none"}}/>
-        <Button minimal className={Classes.POPOVER_DISMISS} onClick={()=>{
+        <Button style={{justifyContent: "left"}} minimal className={Classes.POPOVER_DISMISS} onClick={()=>{
           this.setupFileInput()
           const up = document.getElementById("dealCsv2")
           up.click();

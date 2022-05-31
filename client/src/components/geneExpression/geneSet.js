@@ -79,7 +79,8 @@ class GeneSet extends React.Component {
       el.style.outlineWidth = "2px";
       el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
       el.style.outlineStyle = "auto";
-      el.style.outlineOffset = "2px";                       
+      el.style.outlineOffset = "2px";     
+      el.style.cursor = "text";                        
       el.onclick = function() {
         window.setTimeout(function() {
             var sel, range;
@@ -555,7 +556,8 @@ class GeneSet extends React.Component {
                     el.style.outlineWidth = "2px";
                     el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
                     el.style.outlineStyle = "auto";
-                    el.style.outlineOffset = "2px";                       
+                    el.style.outlineOffset = "2px"; 
+                    el.style.cursor = "text";                            
                     el.onclick = function() {
                       window.setTimeout(function() {
                           var sel, range;
@@ -582,7 +584,7 @@ class GeneSet extends React.Component {
                   if (!diffExp && !allGenes) {
                     const el = document.getElementById(`${genesetDescription}@@${setName}-${displayLabel}-editable-set-span`)          
                     el.style.outline = "none";                    
-                    
+                    el.style.cursor = "default";      
                     this.setState({contentEditable: false})
 
                     const newName = `${el.textContent}`
@@ -756,7 +758,8 @@ class GeneSet extends React.Component {
                     el.style.outlineWidth = "2px";
                     el.style.outlineColor =  "rgba(19, 124, 189, 0.6)";
                     el.style.outlineStyle = "auto";
-                    el.style.outlineOffset = "2px";                       
+                    el.style.outlineOffset = "2px";  
+                    el.style.cursor = "text";                     
                     el.onclick = function() {
                       window.setTimeout(function() {
                           var sel, range;
@@ -780,7 +783,8 @@ class GeneSet extends React.Component {
                   suppressContentEditableWarning
                   onBlur={()=>{
                     const el = document.getElementById(`${genesetDescription}-editable-span`)            
-                    el.style.outline = "none";                    
+                    el.style.outline = "none"; 
+                    el.style.cursor = "default";                 
                     
                     this.setState({contentEditable: false})
                     const x = diffExp ? "//;;//" : "";

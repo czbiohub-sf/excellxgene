@@ -93,7 +93,7 @@ const continuous = (selectorId, colorScale) => {
     subsetResetPossible,
     var_keys: [... new Set(vk)],
     geneSelection: [...state.geneSelection.genes],
-    tooManyCells: numberCells > 50000,
+    tooManyCells: numberCells > 50000 && state.controls.hostedMode,
     graphInteractionMode: state.controls.graphInteractionMode,
     clipPercentileMin: Math.round(100 * (annoMatrix?.clipRange?.[0] ?? 0)),
     clipPercentileMax: Math.round(100 * (annoMatrix?.clipRange?.[1] ?? 1)),
@@ -128,7 +128,9 @@ const continuous = (selectorId, colorScale) => {
     chromeKeyCategorical: state.controls.chromeKeyCategorical,
     chromeKeys: Object.keys(chromatic).filter((item)=>item.startsWith("interpolate")).map((item)=>item.replace("interpolate","")).sort(),
     jointEmbeddingFlag: state.controls.jointEmbeddingFlag,
-    jointMode: state.controls.jointMode
+    jointMode: state.controls.jointMode,
+    screenCap: state.controls.screenCap,
+    sankeyScreenCap: state.sankeySelection.screenCap
   };
 })
 class MenuBar extends React.PureComponent {
@@ -425,11 +427,13 @@ class MenuBar extends React.PureComponent {
       chromeKeyCategorical,
       chromeKeys,
       jointEmbeddingFlag,
-      jointMode
+      jointMode,
+      screenCap,
+      sankeyScreenCap
     } = this.props;
     const { preferencesDialogOpen, pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
-    const loading = !!outputController?.pendingFetch;
+    const loading = !!outputController?.pendingFetch || screenCap || sankeyScreenCap;
     const loadingSankey = !!sankeyController?.pendingFetch;
     // constants used to create selection tool button
     const [selectionTooltip, selectionButtonIcon] =
@@ -483,7 +487,7 @@ class MenuBar extends React.PureComponent {
             paddingTop: "10px",
             width: "90%"
           }}>
-            <ControlGroup fill={true} vertical={false}>
+            {false && <ControlGroup fill={true} vertical={false}>
               <Checkbox checked={jointEmbeddingFlag} label="Display joint embedding"
                   onChange={() => {    
                     dispatch({
@@ -493,7 +497,7 @@ class MenuBar extends React.PureComponent {
                     }
                   } 
               />               
-            </ControlGroup>
+            </ControlGroup>}
 
             <ControlGroup fill={true} vertical={false}>
               <span style={{width: "160px", paddingRight: "10px"}}>Point size scaler:</span>
@@ -857,21 +861,33 @@ class MenuBar extends React.PureComponent {
       
             <Popover2 position="bottom" content={
               <div style={{display: "flex", flexDirection: "column"}}>
-                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>{
-
-                  dispatch(actions.downloadData())
+                <Button style={{justifyContent: "left"}} intent={tooManyCells ? "warning" : undefined} icon={tooManyCells ? "warning-sign" : undefined} className={Classes.POPOVER_DISMISS} minimal onClick={()=>{
+                  this.handleSaveData()
                 }}>
                   Annotated Dataframe
                 </Button>
-                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadMetadata())}>
+                <Button style={{justifyContent: "left"}} className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadMetadata())}>
                   Cell metadata
                 </Button>      
-                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadVarMetadata())}>
+                <Button style={{justifyContent: "left"}} className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadVarMetadata())}>
                   Gene metadata
                 </Button>                                
-                <Button className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadGenedata())}>
+                <Button style={{justifyContent: "left"}} className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch(actions.downloadGenedata())}>
                   Gene sets
-                </Button>                      
+                </Button>     
+                {layoutChoice.sankey ?         
+                <Button
+                  style={{justifyContent: "left"}}
+                  className={Classes.POPOVER_DISMISS}
+                  minimal
+                  type="button"
+                  disabled={loadingSankey}
+                  icon="camera"
+                  onClick={()=>dispatch({type: "sankey: screencap start"})}
+                > Screenshot </Button>:
+                <Button style={{justifyContent: "left"}} icon="camera" className={Classes.POPOVER_DISMISS} minimal onClick={()=>dispatch({type: "graph: screencap start"})}>
+                  Screenshot
+                </Button>}                                      
               </div>
             }>
         
@@ -901,7 +917,7 @@ class MenuBar extends React.PureComponent {
           </ButtonGroup>}
 
         <div style={{paddingTop: "10px", flexBasis: "100%", height: 0}}></div>
-        {(userLoggedIn &&layoutChoice.sankey) ? 
+        {userLoggedIn && layoutChoice.sankey && 
         <div style={{
           width: "20%",
           textAlign: "right",
@@ -919,39 +935,7 @@ class MenuBar extends React.PureComponent {
         >
           Recalculate sankey
         </AnchorButton>
-        <div style={{paddingLeft: "10px"}}>
-        <Tooltip
-          content="Screenshot the current sankey plot"
-          position="bottom"
-          hoverOpenDelay={globals.tooltipHoverOpenDelay}
-        >
-        <AnchorButton
-          type="button"
-          disabled={loadingSankey}
-          icon="camera"
-          id="saveSankeyButton"
-        /></Tooltip></div>
-         </div> : <div style={{
-          width: "20%",
-          textAlign: "left",
-          display: "flex",
-          justifyContent: "left",
-          flexDirection: "row",
-          paddingLeft: "8px"
-        }}>
-          <Tooltip
-          content="Screenshot the current embedding"
-          position="bottom"
-          hoverOpenDelay={globals.tooltipHoverOpenDelay}
-        ><AnchorButton
-        type="button"
-        icon="camera"
-        onClick={()=>{
-          dispatch({type: "graph: screencap start"})
-        }}
-      /></Tooltip>
-        
-         </div> } 
+         </div>} 
         {layoutChoice.sankey ? 
         <div style={{
           width: "80%",

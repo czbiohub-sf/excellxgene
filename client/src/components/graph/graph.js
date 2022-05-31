@@ -24,6 +24,10 @@ import actions from "../../actions";
 import renderThrottle from "../../util/renderThrottle";
 
 import {
+  postAsyncSuccessToast,
+} from "../framework/toasters";
+
+import {
   flagBackground,
   flagSelected,
   flagHighlight,
@@ -724,14 +728,16 @@ class Graph extends React.Component {
     if (!(modifyingLayouts)){
       this.init = true;
       const { modelTF } = this.state;
-      const [layoutDf, layoutDf2, colorDf, pointDilationDf] = await this.fetchData(
+      const [layoutDf, colorDf, pointDilationDf] = await this.fetchData(
         annoMatrix,
         layoutChoice,
         colorsProp,
         pointDilation
       );
-      const doJointLayout = !(layoutDf2.__columns[0][0]===0.5 && layoutDf2.__columns[0][1]===0.5 &&
-          layoutDf2.__columns[1][0]===0.5 && layoutDf2.__columns[1][1]===0.5);
+      const layoutDf2 = null;
+      const doJointLayout = false;
+      //const doJointLayout = !(layoutDf2.__columns[0][0]===0.5 && layoutDf2.__columns[0][1]===0.5 &&
+      //    layoutDf2.__columns[1][0]===0.5 && layoutDf2.__columns[1][1]===0.5);
 
       if (this.props.layoutChoice.current !== layoutChoice.current) {
         return this.cachedAsyncProps;
@@ -853,7 +859,7 @@ class Graph extends React.Component {
     const promises = [];
     // layout 
     promises.push(annoMatrix.fetch("emb", layoutChoice.current));
-    promises.push(annoMatrix.fetch("jemb", layoutChoice.current))
+    //promises.push(annoMatrix.fetch("jemb", layoutChoice.current))
     // color
     const query = this.createColorByQuery(colors);
     if (query) {
@@ -1409,15 +1415,31 @@ class Graph extends React.Component {
           } catch {}
           
           const blob = await canvas.convertToBlob();
-          var a = document.createElement("a");      
-          document.body.appendChild(a);
-          a.style = "display: none";
-          var url = window.URL.createObjectURL(blob);
-          a.href = url;
-          a.download = `${layoutChoice.current.split(';;').at(-1)}_emb.png`;
-          a.click();
-          window.URL.revokeObjectURL(url); 
+
+
+          let handle;
+          try {
+            handle = await window.showSaveFilePicker({
+              suggestedName: `${layoutChoice.current.split(';;').at(-1)}_emb.png`,
+              types: [
+                {
+                  description: 'Png Files',
+                  accept: {
+                    'image/png': ['.png'],
+                  },
+                },
+              ],
+            });
+          } catch {
+            dispatch({type: "graph: screencap end"}) 
+            return; 
+          }
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+
           dispatch({type: "graph: screencap end"}) 
+          postAsyncSuccessToast("Screenshot saved successfully");
         }         
       }      
     })  

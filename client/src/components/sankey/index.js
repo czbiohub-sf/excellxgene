@@ -5,6 +5,7 @@ import { connect } from "react-redux";
 import Canvg, {
   presets
 } from 'canvg';
+import { postAsyncSuccessToast } from "../framework/toasters";
 
 @connect((state) => ({
     layoutChoice: state.layoutChoice,
@@ -12,6 +13,7 @@ import Canvg, {
     sankeyData: state.sankeySelection.sankeyData,
     refresher: state.sankeySelection.dataRefresher,
     alignmentThreshold: state.sankeySelection.alignmentThreshold,
+    screenCap: state.sankeySelection.screenCap
 }))
 class Sankey extends React.Component {
   constructor(props) {
@@ -34,7 +36,7 @@ class Sankey extends React.Component {
     });
   };  
   constructSankey = () => {
-    const { sankeyData: data, layoutChoice, sankeyWidth } = this.props
+    const { sankeyData: data, sankeyWidth } = this.props
     if((data?.nodes ?? "none")==="none" || data?.nodes?.length===0){
       return
     }
@@ -49,7 +51,6 @@ class Sankey extends React.Component {
     const nodeDarkenFactor = 0.3;
     const nodeStrokeWidth = 4;
     const arrow = "\u2192";
-    const nodeAlignment = d3s.sankeyCenter;
     const colorScale = d3.interpolateRainbow; // add to preferences?
     const path = d3s.sankeyLinkHorizontal();
     let initialMousePosition = {};
@@ -137,11 +138,6 @@ class Sankey extends React.Component {
         moveNode(thisNode, newNodePosition);        
     }
     
-    function onDragEnd() {
-        let node = d3.select(this)
-                     .attr("stroke-width", 0);
-    }
-    
     function onDragStart() {
         let node = d3.select(this)
                      .raise()
@@ -149,18 +145,6 @@ class Sankey extends React.Component {
         setInitialNodePosition(node);
         initialNodePosition = getNodePosition(node);
         initialMousePosition = getMousePosition(d3.event);
-    }
-    
-    function reduceUnique(previous, current) {
-        if (previous.indexOf(current) < 0) {
-            previous.push(current);
-        }
-        return previous;
-    }
-    
-    function setInitialMousePosition(e) {
-        initialMousePosition.x = e.x;
-        initialMousePosition.y = e.y;
     }
     
     function setInitialNodePosition(node) {
@@ -171,11 +155,6 @@ class Sankey extends React.Component {
         initialNodePosition.height = pos.height;
     }
         
-    function sumValues(previous, current) {
-        previous += current;
-        return previous;
-    }
-    
     d3.selectAll("#canvas > *").remove()
     const svg = d3.select("#canvas")
                   .append("g")
@@ -211,8 +190,7 @@ class Sankey extends React.Component {
 
     let graph = sankey(data);
     
-    // Loop through the nodes. Set additional properties to make a few things
-    // easier to deal with later.
+
     graph.nodes.forEach(node => {
         let fillColor = color(node.index);
         node.fillColor = fillColor;
@@ -221,7 +199,6 @@ class Sankey extends React.Component {
         node.height = node.y1 - node.y0;
     });
     
-    // Build the links.
     let svgLinks = svg.append("g")
                       .classed("links", true)
                       .selectAll("g")
@@ -243,7 +220,6 @@ class Sankey extends React.Component {
             .attr("stroke-width", d => Math.max(1.0, d.width))
             .attr("stroke-opacity", linkOpacity);
     
-    // Add hover effect to links.
     svgLinks.append("title")
             .text(d => `${d.source.id.split('_').slice(1).join('_')} ${arrow} ${d.target.id.split('_').slice(1).join('_')}\n${d.value}`);
 
@@ -262,29 +238,14 @@ class Sankey extends React.Component {
                       .attr("opacity", nodeOpacity)
                       .attr("stroke", d => d.strokeColor)
                       .attr("stroke-width", 0)
-    let nodeDepths = graph.nodes
-        .map(n => n.depth)
-        .reduce(reduceUnique, []);
     
-    nodeDepths.forEach(d => {
-        let nodesAtThisDepth = graph.nodes.filter(n => n.depth === d);
-        let numberOfNodes = nodesAtThisDepth.length;
-        let totalHeight = nodesAtThisDepth
-                            .map(n => n.height)
-                            .reduce(sumValues, 0);
-
-        let whitespace = graphSize[1] - totalHeight;
-        let balancedWhitespace = whitespace / (numberOfNodes + 1.0);
-    });
-    
-    // Add hover effect to nodes.
     svgNodes.append("title")
             .text(d => `${d.id}\n${d.value}`);
             
     svgNodes.call(d3.drag()
                     .on("start", onDragStart)
-                    .on("drag", onDragDragging)
-                    .on("end", onDragEnd));
+                    .on("drag", onDragDragging));
+
     svg.append("g")
     .attr("font-family", "sans-serif")
     .attr("font-size", 14)
@@ -296,29 +257,47 @@ class Sankey extends React.Component {
     .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
     .text(d => d.id.split('_').slice(1).join('_'))
     svg.attr("id","sankeyPlot");
-    d3.select('#saveSankeyButton').on('click', function(){
-      var s = document.querySelector('#sankeyPlot');
-      var data = (new XMLSerializer()).serializeToString(s);
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext('2d');
-      Canvg.from(ctx, data, presets.offscreen()).then((v)=>{
-        v.render().then(()=>{
-          canvas.convertToBlob().then((blob)=>{
-            var a = document.createElement("a");
-            document.body.appendChild(a);
-            a.style = "display: none";
-        
-            var url = window.URL.createObjectURL(blob);
-            a.href = url;
-            a.download = `${layoutChoice.current.split(';;').at(-1)}_sankey.png`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-          });
-        })
-      });
-    });    
+ 
   }
+  saveSankey = () => {
+    const { dispatch, sankeyWidth: width, layoutChoice } = this.props;
+    const { height } = this.state;
 
+    var s = document.querySelector('#sankeyPlot');
+    var data = (new XMLSerializer()).serializeToString(s);
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    Canvg.from(ctx, data, presets.offscreen()).then((v)=>{
+      v.render().then(()=>{
+        canvas.convertToBlob().then(async (blob)=>{
+
+          let handle;
+          try {
+            handle = await window.showSaveFilePicker({
+              suggestedName: `${layoutChoice.current.split(';;').at(-1)}_sankey.png`,
+              types: [
+                {
+                  description: 'Png Files',
+                  accept: {
+                    'image/png': ['.png'],
+                  },
+                },
+              ],
+            });
+          } catch {
+            dispatch({type: "sankey: screencap end"}) 
+            return; 
+          }
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+
+          dispatch({type: "sankey: screencap end"}) 
+          postAsyncSuccessToast("Screenshot saved successfully");
+        });
+      })
+    });
+  }
   handleResize = () => {
     const { state } = this.state;
     const viewport = this.getViewportDimensions();
@@ -330,12 +309,17 @@ class Sankey extends React.Component {
     d3.selectAll("#canvas > *").remove()
     this.constructSankey()
   };
+
   componentDidUpdate(prevProps) {
-    const { refresher } = this.props
+    const { refresher, screenCap } = this.props
     if(refresher !== prevProps.refresher || this.props.sankeyWidth !== prevProps.sankeyWidth) {
       d3.selectAll("#canvas > *").remove()
       this.constructSankey()
     }
+    if (screenCap && !prevProps.screencap) {
+      this.saveSankey();
+    }
+
   }
   componentDidMount() {
     window.addEventListener("resize", this.handleResize);
