@@ -11,7 +11,6 @@ import setupSVGandBrushElements from "./setupSVGandBrush";
 import _camera from "../../util/camera";
 import _drawPoints from "./drawPointsRegl";
 import { Html2Canvas } from "../../html2canvasPruned";
-import _ from "lodash";
 import {
   createColorTable,
   createColorQuery,
@@ -23,16 +22,14 @@ import CentroidLabels from "./overlays/centroidLabels";
 import actions from "../../actions";
 import renderThrottle from "../../util/renderThrottle";
 
-import {
-  postAsyncSuccessToast,
-} from "../framework/toasters";
+import { postAsyncSuccessToast } from "../framework/toasters";
 
 import {
   flagBackground,
   flagSelected,
   flagHighlight,
   flagHalfSelected,
-  flagInvisible
+  flagInvisible,
 } from "../../util/glHelpers";
 
 function withinPolygon(polygon, x, y) {
@@ -86,15 +83,14 @@ function createProjectionTF(viewportWidth, viewportHeight) {
   mat3.scale(m, m, aspectScale);
   return m;
 }
-function Float32Concat(first, second)
-{
-    var firstLength = first.length,
-        result = new Float32Array(firstLength + second.length);
+function Float32Concat(first, second) {
+  const firstLength = first.length;
+  const result = new Float32Array(firstLength + second.length);
 
-    result.set(first);
-    result.set(second, firstLength);
+  result.set(first);
+  result.set(second, firstLength);
 
-    return result;
+  return result;
 }
 function createModelTF() {
   /*
@@ -128,7 +124,7 @@ function createModelTF() {
   cxgMode: state.controls.cxgMode,
   allGenes: state.controls.allGenes.__columns[0],
   cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene",
-  jointEmbeddingFlag: state.controls.jointEmbeddingFlag
+  jointEmbeddingFlag: state.controls.jointEmbeddingFlag,
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -136,7 +132,7 @@ class Graph extends React.Component {
     Must be created for each canvas
     */
     // setup canvas, webgl draw function and camera
-    //canvas.getContext("webgl", {preserveDrawingBuffer: false});
+    // canvas.getContext("webgl", {preserveDrawingBuffer: false});
     const camera = _camera(canvas);
     const regl = _regl(canvas);
     const drawPoints = _drawPoints(regl);
@@ -144,6 +140,7 @@ class Graph extends React.Component {
     // preallocate webgl buffers
     const pointBufferStart = regl.buffer();
     const pointBufferEnd = regl.buffer();
+    const pointBufferTerminal = regl.buffer();
     const colorBuffer = regl.buffer();
     const flagBuffer = regl.buffer();
     return {
@@ -152,6 +149,7 @@ class Graph extends React.Component {
       drawPoints,
       pointBufferStart,
       pointBufferEnd,
+      pointBufferTerminal,
       colorBuffer,
       flagBuffer,
     };
@@ -186,7 +184,14 @@ class Graph extends React.Component {
   });
 
   computeSelectedFlags = memoize(
-    (crossfilter, colorMode, colorDf, _flagSelected, _flagHalfSelected, _flagUnselected ) => {
+    (
+      crossfilter,
+      colorMode,
+      colorDf,
+      _flagSelected,
+      _flagHalfSelected,
+      _flagUnselected
+    ) => {
       const x = crossfilter.fillByIsSelected(
         new Float32Array(crossfilter.size()),
         _flagSelected,
@@ -195,7 +200,7 @@ class Graph extends React.Component {
       if (colorDf && colorMode !== "color by categorical metadata") {
         const col = colorDf.icol(0).asArray();
         for (let i = 0, len = x.length; i < len; i += 1) {
-          if (col[i]<=0 && x[i] === _flagSelected){
+          if (col[i] <= 0 && x[i] === _flagSelected) {
             x[i] = _flagHalfSelected;
           }
         }
@@ -232,7 +237,14 @@ class Graph extends React.Component {
   });
 
   computePointFlags = memoize(
-    (crossfilter, colorByData, colorMode, colorDf, pointDilationData, pointDilationLabel) => {
+    (
+      crossfilter,
+      colorByData,
+      colorMode,
+      colorDf,
+      pointDilationData,
+      pointDilationLabel
+    ) => {
       /*
       We communicate with the shader using three flags:
       - isNaN -- the value is a NaN. Only makes sense when we have a colorAccessor
@@ -252,9 +264,9 @@ class Graph extends React.Component {
       const selectedFlags = this.computeSelectedFlags(
         crossfilter,
         colorMode,
-        colorDf, 
+        colorDf,
         flagSelected,
-        flagHalfSelected        
+        flagHalfSelected
       );
       const highlightFlags = this.computeHighlightFlags(
         nObs,
@@ -272,7 +284,7 @@ class Graph extends React.Component {
 
   constructor(props) {
     super(props);
-    this.init=false;
+    this.init = false;
     const viewport = this.getViewportDimensions();
     this.reglCanvas = null;
     this.cachedAsyncProps = null;
@@ -300,6 +312,7 @@ class Graph extends React.Component {
       drawPoints: null,
       pointBufferStart: null,
       pointBufferEnd: null,
+      pointBufferTerminal: null,
       colorBuffer: null,
       flagBuffer: null,
       nPoints: null,
@@ -338,18 +351,18 @@ class Graph extends React.Component {
       logScaleExpr,
       scaleExpr,
       pointScaler,
-      layoutChoice
+      layoutChoice,
     } = this.props;
     const { toolSVG, viewport, regl } = this.state;
     const hasResized =
       prevState.viewport.height !== viewport.height ||
-      prevState.viewport.width !== viewport.width;// || graphWidth !== prevProps.graphWidth;
+      prevState.viewport.width !== viewport.width; // || graphWidth !== prevProps.graphWidth;
     let stateChanges = {};
     if (
       (viewport.height && viewport.width && !toolSVG) || // first time init
       hasResized || //  window size has changed we want to recreate all SVGs
       selectionTool !== prevProps.selectionTool || // change of selection tool
-      prevProps.graphInteractionMode !== graphInteractionMode  ||// lasso/zoom mode is switched
+      prevProps.graphInteractionMode !== graphInteractionMode || // lasso/zoom mode is switched
       prevProps.dataLayerExpr !== dataLayerExpr ||
       prevProps.logScaleExpr !== logScaleExpr ||
       prevProps.scaleExpr !== scaleExpr
@@ -361,8 +374,8 @@ class Graph extends React.Component {
     }
 
     if (pointScaler !== prevProps.pointScaler && regl) {
-      const drawPoints = _drawPoints(regl, pointScaler)
-      stateChanges = {...stateChanges, drawPoints}
+      const drawPoints = _drawPoints(regl, pointScaler);
+      stateChanges = { ...stateChanges, drawPoints };
     }
     /*
     if the selection tool or state has changed, ensure that the selection
@@ -380,7 +393,7 @@ class Graph extends React.Component {
       );
     }
     if (layoutChoice.current !== prevProps.layoutChoice.current) {
-      stateChanges = {...stateChanges, selectedOther: []}
+      stateChanges = { ...stateChanges, selectedOther: [] };
     }
     if (Object.keys(stateChanges).length > 0) {
       // eslint-disable-next-line react/no-did-update-set-state --- Preventing update loop via stateChanges and diff checks
@@ -435,6 +448,8 @@ class Graph extends React.Component {
   };
 
   handleLidarEvent = (e) => {
+    const { cOrG } = this.props;
+
     if (e.type === "mousemove") {
       if (e.target.id === "lidar-layer") {
         this.setState((state) => {
@@ -454,17 +469,19 @@ class Graph extends React.Component {
           pointY: point[1],
         };
       });
-    } else if(e.type === "mousedown") {
-
+    } else if (e.type === "mousedown") {
       this.fetchLidarCrossfilter();
-      
     } else if (e.type === "mouseleave") {
       this.setState((state) => {
-        return { ...state, lidarFocused: false, renderedMetadata: (
-          <Card interactive elevation={Elevation.TWO}>
-            {`No ${this.props.cOrG}s in range.`}
-          </Card>
-        )};
+        return {
+          ...state,
+          lidarFocused: false,
+          renderedMetadata: (
+            <Card interactive elevation={Elevation.TWO}>
+              {`No ${cOrG}s in range.`}
+            </Card>
+          ),
+        };
       });
     }
   };
@@ -546,68 +563,30 @@ class Graph extends React.Component {
     dispatch(actions.graphLassoStartAction(layoutChoice.current));
   }
 
-  polygonBoundingBox = (polygon) => {
-    let minX = Number.MAX_VALUE;
-    let minY = Number.MAX_VALUE;
-    let maxX = Number.MIN_VALUE;
-    let maxY = Number.MIN_VALUE;
-    for (let i = 0, l = polygon.length; i < l; i += 1) {
-      const point = polygon[i];
-      const [x, y] = point;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-    return [minX, minY, maxX, maxY];
-  }
-  selectWithinPolygon(polygon,multiselect) {
-    const { selectedOther } = this.state;
-    const { dispatch, allGenes } = this.props;
-    const [minX, minY, maxX, maxY] = this.polygonBoundingBox(polygon);
-    const { positions2: positions } = this.state;
-    const [X,Y] = positions;
-    const I = [];
-    let i = 0;
-    for (let z = 0; z < X.length; z+=1) {
-      const x = X[z]
-      const y = Y[z]
-      if (!(x < minX || x > maxX || y < minY || y > maxY)) {
-        if (withinPolygon(polygon,x,y)){
-          I.push(i)
-        }
-      }
-      i+=1;
-    }
-    if (multiselect) {
-      this.setState({selectedOther: [...new Set([...I, ...(selectedOther ?? [])])]})
-      const I2 = [...new Set([...I, ...(selectedOther ?? [])])]
-      dispatch({type: "set other mode selection", selectedIndices: I2, selected: I2.map((item)=>allGenes[item])})        
-
-    } else {
-      this.setState({selectedOther: I})
-      dispatch({type: "set other mode selection", selectedIndices: I, selected: I.map((item)=>allGenes[item])})        
-
-    }
-  }
-
   // when a lasso is completed, filter to the points within the lasso polygon
   handleLassoEnd(polygon) {
     const minimumPolygonArea = 10;
     const { dispatch, layoutChoice, multiselect } = this.props;
-    const { positions2: positions } = this.state;
+    const { positions2: positions, defaultSelectedOther } = this.state;
     if (
       polygon.length < 3 ||
       Math.abs(d3.polygonArea(polygon)) < minimumPolygonArea
     ) {
       // if less than three points, or super small area, treat as a clear selection.
       dispatch(actions.graphLassoDeselectAction(layoutChoice.current));
-      this.setState({selectedOther: []})
-      dispatch({type: "set other mode selection", selectedIndices: this.state.defaultSelectedOther ?? [], selected: []})    
+      this.setState({ selectedOther: [] });
+      dispatch({
+        type: "set other mode selection",
+        selectedIndices: defaultSelectedOther ?? [],
+        selected: [],
+      });
     } else {
-        if (positions) {
-          this.selectWithinPolygon(polygon.map((xy) => this.mapScreenToPoint(xy)), multiselect)
-        }      
+      if (positions) {
+        this.selectWithinPolygon(
+          polygon.map((xy) => this.mapScreenToPoint(xy)),
+          multiselect
+        );
+      }
       dispatch(
         actions.graphLassoEndAction(
           layoutChoice.current,
@@ -641,6 +620,22 @@ class Graph extends React.Component {
       data: e.target.value,
     });
   }
+
+  polygonBoundingBox = (polygon) => {
+    let minX = Number.MAX_VALUE;
+    let minY = Number.MAX_VALUE;
+    let maxX = Number.MIN_VALUE;
+    let maxY = Number.MIN_VALUE;
+    for (let i = 0, l = polygon.length; i < l; i += 1) {
+      const point = polygon[i];
+      const [x, y] = point;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return [minX, minY, maxX, maxY];
+  };
 
   setReglCanvas = (canvas) => {
     this.reglCanvas = canvas;
@@ -723,11 +718,12 @@ class Graph extends React.Component {
       chromeKeyCategorical,
       chromeKeyContinuous,
       selectedOther,
-      jointEmbeddingFlag
+      jointEmbeddingFlag,
     } = props.watchProps;
-    if (!(modifyingLayouts)){
+    if (!modifyingLayouts) {
       this.init = true;
       const { modelTF } = this.state;
+      const { layoutChoice: layoutChoiceProps } = this.props;
       const [layoutDf, colorDf, pointDilationDf] = await this.fetchData(
         annoMatrix,
         layoutChoice,
@@ -736,15 +732,15 @@ class Graph extends React.Component {
       );
       const layoutDf2 = null;
       const doJointLayout = false;
-      //const doJointLayout = !(layoutDf2.__columns[0][0]===0.5 && layoutDf2.__columns[0][1]===0.5 &&
+      // const doJointLayout = !(layoutDf2.__columns[0][0]===0.5 && layoutDf2.__columns[0][1]===0.5 &&
       //    layoutDf2.__columns[1][0]===0.5 && layoutDf2.__columns[1][1]===0.5);
 
-      if (this.props.layoutChoice.current !== layoutChoice.current) {
+      if (layoutChoiceProps.current !== layoutChoice.current) {
         return this.cachedAsyncProps;
       }
-      
+
       const { currentDimNames } = layoutChoice;
-      
+
       const X = layoutDf.col(currentDimNames[0]).asArray();
       const Y = layoutDf.col(currentDimNames[1]).asArray();
 
@@ -778,15 +774,15 @@ class Graph extends React.Component {
         const X2 = layoutDf2.col(currentDimNames[0]).asArray();
         const Y2 = layoutDf2.col(currentDimNames[1]).asArray();
         const def = [];
-        X2.forEach((item,ix)=>{
-          if (item) def.push(ix)
-        })
+        X2.forEach((item, ix) => {
+          if (item) def.push(ix);
+        });
         const positions2 = this.computePointPositions(X2, Y2, modelTF);
-        this.setState({...this.state, positions2: [X2,Y2]})
-        positions = Float32Concat(positions,positions2);
+        this.setState({ positions2: [X2, Y2] });
+        positions = Float32Concat(positions, positions2);
 
-        const flags2 = new Float32Array(layoutDf2.length)
-        flags2.forEach((_item,index)=>{
+        const flags2 = new Float32Array(layoutDf2.length);
+        flags2.forEach((_item, index) => {
           if (selectedOther.length === 0) {
             flags2[index] = colorsProp.colorAccessor ? null : flagHalfSelected;
           } else {
@@ -795,37 +791,40 @@ class Graph extends React.Component {
           if (!jointEmbeddingFlag) {
             flags2[index] = flagInvisible;
           }
-        })
-        selectedOther.forEach((item)=>{
-          flags2[item] = flagHalfSelected
+        });
+        selectedOther.forEach((item) => {
+          flags2[item] = flagHalfSelected;
           if (!jointEmbeddingFlag) {
             flags2[item] = flagInvisible;
-          }          
-        })
-        flags = Float32Concat(flags,flags2)
-        
+          }
+        });
+        flags = Float32Concat(flags, flags2);
+
         const { cxgMode } = this.props;
         const colors2 = new Float32Array(3 * layoutDf2.length);
         for (let i = 0, len = layoutDf2.length; i < len; i += 1) {
           if (cxgMode === "OBS") {
             if (!flags2[i]) {
-              colors2.set([0.5,0,0], 3 * i);
+              colors2.set([0.5, 0, 0], 3 * i);
             } else {
-              colors2.set([1,0,0], 3 * i);
+              colors2.set([1, 0, 0], 3 * i);
             }
+          } else if (!flags2[i]) {
+            colors2.set([0, 0, 0.5], 3 * i);
           } else {
-            if (!flags2[i]) {
-              colors2.set([0,0,0.5], 3 * i);
-            } else {
-              colors2.set([0,0,1], 3 * i);
-            }          } 
+            colors2.set([0, 0, 1], 3 * i);
+          }
         }
-        colors = Float32Concat(colors,colors2) 
-        nPoints = nPoints + annoMatrix.nVar;       
-        this.setState({defaultSelectedOther: def})
+        colors = Float32Concat(colors, colors2);
+        nPoints += annoMatrix.nVar;
+        this.setState({ defaultSelectedOther: def });
       }
       this.setState((state) => {
-        return { ...state, colorState: { colors, colorDf, colorTable }, nPoints: nPoints };
+        return {
+          ...state,
+          colorState: { colors, colorDf, colorTable },
+          nPoints,
+        };
       });
       this.init = false;
       return {
@@ -840,85 +839,65 @@ class Graph extends React.Component {
         chromeKeyContinuous,
         jointEmbeddingFlag,
         layoutChoice,
-        layoutDf
+        layoutDf,
       };
-    } else {
-      return this.cachedAsyncProps;
     }
+    return this.cachedAsyncProps;
   };
 
-  async fetchData(annoMatrix, layoutChoice, colors, pointDilation) {
-    /*
-    fetch all data needed.  Includes:
-      - the color by dataframe
-      - the layout dataframe
-      - the point dilation dataframe
-    */
-    const { metadataField: pointDilationAccessor } = pointDilation;
-
-    const promises = [];
-    // layout 
-    promises.push(annoMatrix.fetch("emb", layoutChoice.current));
-    //promises.push(annoMatrix.fetch("jemb", layoutChoice.current))
-    // color
-    const query = this.createColorByQuery(colors);
-    if (query) {
-      promises.push(annoMatrix.fetch(...query));
-    } else {
-      promises.push(Promise.resolve(null));
-    }
-
-    // point highlighting
-    if (pointDilationAccessor) {
-      promises.push(annoMatrix.fetch("obs", pointDilationAccessor));
-    } else {
-      promises.push(Promise.resolve(null));
-    }
-    return Promise.all(promises);
-  }
-
-  fetchLidarCrossfilter() {
-    const { lidarRadius, pointX, pointY, screenX, screenY } = this.state;
-    const { crossfilter, layoutChoice } = this.props;
-
-    const dummyPoint = this.mapScreenToPoint([
-      screenX - (lidarRadius ?? 20),
-      screenY,
-    ]);
-    const radius = Math.sqrt(
-      (dummyPoint[0] - pointX) ** 2 + (dummyPoint[1] - pointY) ** 2
+  renderCanvas = renderThrottle(() => {
+    const {
+      regl,
+      drawPoints,
+      colorBuffer,
+      pointBufferStart,
+      pointBufferEnd,
+      pointBufferTerminal,
+      flagBuffer,
+      camera,
+      projectionTF,
+      nPoints,
+    } = this.state;
+    const { screenCap } = this.props;
+    this.renderPoints(
+      regl,
+      drawPoints,
+      colorBuffer,
+      pointBufferStart,
+      pointBufferEnd,
+      pointBufferTerminal,
+      this.duration,
+      flagBuffer,
+      camera,
+      projectionTF,
+      screenCap,
+      nPoints
     );
-    const selection = {
-      mode: "within-lidar",
-      center: [pointX, pointY],
-      radius,
-    };
-    crossfilter.select("emb", layoutChoice.current, selection).then((cf) => {
-      let count = 0;
-      if (cf) {
-        const dim =
-          cf.obsCrossfilter.dimensions[
-            `emb/${layoutChoice.current}_0:${layoutChoice.current}_1`
-          ];
-        if (!dim) {
-          return;
-        }
-        const { ranges } = dim.selection;
-        ranges.forEach((range) => {
-          count += range[1] - range[0];
-        });
-      }
-      this.setState((state) => {
-        return { ...state, numCellsInLidar: count, lidarCrossfilter: cf };
-      });
+  });
 
-      const metadata = this.renderMetadata()
-      this.setState((state) => {
-        return { ...state, renderedMetadata: metadata };
-      });
-
-    });
-  }
+  shouldComponentUpdate = (nextProps, nextState) => {
+    const currprops = this.props;
+    const {
+      viewport,
+      renderedMetadata,
+      pointX,
+      pointY,
+      lidarCrossfilter,
+      lidarRadius,
+      lidarFocused,
+    } = this.state;
+    const newprops = nextProps;
+    return (
+      !shallowEqual(currprops, newprops) ||
+      viewport !== nextState.viewport ||
+      renderedMetadata !== nextState.renderedMetadata ||
+      pointX !== nextState.pointX ||
+      pointY !== nextState.pointY ||
+      lidarCrossfilter !== nextState.lidarCrossfilter ||
+      lidarRadius !== nextState.lidarRadius ||
+      lidarFocused !== nextState.lidarFocused
+    );
+  };
 
   brushToolUpdate(tool, container) {
     /*
@@ -1040,104 +1019,209 @@ class Graph extends React.Component {
     ];
   }
 
-  renderCanvas = renderThrottle(() => {
-    const {
-      regl,
-      drawPoints,
-      colorBuffer,
-      pointBufferStart,
-      pointBufferEnd,
-      flagBuffer,
-      camera,
-      projectionTF,
-      nPoints
-    } = this.state;
-    const { screenCap } = this.props;
-    this.renderPoints(
-      regl,
-      drawPoints,
-      colorBuffer,
-      pointBufferStart,
-      pointBufferEnd,
-      this.duration,
-      flagBuffer,
-      camera,
-      projectionTF,
-      screenCap,
-      nPoints
-    );
-  });
+  async fetchData(annoMatrix, layoutChoice, colors, pointDilation) {
+    /*
+    fetch all data needed.  Includes:
+      - the color by dataframe
+      - the layout dataframe
+      - the point dilation dataframe
+    */
+    const { metadataField: pointDilationAccessor } = pointDilation;
 
-  shouldComponentUpdate = (nextProps, nextState) => {
-    const currprops = this.props;
-    const newprops = nextProps;
-    return (!shallowEqual(currprops,newprops) || 
-            this.state.viewport !== nextState.viewport || 
-            this.state.renderedMetadata !== nextState.renderedMetadata ||
-            this.state.pointX !== nextState.pointX ||
-            this.state.pointY !== nextState.pointY ||
-            this.state.lidarCrossfilter !== nextState.lidarCrossfilter ||
-            this.state.lidarRadius !== nextState.lidarRadius ||
-            this.state.lidarFocused !== nextState.lidarFocused
-          );
+    const promises = [];
+    // layout
+    promises.push(annoMatrix.fetch("emb", layoutChoice.current));
+    // promises.push(annoMatrix.fetch("jemb", layoutChoice.current))
+    // color
+    const query = this.createColorByQuery(colors);
+    if (query) {
+      promises.push(annoMatrix.fetch(...query));
+    } else {
+      promises.push(Promise.resolve(null));
+    }
+
+    // point highlighting
+    if (pointDilationAccessor) {
+      promises.push(annoMatrix.fetch("obs", pointDilationAccessor));
+    } else {
+      promises.push(Promise.resolve(null));
+    }
+    return Promise.all(promises);
+  }
+
+  fetchLidarCrossfilter() {
+    const { lidarRadius, pointX, pointY, screenX, screenY } = this.state;
+    const { crossfilter, layoutChoice } = this.props;
+
+    const dummyPoint = this.mapScreenToPoint([
+      screenX - (lidarRadius ?? 20),
+      screenY,
+    ]);
+    const radius = Math.sqrt(
+      (dummyPoint[0] - pointX) ** 2 + (dummyPoint[1] - pointY) ** 2
+    );
+    const selection = {
+      mode: "within-lidar",
+      center: [pointX, pointY],
+      radius,
+    };
+    crossfilter.select("emb", layoutChoice.current, selection).then((cf) => {
+      let count = 0;
+      if (cf) {
+        const dim =
+          cf.obsCrossfilter.dimensions[
+            `emb/${layoutChoice.current}_0:${layoutChoice.current}_1`
+          ];
+        if (!dim) {
+          return;
+        }
+        const { ranges } = dim.selection;
+        ranges.forEach((range) => {
+          count += range[1] - range[0];
+        });
+      }
+      this.setState((state) => {
+        return { ...state, numCellsInLidar: count, lidarCrossfilter: cf };
+      });
+
+      const metadata = this.renderMetadata();
+      this.setState((state) => {
+        return { ...state, renderedMetadata: metadata };
+      });
+    });
+  }
+
+  selectWithinPolygon(polygon, multiselect) {
+    const { selectedOther } = this.state;
+    const { dispatch, allGenes } = this.props;
+    const [minX, minY, maxX, maxY] = this.polygonBoundingBox(polygon);
+    const { positions2: positions } = this.state;
+    const [X, Y] = positions;
+    const I = [];
+    let i = 0;
+    for (let z = 0; z < X.length; z += 1) {
+      const x = X[z];
+      const y = Y[z];
+      if (!(x < minX || x > maxX || y < minY || y > maxY)) {
+        if (withinPolygon(polygon, x, y)) {
+          I.push(i);
+        }
+      }
+      i += 1;
+    }
+    if (multiselect) {
+      this.setState({
+        selectedOther: [...new Set([...I, ...(selectedOther ?? [])])],
+      });
+      const I2 = [...new Set([...I, ...(selectedOther ?? [])])];
+      dispatch({
+        type: "set other mode selection",
+        selectedIndices: I2,
+        selected: I2.map((item) => allGenes[item]),
+      });
+    } else {
+      this.setState({ selectedOther: I });
+      dispatch({
+        type: "set other mode selection",
+        selectedIndices: I,
+        selected: I.map((item) => allGenes[item]),
+      });
+    }
   }
 
   updateReglAndRender(asyncProps, prevAsyncProps) {
-    const { positions: positionsEnd, colors, flags, height, width, screenCap, pointScaler, chromeKeyCategorical, chromeKeyContinuous, jointEmbeddingFlag, layoutChoice } = asyncProps;
+    const {
+      positions: positionsEnd,
+      colors,
+      flags,
+      height,
+      width,
+      screenCap,
+      pointScaler,
+      chromeKeyCategorical,
+      chromeKeyContinuous,
+      jointEmbeddingFlag,
+      layoutChoice,
+    } = asyncProps;
     const positionsStart = prevAsyncProps?.positions ?? positionsEnd;
     const prevLayoutChoice = prevAsyncProps?.layoutChoice;
-    this.duration = (layoutChoice.current !== prevLayoutChoice?.current) && prevAsyncProps?.positions ? globals.animationLength : 0;
+    this.duration =
+      layoutChoice.current !== prevLayoutChoice?.current &&
+      prevAsyncProps?.positions
+        ? globals.animationLength
+        : 0;
     this.cachedAsyncProps = asyncProps;
 
-    const { pointBufferStart, pointBufferEnd, colorBuffer, flagBuffer } = this.state;
+    const {
+      pointBufferStart,
+      pointBufferEnd,
+      pointBufferTerminal,
+      colorBuffer,
+      flagBuffer,
+    } = this.state;
     let needToRenderCanvas = false;
 
     if (height !== prevAsyncProps?.height || width !== prevAsyncProps?.width) {
       needToRenderCanvas = true;
     }
     if (positionsEnd !== prevAsyncProps?.positions) {
-
-      const newPos = positionsEnd;
-      const pos2 = positionsStart;
-      
       const oldIndices = prevAsyncProps?.layoutDf?.rowIndex?.rindex ?? null;
       const newIndices = asyncProps?.layoutDf?.rowIndex?.rindex ?? null;
-    
+
       let oldPos;
-      if (oldIndices && !newIndices) { 
-        oldPos = [...newPos]; 
-        for (let i = 0; i < oldIndices.length; i +=1 ) { 
-          const x = 2*oldIndices[i]
-          const y = 2*oldIndices[i]+1
-          oldPos[x] = pos2[2*i]
-          oldPos[y] = pos2[2*i+1]
+      let newPos = positionsEnd;
+      let termPos = positionsEnd;
+      if (oldIndices && !newIndices) {
+        newPos = new Float32Array(newPos.length);
+        newPos.fill(NaN);
+        oldPos = new Float32Array(newPos.length);
+        oldPos.fill(NaN);
+        for (let i = 0; i < oldIndices.length; i += 1) {
+          const x = 2 * oldIndices[i];
+          const y = 2 * oldIndices[i] + 1;          
+          newPos[x] = positionsEnd[x];
+          newPos[y] = positionsEnd[y];
+          oldPos[x] = positionsStart[2 * i];
+          oldPos[y] = positionsStart[2 * i + 1];          
         }
-      } else if (!oldIndices && newIndices) { 
+      } else if (!oldIndices && newIndices) {
         oldPos = [];
-        for (let i = 0; i < newIndices.length; i +=1 ) {
-          const x = 2*newIndices[i]
-          const y = 2*newIndices[i]+1
-          oldPos.push(pos2[x])
-          oldPos.push(pos2[y])
+        for (let i = 0; i < newIndices.length; i += 1) {
+          const x = 2 * newIndices[i];
+          const y = 2 * newIndices[i] + 1;
+          oldPos.push(positionsStart[x]);
+          oldPos.push(positionsStart[y]);
         }
       } else if (!oldIndices && !newIndices) {
-        oldPos = pos2;
+        oldPos = positionsStart;
       } else {
-        oldPos = []; 
-        for (let i = 0; i < newIndices.length; i +=1 ) { 
+        oldPos = [];
+        newPos = [];
+        let flag = true;
+        for (let i = 0; i < newIndices.length; i += 1) {
           if (oldIndices.includes(newIndices[i])) {
             const index = oldIndices.indexOf(newIndices[i]);
-            oldPos.push(pos2[2*index]);
-            oldPos.push(pos2[2*index+1]);
+            oldPos.push(positionsStart[2 * index]);
+            oldPos.push(positionsStart[2 * index + 1]);
+            newPos.push(positionsEnd[2 * i])
+            newPos.push(positionsEnd[2 * i + 1])
+            flag=false;
           } else {
-            oldPos.push(newPos[2*i]);
-            oldPos.push(newPos[2*i+1]);
+            oldPos.push(NaN);
+            oldPos.push(NaN);
+            newPos.push(NaN);
+            newPos.push(NaN);
           }
         }
-      }   
+        if (flag) {
+          this.duration=0;
+        }
+      }
 
       pointBufferStart({ data: oldPos, dimension: 2 });
       pointBufferEnd({ data: newPos, dimension: 2 });
+      pointBufferTerminal({ data: termPos, dimension: 2 });   
+
       needToRenderCanvas = true;
     }
     if (colors !== prevAsyncProps?.colors) {
@@ -1150,7 +1234,7 @@ class Graph extends React.Component {
     }
     if (screenCap !== prevAsyncProps?.screenCap && screenCap) {
       needToRenderCanvas = true;
-    } 
+    }
     if (pointScaler !== prevAsyncProps?.pointScaler) {
       needToRenderCanvas = true;
     }
@@ -1159,17 +1243,21 @@ class Graph extends React.Component {
     }
     if (chromeKeyContinuous !== prevAsyncProps?.chromeKeyContinuous) {
       needToRenderCanvas = true;
-    }    
+    }
     if (jointEmbeddingFlag !== prevAsyncProps?.jointEmbeddingFlag) {
       needToRenderCanvas = true;
-    }        
-    if (needToRenderCanvas){
+    }
+    if (needToRenderCanvas) {
       this.renderCanvas();
     }
   }
 
   updateColorTable(colors, colorDf) {
-    const { annoMatrix, chromeKeyCategorical, chromeKeyContinuous } = this.props;
+    const {
+      annoMatrix,
+      chromeKeyCategorical,
+      chromeKeyContinuous,
+    } = this.props;
     const { schema } = annoMatrix;
 
     /* update color table state */
@@ -1192,7 +1280,7 @@ class Graph extends React.Component {
       colorDf,
       schema,
       chromeKeyCategorical,
-      chromeKeyContinuous,      
+      chromeKeyContinuous,
       userColors
     );
   }
@@ -1207,7 +1295,7 @@ class Graph extends React.Component {
   renderMetadata() {
     const { annoMatrix, colors, cOrG } = this.props;
     const { colorState, lidarCrossfilter, numCellsInLidar } = this.state;
-    
+
     if (colors.colorMode && colorState.colorDf) {
       const { colorDf: colorData, colorTable } = colorState;
       const { colorAccessor, colorMode } = colors;
@@ -1251,8 +1339,8 @@ class Graph extends React.Component {
                 const color = c
                   ? `rgb(${c.map((x) => (x * 255).toFixed(0))})`
                   : "black";
-                const num = occupancy.get(key, 0) ?? 0
-                nums.push(parseInt(num))
+                const num = occupancy.get(key, 0) ?? 0;
+                nums.push(parseInt(num, 10));
                 els.push(
                   <div
                     key={key}
@@ -1270,27 +1358,25 @@ class Graph extends React.Component {
                       {key?.toString()?.concat(" ")}
                     </strong>
                     <div style={{ paddingLeft: "10px" }}>
-                      {`${num} / ${
-                        categoryCounts.get(key) ?? 0
-                      }`}
+                      {`${num} / ${categoryCounts.get(key) ?? 0}`}
                     </div>
                   </div>
                 );
               }
             }
-            const dsu = (arr1, arr2) => arr1
-                          .map((item, index) => [arr2[index], item]) 
-                          .sort(([arg1], [arg2]) => arg2 - arg1) 
-                          .map(([, item]) => item); 
-            
-            els = dsu(els, nums);
+            const dsu = (arr1, arr2) =>
+              arr1
+                .map((item, index) => [arr2[index], item])
+                .sort(([arg1], [arg2]) => arg2 - arg1)
+                .map(([, item]) => item);
 
+            els = dsu(els, nums);
           }
         }
 
         return (
           <Card interactive elevation={Elevation.TWO}>
-            {els ?? `No ${this.props.cOrG}s in range`}
+            {els ?? `No ${cOrG}s in range`}
           </Card>
         );
       }
@@ -1319,7 +1405,7 @@ class Graph extends React.Component {
         return (
           <Card interactive elevation={Elevation.TWO}>
             <div style={{ paddingBottom: "10px" }}>
-              <strong>{colorAccessor.split('//;;//').join("")}</strong>
+              <strong>{colorAccessor.split("//;;//").join("")}</strong>
             </div>
             <div
               style={{
@@ -1351,7 +1437,7 @@ class Graph extends React.Component {
     }
     return (
       <Card interactive elevation={Elevation.TWO}>
-        {`Hovering over ${numCellsInLidar ?? 0} ${this.props.cOrG}s.`}
+        {`Hovering over ${numCellsInLidar ?? 0} ${cOrG}s.`}
       </Card>
     );
   }
@@ -1362,6 +1448,7 @@ class Graph extends React.Component {
     colorBuffer,
     pointBufferStart,
     pointBufferEnd,
+    pointBufferTerminal,
     duration,
     flagBuffer,
     camera,
@@ -1369,7 +1456,14 @@ class Graph extends React.Component {
     screenCap,
     nPoints
   ) {
-    const { annoMatrix, dispatch, layoutChoice, pointScaler, allGenes } = this.props;
+    const {
+      annoMatrix,
+      dispatch,
+      layoutChoice,
+      pointScaler,
+      allGenes,
+    } = this.props;
+    const { selectedOther, defaultSelectedOther } = this.state;
     if (!this.reglCanvas || !annoMatrix) return;
 
     const cameraTF = camera.view();
@@ -1384,76 +1478,86 @@ class Graph extends React.Component {
       regl.clear({
         depth: 1,
         color: [1, 1, 1, 1],
-      });      
-      drawPoints({
-        distance: camera.distance(),
-        color: colorBuffer,
-        positionsStart: pointBufferStart,
-        positionsEnd: pointBufferEnd,
-        flag: flagBuffer,
-        count: nPoints,
-        projView,
-        nPoints: nPoints,
-        minViewportDimension: Math.min(width, height),
-        duration,
-        startTime
-      }, pointScaler
+      });
+      drawPoints(
+        {
+          distance: camera.distance(),
+          color: colorBuffer,
+          positionsStart: pointBufferStart,
+          positionsEnd: pointBufferEnd,
+          positionsFinal: pointBufferTerminal,
+          flag: flagBuffer,
+          count: nPoints,
+          projView,
+          nPoints,
+          minViewportDimension: Math.min(width, height),
+          duration,
+          startTime,
+        },
+        pointScaler
       );
-      
+
       if (time - startTime > duration / 1000) {
         frameLoop.cancel();
-        if (screenCap) {  
-          const graph = regl._gl.canvas;//document.getElementById("embedding-layout");
+        if (screenCap) {
+          const graph = regl._gl.canvas; // document.getElementById("embedding-layout");
           const legend = document.getElementById("continuous_legend");
           const canvas = new OffscreenCanvas(width, height);
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext("2d");
           ctx.drawImage(graph, 0, 0);
           const H2C = new Html2Canvas();
-          const canvas_new = await H2C.h2c.html2canvas(legend);      
+          const canvasNew = await H2C.h2c.html2canvas(legend);
           try {
-            ctx.drawImage(canvas_new, 0, 0);
+            ctx.drawImage(canvasNew, 0, 0);
           } catch {}
-          
-          const blob = await canvas.convertToBlob();
 
+          const blob = await canvas.convertToBlob();
 
           let handle;
           try {
             handle = await window.showSaveFilePicker({
-              suggestedName: `${layoutChoice.current.split(';;').at(-1)}_emb.png`,
+              suggestedName: `${layoutChoice.current
+                .split(";;")
+                .at(-1)}_emb.png`,
               types: [
                 {
-                  description: 'Png Files',
+                  description: "Png Files",
                   accept: {
-                    'image/png': ['.png'],
+                    "image/png": [".png"],
                   },
                 },
               ],
             });
           } catch {
-            dispatch({type: "graph: screencap end"}) 
-            return; 
+            dispatch({ type: "graph: screencap end" });
+            return;
           }
           const writable = await handle.createWritable();
           await writable.write(blob);
           await writable.close();
 
-          dispatch({type: "graph: screencap end"}) 
+          dispatch({ type: "graph: screencap end" });
           postAsyncSuccessToast("Screenshot saved successfully");
-        }         
-      }      
-    })  
-    
+        }
+      }
+    });
+
     regl._gl.flush();
     if (nPoints <= annoMatrix.nObs) {
-      this.setState({...this.state,positions2: null, selectedOther: []})
-      dispatch({type: "set other mode selection", selectedIndices: [], selected: []})  
-    } else {
-      if (this.state.selectedOther.length === 0) { // revert indices to default selection.
-        dispatch({type: "set other mode selection", selectedIndices: this.state.defaultSelectedOther ?? [], selected: this.state.selectedOther.map((item)=>allGenes[item]) ?? []})  
-      }
+      this.setState({ positions2: null, selectedOther: [] });
+      dispatch({
+        type: "set other mode selection",
+        selectedIndices: [],
+        selected: [],
+      });
+    } else if (selectedOther.length === 0) {
+      // revert indices to default selection.
+      dispatch({
+        type: "set other mode selection",
+        selectedIndices: defaultSelectedOther ?? [],
+        selected: selectedOther.map((item) => allGenes[item]) ?? [],
+      });
     }
-    
   }
 
   render() {
@@ -1473,7 +1577,7 @@ class Graph extends React.Component {
       pointScaler,
       chromeKeyCategorical,
       chromeKeyContinuous,
-      jointEmbeddingFlag
+      jointEmbeddingFlag,
     } = this.props;
     const {
       modelTF,
@@ -1486,7 +1590,7 @@ class Graph extends React.Component {
       regl,
       lidarRadius,
       renderedMetadata,
-      selectedOther
+      selectedOther,
     } = this.state;
     const radius = lidarRadius ?? 20;
     const cameraTF = camera?.view()?.slice();
@@ -1516,7 +1620,7 @@ class Graph extends React.Component {
         <svg
           id="lasso-layer"
           data-testid="layout-overlay"
-          className={`graph-svg`}
+          className="graph-svg"
           style={{
             position: "absolute",
             top: 0,
@@ -1535,7 +1639,7 @@ class Graph extends React.Component {
         >
           <svg
             id="lidar-layer"
-            className={`graph-svg`}
+            className="graph-svg"
             style={{
               position: "absolute",
               top: 0,
@@ -1563,7 +1667,7 @@ class Graph extends React.Component {
             margin: 0,
             shapeRendering: "crispEdges",
           }}
-          className={`graph-canvas`}
+          className="graph-canvas"
           id="embedding-layout"
           data-testid="layout-graph"
           ref={this.setReglCanvas}
@@ -1610,7 +1714,7 @@ class Graph extends React.Component {
             chromeKeyCategorical,
             chromeKeyContinuous,
             selectedOther,
-            jointEmbeddingFlag
+            jointEmbeddingFlag,
           }}
         >
           <Async.Pending initial>
@@ -1632,11 +1736,10 @@ class Graph extends React.Component {
           </Async.Rejected>
           <Async.Fulfilled>
             {(asyncProps) => {
-              
               if (regl && !shallowEqual(asyncProps, this.cachedAsyncProps)) {
-                this.updateReglAndRender(asyncProps, this.cachedAsyncProps);          
+                this.updateReglAndRender(asyncProps, this.cachedAsyncProps);
               }
-              
+
               return null;
             }}
           </Async.Fulfilled>
@@ -1691,4 +1794,3 @@ const StillLoading = ({ displayName, width, height }) => {
 };
 
 export default Graph;
-

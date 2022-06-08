@@ -802,7 +802,7 @@ const doInitialDataLoad = () =>
       const allGenes = await annoMatrix.fetch("var","name_0")
       const layoutSchema = schema?.schema?.layout?.obs ?? [];
       if(layoutSchema.length > 0){
-        const preferredNames = [schema?.schema?.rootName.split("X_").at(-1)];
+        const preferredNames = [schema?.schema?.rootName.split("X_").at(-1),"umap"];
         const f = layoutSchema.filter((i) => {
           return preferredNames.includes(i.name)
         })

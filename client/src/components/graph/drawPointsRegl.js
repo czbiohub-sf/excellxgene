@@ -19,6 +19,7 @@ export default function drawPointsRegl(regl, pointScaler=1.0) {
 
     attribute vec2 positionsStart;
     attribute vec2 positionsEnd;
+    attribute vec2 positionsFinal;
     attribute vec3 color;
     attribute float flag;
 
@@ -56,8 +57,13 @@ export default function drawPointsRegl(regl, pointScaler=1.0) {
       gl_PointSize = size * pow(distance, 0.5) * ${pointScaler*0.999};
 
       float z = (isBackground || isHalfSelected) ? zBottom : (isHighlight ? zTop : zMiddle);
-
-      vec2 position = mix(positionsStart, positionsEnd, t);
+      vec2 position;
+      if (t >= 1.0) {
+        position = positionsFinal;
+      } else {
+        position = mix(positionsStart, positionsEnd, t);        
+      }
+      
       vec3 xy = projView * vec3(position, 1.);
       gl_Position = vec4(xy.xy, z, 1.);
 
@@ -79,6 +85,7 @@ export default function drawPointsRegl(regl, pointScaler=1.0) {
     attributes: {
       positionsStart: regl.prop("positionsStart"),
       positionsEnd: regl.prop("positionsEnd"),
+      positionsFinal: regl.prop("positionsFinal"),
       color: regl.prop("color"),
       flag: regl.prop("flag"),
     },

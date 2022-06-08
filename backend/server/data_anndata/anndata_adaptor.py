@@ -1684,7 +1684,7 @@ def initialize_socket(da):
                     dataLayer = reembedParams.get("dataLayer","X")
                     OBS_KEYS = ["name_0","sam_weights"]
                     if doBatchPrep and batchPrepKey != "" and batchPrepLabel != "":
-                        cl = np.array(list(da.data.obs[batchPrepKey]))
+                        cl = pickle_loader(f"{userID}/obs/{batchPrepKey}.p")
                         batches = np.unique(cl)
                         for k in batches:
                             params = batchPrepParams[batchPrepKey].get(k,{})
