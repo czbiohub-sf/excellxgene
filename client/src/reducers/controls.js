@@ -41,7 +41,8 @@ const Controls = (
     lastClickedGene: null,
     lastClickedGeneset: null,
     currentlyDragged: null,
-    justCreatedGeneset: false
+    justCreatedGeneset: false,
+    snapT: 1.5
   },
   action
 ) => {
@@ -115,6 +116,12 @@ const Controls = (
         currentSelectionDEG: action.name
       };
     }       
+    case "set snapT": {
+      return {
+        ...state,
+        snapT: action.value
+      }
+    }
     case "track anno": {
       const { annoTracker } = state;
       annoTracker.push(action.anno);

@@ -29,6 +29,7 @@ export default function drawPointsRegl(regl, pointScaler=1.0) {
     uniform float minViewportDimension;
     uniform float duration;
     uniform float elapsed;
+    uniform float snapT;
 
     varying lowp vec4 fragColor;
 
@@ -59,7 +60,11 @@ export default function drawPointsRegl(regl, pointScaler=1.0) {
       float z = (isBackground || isHalfSelected) ? zBottom : (isHighlight ? zTop : zMiddle);
       vec2 position;
       if (t >= 1.0) {
-        position = positionsFinal;
+        if (snapT >= 1.0) {
+          position = positionsFinal;
+        } else {
+          position = mix(positionsStart, positionsEnd, snapT);
+        }
       } else {
         position = mix(positionsStart, positionsEnd, t);        
       }
@@ -96,6 +101,7 @@ export default function drawPointsRegl(regl, pointScaler=1.0) {
       nPoints: regl.prop("nPoints"),
       duration: regl.prop("duration"),
       minViewportDimension: regl.prop("minViewportDimension"),
+      snapT: regl.prop("snapT"),
       elapsed: ({ time }, { startTime = 0 }) => (time - startTime) * 1000,
     },
 
