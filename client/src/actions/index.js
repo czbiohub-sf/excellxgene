@@ -211,16 +211,16 @@ export const downloadMetadata = () => async (
   getState
 ) => {
     const state = getState();
-    // get current embedding
-    const { layoutChoice, annoMatrix } = state;
-
+    const { layoutChoice, annoMatrix, sankeySelection } = state;
+    const { categories } = sankeySelection;
+    const categoriesKeys = Object.keys(categories);
     let catNames;
     catNames = [];
     for (const item of annoMatrix.schema.annotations?.obs?.columns) {
-      if (item.name !== "name_0"){
+      if (item.name !== "name_0" && categoriesKeys.includes(item.name)){
         catNames.push(item.name)
       }
-    }      
+    }     
     let cells = annoMatrix.rowIndex.labels();  
     cells = Array.isArray(cells) ? cells : Array.from(cells);
     dispatch({
