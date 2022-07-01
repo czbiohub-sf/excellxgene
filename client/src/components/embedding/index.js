@@ -10,6 +10,7 @@ import {
   RadioGroup,
   AnchorButton,
   MenuItem,
+  Slider,
   Menu,
   Icon,
   Tooltip,
@@ -17,7 +18,6 @@ import {
 import * as globals from "../../globals";
 import actions from "../../actions";
 import { getDiscreteCellEmbeddingRowIndex } from "../../util/stateManager/viewStackHelpers";
-import _ from "lodash";
 import AnnoDialog from "../annoDialog";
 import LabelInput from "../labelInput";
 
@@ -35,7 +35,7 @@ import LabelInput from "../labelInput";
 class Embedding extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {newLayoutText: "", isEmbeddingExpanded: {"": true}, embeddingChoiceOpen: false};
+    this.state = {newLayoutText: "", isEmbeddingExpanded: {"": true}, embeddingChoiceOpen: false, snapT: 1.0};
   }
   
   handleChangeOrSelect = (name) => {
@@ -156,9 +156,10 @@ class Embedding extends React.Component {
     e.preventDefault()    
   }
   render() {
-    const { layoutChoice, schema, crossfilter, cOrG } = this.props;
-    const { newLayoutText, isEmbeddingExpanded, embeddingChoiceOpen } = this.state;
+    const { dispatch, layoutChoice, schema, crossfilter, cOrG } = this.props;
+    const { newLayoutText, isEmbeddingExpanded, embeddingChoiceOpen, snapT } = this.state;
     const { annoMatrix } = crossfilter;
+    document.querySelector(".bp3-slider-label")?.remove()
     return (
       <ButtonGroup
         style={{
@@ -222,7 +223,7 @@ class Embedding extends React.Component {
                 handleEmbeddingExpansionChange={this.handleEmbeddingExpansionChange}
                 initEmbeddings={annoMatrix.schema?.initial_embeddings ?? []}
                 cOrG={cOrG}
-              />
+              />            
               <AnnoDialog
                 isActive={
                   layoutChoice.isEditingLayoutName
@@ -258,6 +259,22 @@ class Embedding extends React.Component {
             </div>
           }
         />
+        <Slider
+          min={0.0}
+          max={1.0}
+          stepSize={0.01}
+          showTrackFill={false}
+          onChange={(value)=>{
+            this.setState({snapT: value})
+            dispatch({type: "set snapT", value})}}
+          value={snapT}
+          onRelease={()=>{
+            this.setState({snapT: 1.0})
+            dispatch({type: "set snapT", value: 1.5})
+          }}
+          labelValues={[]}
+          labelRenderer={null}
+        />          
       </ButtonGroup>
     );
   }

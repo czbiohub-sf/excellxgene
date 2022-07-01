@@ -125,6 +125,7 @@ function createModelTF() {
   allGenes: state.controls.allGenes.__columns[0],
   cOrG: state.controls.cxgMode === "OBS" ? "cell" : "gene",
   jointEmbeddingFlag: state.controls.jointEmbeddingFlag,
+  snapT: state.controls.snapT
 }))
 class Graph extends React.Component {
   static createReglState(canvas) {
@@ -289,6 +290,7 @@ class Graph extends React.Component {
     this.reglCanvas = null;
     this.cachedAsyncProps = null;
     this.duration = 0;
+    this.snapT = 1.5;
     const modelTF = createModelTF();
 
     this.state = {
@@ -351,7 +353,7 @@ class Graph extends React.Component {
       logScaleExpr,
       scaleExpr,
       pointScaler,
-      layoutChoice,
+      layoutChoice
     } = this.props;
     const { toolSVG, viewport, regl } = this.state;
     const hasResized =
@@ -372,7 +374,6 @@ class Graph extends React.Component {
         ...this.createToolSVG(),
       };
     }
-
     if (pointScaler !== prevProps.pointScaler && regl) {
       const drawPoints = _drawPoints(regl, pointScaler);
       stateChanges = { ...stateChanges, drawPoints };
@@ -719,6 +720,7 @@ class Graph extends React.Component {
       chromeKeyContinuous,
       selectedOther,
       jointEmbeddingFlag,
+      snapT
     } = props.watchProps;
     if (!modifyingLayouts) {
       this.init = true;
@@ -840,6 +842,7 @@ class Graph extends React.Component {
         jointEmbeddingFlag,
         layoutChoice,
         layoutDf,
+        snapT
       };
     }
     return this.cachedAsyncProps;
@@ -867,6 +870,7 @@ class Graph extends React.Component {
       pointBufferEnd,
       pointBufferTerminal,
       this.duration,
+      this.snapT,
       flagBuffer,
       camera,
       projectionTF,
@@ -1142,6 +1146,7 @@ class Graph extends React.Component {
       chromeKeyContinuous,
       jointEmbeddingFlag,
       layoutChoice,
+      snapT
     } = asyncProps;
     const positionsStart = prevAsyncProps?.positions ?? positionsEnd;
     const prevLayoutChoice = prevAsyncProps?.layoutChoice;
@@ -1150,8 +1155,9 @@ class Graph extends React.Component {
       prevAsyncProps?.positions
         ? globals.animationLength
         : 0;
-    this.cachedAsyncProps = asyncProps;
+    this.snapT = snapT;
 
+    this.cachedAsyncProps = asyncProps;
     const {
       pointBufferStart,
       pointBufferEnd,
@@ -1159,7 +1165,11 @@ class Graph extends React.Component {
       colorBuffer,
       flagBuffer,
     } = this.state;
+    
     let needToRenderCanvas = false;
+    
+    if (this.snapT <= 1.0 || prevAsyncProps?.snapT <= 1.0 && this.snapT === 1.5)
+      needToRenderCanvas = true;
 
     if (height !== prevAsyncProps?.height || width !== prevAsyncProps?.width) {
       needToRenderCanvas = true;
@@ -1450,6 +1460,7 @@ class Graph extends React.Component {
     pointBufferEnd,
     pointBufferTerminal,
     duration,
+    snapT,
     flagBuffer,
     camera,
     projectionTF,
@@ -1492,6 +1503,7 @@ class Graph extends React.Component {
           nPoints,
           minViewportDimension: Math.min(width, height),
           duration,
+          snapT,
           startTime,
         },
         pointScaler
@@ -1578,6 +1590,7 @@ class Graph extends React.Component {
       chromeKeyCategorical,
       chromeKeyContinuous,
       jointEmbeddingFlag,
+      snapT
     } = this.props;
     const {
       modelTF,
@@ -1594,6 +1607,7 @@ class Graph extends React.Component {
     } = this.state;
     const radius = lidarRadius ?? 20;
     const cameraTF = camera?.view()?.slice();
+
     return (
       <div
         id="graph-wrapper"
@@ -1715,6 +1729,7 @@ class Graph extends React.Component {
             chromeKeyContinuous,
             selectedOther,
             jointEmbeddingFlag,
+            snapT
           }}
         >
           <Async.Pending initial>
