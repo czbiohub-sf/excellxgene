@@ -199,8 +199,9 @@ class CellMetadataUploadButton extends React.Component {
 
         })
       })
-
-      context.props.annoMatrix.fetch("obs", "name_0").then((nameDf)=>{
+      let aM = context.props.annoMatrix;
+      if (context.props.annoMatrix.viewOf) aM = context.props.annoMatrix.viewOf;
+      aM.fetch("obs", "name_0").then((nameDf)=>{
         const rowNames = nameDf.__columns[0];      
         const arrays = [];
         columns.forEach(()=>{
