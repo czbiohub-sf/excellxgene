@@ -4,13 +4,8 @@
 
 Video vignettes to come!
 
-## V2.6.3
-In the latest version, the internal file system used by excellxgene has been restructured. As a result, launching excellxgene on a dataset you have previously worked with will create a new folder with none of your previous work. You will need to migrate your work to the new version of excellxgene. The easiest way to do this is with the following:
-
-1. Create a new conda environment (same instructions as in the installation section).
-2. Pip install `excellxgene==2.6.3`
-3. Launch the new version of excellxgene.
-4. Upload the metadata/genesets/etc downloaded from the old version of excellxgene to the new version.
+## V2.9.2
+The latest stable version is V2.9.2. The current version of exCellxgene relies on anndata==0.7.8, so might crash with anndata objects generated with anndata==0.8.0 or above. Until we fix this bug, we recommend users to follow the installation instruction below. The key parts are (1) installing the excellxgene version 2.9.2, and (2) upgrading the anndata version to 0.8.0 in the "cxg" conda environment.
 
 ### Installation
 
@@ -30,7 +25,8 @@ conda activate cxg
 
 3. Install excellxgene with pip:
 ```
-pip install excellxgene
+pip install excellxgene==2.9.2
+pip install anndata==0.8.0
 ```
 
 If your operating system is CentOS, then you may run into issues installing dependencies that require up-to-date `gcc` or `g++` compilers. Please install with the following and try reinstalling `excellxgene` with pip:
@@ -58,4 +54,4 @@ If you're running excellxgene remotely, please launch with:
 excellxgene launch example-datasets --host 0.0.0.0
 ```
 
-Ping me on the Biohub slack (@Alec) if you have any questions!
+Tutorial slides highligting some use cases will be updated (Q2/3 2023).
