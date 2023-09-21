@@ -2,10 +2,9 @@
 
 # Exploratory CellxGene (ExCellxGene)
 
-Video vignettes to come!
 
 ## V2.9.2
-The latest stable version is V2.9.2. The current version of exCellxgene relies on anndata==0.7.8, so might crash with anndata objects generated with anndata==0.8.0 or above. Until we fix this bug, we recommend users to follow the installation instruction below. The key parts are (1) installing the excellxgene version 2.9.2, and (2) upgrading the anndata version to 0.8.0 in the "cxg" conda environment.
+The latest stable version is V2.9.2. The current version of exCellxgene relies on anndata==0.7.8, so might crash with anndata objects generated with anndata==0.8.0 or above. Until we fix this bug, we recommend users to follow the installation instruction below. The key part is installing exCellxgene, then upgrading the anndata version to 0.8.0 in the "cxg" conda environment.
 
 ### Installation
 
@@ -25,7 +24,7 @@ conda activate cxg
 
 3. Install excellxgene with pip:
 ```
-pip install excellxgene==2.9.2
+pip install excellxgene
 pip install anndata==0.8.0
 ```
 
@@ -54,4 +53,10 @@ If you're running excellxgene remotely, please launch with:
 excellxgene launch example-datasets --host 0.0.0.0
 ```
 
-Tutorial slides highligting some use cases will be updated (Q2/3 2023).
+### Preprint on how to do manual cell-type annotation using interactive tools: 
+https://www.biorxiv.org/content/10.1101/2023.07.11.548639v1
+
+### Tutorial slides highligting some use cases:
+https://cellxgene.cziscience.com/docs/05__Annotate%20and%20Analyze%20Your%20Data/5_8__Multimodal%20Annotations
+
+More tutorial slides for multi-omics datasets (RNA, ATAC, CITE-seq, spatial transcriptomics) are coming soon (Q1/Q2 2024).
