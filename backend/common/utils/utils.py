@@ -6,9 +6,8 @@ import os
 import pkgutil
 import socket
 from urllib.parse import urlsplit, urljoin
-
 import numpy as np
-from flask import json
+import json
 
 from backend.common.errors import ConfigurationError
 

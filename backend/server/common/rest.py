@@ -1,4 +1,3 @@
-import copy
 import logging
 import sys
 from http import HTTPStatus
@@ -8,15 +7,12 @@ import pandas as pd
 import numpy as np
 from glob import glob
 from flask import make_response, jsonify, current_app, abort, send_file, after_this_request, session
-from werkzeug.urls import url_unquote
+from urllib.parse import unquote
 import shutil
-from anndata import AnnData
 import pickle
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
-from backend.common.utils.data_locator import DataLocator
 from backend.server.common.config.client_config import get_client_config, get_client_userinfo
 from backend.common.constants import Axis, DiffExpMode, JSON_NaN_to_num_warning_msg
-from backend.common.genesets import read_gene_sets_tidycsv
 from backend.common.errors import (
     FilterError,
     JSONEncodingValueError,
@@ -24,15 +20,14 @@ from backend.common.errors import (
     DisabledFeatureError,
     ExceedsLimitError,
     DatasetAccessError,
-    ColorFormatException,
     AnnotationsError,
     ObsoleteRequest,
-    UnsupportedSummaryMethod,
 )
 from backend.common.genesets import summarizeQueryHash
 from backend.common.fbs.matrix import decode_matrix_fbs
-import os 
+import os
 import pathlib
+
 
 def abort_and_log(code, logmsg, loglevel=logging.DEBUG, include_exc_info=False):
     """
@@ -72,22 +67,22 @@ def _query_parameter_to_filter(args):
             axis, name = key.split(":")
             if axis not in ("obs", "var"):
                 raise FilterError("unknown filter axis")
-            name = url_unquote(name)
+            name = unquote(name)
             current = filters[axis].setdefault(name, {"name": name})
 
             val_split = value.split(",")
             if len(val_split) == 1:
                 if "min" in current or "max" in current:
                     raise FilterError("do not mix range and value filters")
-                value = url_unquote(value)
+                value = unquote(value)
                 values = current.setdefault("values", [])
                 values.append(value)
 
             elif len(val_split) == 2:
                 if len(current) > 1:
                     raise FilterError("duplicate range specification")
-                min = url_unquote(val_split[0])
-                max = url_unquote(val_split[1])
+                min = unquote(val_split[0])
+                max = unquote(val_split[1])
                 if min != "*":
                     current["min"] = float(min)
                 if max != "*":
@@ -109,31 +104,35 @@ def _query_parameter_to_filter(args):
 
     return result
 
-def schema_get_helper(data_adaptor, userID = None):   
+
+def schema_get_helper(data_adaptor, userID=None):
     if userID is None:
-        userID = _get_user_id(data_adaptor)   
-        
+        userID = _get_user_id(data_adaptor)
+
     if data_adaptor.data.raw is not None:
-        layers = [".raw"]+list(data_adaptor.data.layers.keys())
+        layers = [".raw"] + list(data_adaptor.data.layers.keys())
     else:
         layers = list(data_adaptor.data.layers.keys())
-    
+
     if "X" not in layers:
         layers = ["X"] + layers
-    
-    
+
     initial_embeddings = []
     for k in data_adaptor._obsm_init.keys():
-        initial_embeddings.append(k if k[:2]!="X_" else k[2:])
+        initial_embeddings.append(k if k[:2] != "X_" else k[2:])
 
     latent_spaces = []
     fns = glob(f"{userID}/pca/*.p")
     for f in fns:
-        latent_spaces.append(f.split('/')[-1].split('\\')[-1][:-2])
+        latent_spaces.append(f.split("/")[-1].split("\\")[-1][:-2])
 
     mode = userID.split("/")[-1].split("\\")[-1]
     schema = {
-        "dataframe": {"nObs": data_adaptor.NAME[mode]["obs"].size, "nVar": data_adaptor.NAME[mode]["var"].size, "type": str(data_adaptor.data.X.dtype)},
+        "dataframe": {
+            "nObs": data_adaptor.NAME[mode]["obs"].size,
+            "nVar": data_adaptor.NAME[mode]["var"].size,
+            "type": str(data_adaptor.data.X.dtype),
+        },
         "annotations": {
             "obs": {"index": "name_0", "columns": []},
             "var": {"index": "name_0", "columns": []},
@@ -142,107 +141,113 @@ def schema_get_helper(data_adaptor, userID = None):
         "layers": layers,
         "latent_spaces": latent_spaces,
         "initial_embeddings": initial_embeddings,
-        "rootName": data_adaptor.rootName
+        "rootName": data_adaptor.rootName,
     }
-    
+
     for ax in Axis:
         if str(ax) == "var":
             fns = glob(f"{userID}/var/*.p")
             for ann in fns:
-                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+                ann = ann.split(".p")[0].split("/")[-1].split("\\")[-1]
                 if ann != "name_0":
                     x = pickle_loader(f"{userID}/var/{ann}.p")
-                    a,c = np.unique(x,return_counts=True)
+                    a, c = np.unique(x, return_counts=True)
                     if a.size > 2000 or c.max() < 5:
                         ann_schema = {"name": ann, "writable": False}
                     else:
                         ann_schema = {"name": ann, "writable": True}
                     ann_schema.update(get_schema_type_hint_of_array(x))
                     schema["annotations"]["var"]["columns"].append(ann_schema)
-            
+
             ann = "name_0"
-            x = pickle_loader(f"{userID}/var/{ann}.p") 
+            x = pickle_loader(f"{userID}/var/{ann}.p")
             ann_schema = {"name": ann, "writable": False}
             ann_schema.update(get_schema_type_hint_of_array(x))
             schema["annotations"][ax]["columns"].append(ann_schema)
-            
+
         elif str(ax) == "obs":
             fns = glob(f"{userID}/obs/*.p")
             for ann in fns:
-                ann=ann.split('.p')[0].split('/')[-1].split('\\')[-1]
+                ann = ann.split(".p")[0].split("/")[-1].split("\\")[-1]
                 if ann != "name_0":
                     x = pickle_loader(f"{userID}/obs/{ann}.p")
-                    a,c = np.unique(x,return_counts=True)
+                    a, c = np.unique(x, return_counts=True)
                     if a.size > 2000 or c.max() < 5:
                         ann_schema = {"name": ann, "writable": False}
                     else:
                         ann_schema = {"name": ann, "writable": True}
                     ann_schema.update(get_schema_type_hint_of_array(x))
                     schema["annotations"][ax]["columns"].append(ann_schema)
-            
+
             ann = "name_0"
-            x = pickle_loader(f"{userID}/obs/{ann}.p") 
+            x = pickle_loader(f"{userID}/obs/{ann}.p")
             ann_schema = {"name": ann, "writable": False}
             ann_schema.update(get_schema_type_hint_of_array(x))
             schema["annotations"][ax]["columns"].append(ann_schema)
 
-    for layout in [x.split('/')[-1].split('\\')[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
+    for layout in [x.split("/")[-1].split("\\")[-1][:-2] for x in glob(f"{userID}/emb/*.p")]:
         layout_schema = {"name": layout, "type": "float32", "dims": [f"{layout}_0", f"{layout}_1"]}
         schema["layout"]["obs"].append(layout_schema)
     return schema
+
 
 def schema_get(data_adaptor):
     schema = schema_get_helper(data_adaptor)
     return make_response(jsonify({"schema": schema}), HTTPStatus.OK)
 
-def gene_info_get(request,data_adaptor):
+
+def gene_info_get(request, data_adaptor):
     gene = request.args.get("gene", None)
-    varM = request.args.get("varM", None)    
-    name = request.args.get("embName",None)
+    varM = request.args.get("varM", None)
+    name = request.args.get("embName", None)
     userID = _get_user_id(data_adaptor)
-     #direc    
+    # direc
 
     if varM is not None and gene is not None:
         try:
             X = pickle_loader(f"{userID}/var/{varM};;{name}.p")
         except:
             X = pickle_loader(f"{userID}/var/{varM}.p")
-        n = pickle_loader(f"{userID}/var/name_0.p")                    
-        return make_response(jsonify({"response": X[n==gene]}), HTTPStatus.OK)
+        n = pickle_loader(f"{userID}/var/name_0.p")
+        return make_response(jsonify({"response": X[n == gene]}), HTTPStatus.OK)
     else:
         return make_response(jsonify({"response": "NaN"}), HTTPStatus.OK)
 
-def reset_to_root_folder(request,data_adaptor):
+
+def reset_to_root_folder(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     src = data_adaptor.guest_idhash
-    target = userID    
+    target = userID
     os.system(f"rsync -a --recursive --delete {src}/ {target}")
     schema = schema_get_helper(data_adaptor)
-    return make_response(jsonify({"schema": schema}), HTTPStatus.OK)    
+    return make_response(jsonify({"schema": schema}), HTTPStatus.OK)
 
-def admin_restart_get(request,data_adaptor):
-    assert(session['excxg_profile']['email']=='alexander.tarashansky@czbiohub.org')
+
+def admin_restart_get(request, data_adaptor):
+    assert session["excxg_profile"]["email"] == "alexander.tarashansky@czbiohub.org"
     data_adaptor._reset_pool()
     return make_response(jsonify({"reset": True}), HTTPStatus.OK)
 
-def gene_info_bulk_put(request,data_adaptor):
+
+def gene_info_bulk_put(request, data_adaptor):
     args = request.get_json()
-    geneSet = args['geneSet']
-    varM = args['varMetadata']
-    name = args.get("embName",None)
+    geneSet = args["geneSet"]
+    varM = args["varMetadata"]
+    name = args.get("embName", None)
     userID = _get_user_id(data_adaptor)
-     #direc  
+    # direc
 
     if varM != "":
         try:
             X = pickle_loader(f"{userID}/var/{varM};;{name}.p")
         except:
             X = pickle_loader(f"{userID}/var/{varM}.p")
-        n = pickle_loader(f"{userID}/var/name_0.p")   
+        n = pickle_loader(f"{userID}/var/name_0.p")
 
-        return make_response(jsonify({"response": list(pd.Series(data=X,index=n)[geneSet].values)}), HTTPStatus.OK)
+        return make_response(jsonify({"response": list(pd.Series(data=X, index=n)[geneSet].values)}), HTTPStatus.OK)
     else:
-        return make_response(jsonify({"response": "ok"}), HTTPStatus.OK)        
+        return make_response(jsonify({"response": "ok"}), HTTPStatus.OK)
+
 
 def config_get(app_config, data_adaptor):
     config = get_client_config(app_config, data_adaptor)
@@ -257,12 +262,14 @@ def userinfo_get(app_config, data_adaptor):
 def _get_obs_keys(data_adaptor):
     userID = _get_user_id(data_adaptor)
     fns = glob(f"{userID}/obs/*.p")
-    return [ann.split('.p')[0].split('/')[-1].split('\\')[-1] for ann in fns]
+    return [ann.split(".p")[0].split("/")[-1].split("\\")[-1] for ann in fns]
+
 
 def _get_var_keys(data_adaptor):
     userID = _get_user_id(data_adaptor)
     fns = glob(f"{userID}/var/*.p")
-    return [ann.split('.p')[0].split('/')[-1].split('\\')[-1] for ann in fns]
+    return [ann.split(".p")[0].split("/")[-1].split("\\")[-1] for ann in fns]
+
 
 def annotations_obs_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
@@ -272,21 +279,22 @@ def annotations_obs_get(request, data_adaptor):
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
-    
+
     try:
         labels = None
         annotations = data_adaptor.dataset_config.user_annotations
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
             name_0 = pickle_loader(f"{userID}/obs/name_0.p")
-            labels=pd.DataFrame()
+            labels = pd.DataFrame()
             for f in fields:
                 labels[f] = pickle_loader(f"{userID}/obs/{f}.p")
-            labels.index = pd.Index(name_0,dtype='object')
+            labels.index = pd.Index(name_0, dtype="object")
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.OBS, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def annotations_var_get(request, data_adaptor):
     fields = request.args.getlist("annotation-name", None)
@@ -305,17 +313,18 @@ def annotations_var_get(request, data_adaptor):
         if annotations.user_annotations_enabled():
             userID = _get_user_id(data_adaptor)
             name_0 = pickle_loader(f"{userID}/var/name_0.p")
-            labels=pd.DataFrame()
+            labels = pd.DataFrame()
             for f in fields:
                 try:
                     labels[f] = pickle_loader(f"{userID}/var/{f};;{name}.p")
                 except:
                     labels[f] = pickle_loader(f"{userID}/var/{f}.p")
-            labels.index = pd.Index(name_0,dtype='object')
+            labels.index = pd.Index(name_0, dtype="object")
         fbs = data_adaptor.annotation_to_fbs_matrix(Axis.VAR, fields, labels)
         return make_response(fbs, HTTPStatus.OK, {"Content-Type": "application/octet-stream"})
     except KeyError as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def annotations_var_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
@@ -339,16 +348,18 @@ def annotations_var_put(request, data_adaptor):
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
-def pickle_dumper(x,fn):
-    with open(fn,"wb") as f:
-        pickle.dump(x,f)
+def pickle_dumper(x, fn):
+    with open(fn, "wb") as f:
+        pickle.dump(x, f)
+
 
 def pickle_loader(fn):
-    with open(fn,"rb") as f:
+    with open(fn, "rb") as f:
         x = pickle.load(f)
     return x
 
-def annotations_put_fbs_helper(data_adaptor, fbs): 
+
+def annotations_put_fbs_helper(data_adaptor, fbs):
     """helper function to write annotations from fbs"""
     annotations = data_adaptor.dataset_config.user_annotations
     if not annotations.user_annotations_enabled():
@@ -358,47 +369,51 @@ def annotations_put_fbs_helper(data_adaptor, fbs):
     if not new_label_df.empty:
         new_label_df = data_adaptor.check_new_labels(new_label_df)
     if not new_label_df.empty:
-        annotations_put_worker(data_adaptor,new_label_df)
+        annotations_put_worker(data_adaptor, new_label_df)
 
-def annotations_put_worker(data_adaptor, new_label_df, userID=None, initVar = False):
+
+def annotations_put_worker(data_adaptor, new_label_df, userID=None, initVar=False):
     if userID is None:
         userID = _get_user_id(data_adaptor)
-    ID = userID.split('/')[0].split('\\')[0]
-    mode = userID.split('/')[-1].split('\\')[-1]
+    ID = userID.split("/")[0].split("\\")[0]
+    mode = userID.split("/")[-1].split("\\")[-1]
     otherMode = "OBS" if mode == "VAR" else "VAR"
-    pathNew = ID+"/"+otherMode
+    pathNew = ID + "/" + otherMode
     for col in new_label_df:
         vals = np.array(list(new_label_df[col]))
-        if isinstance(vals[0],np.integer):
-            if (len(set(vals))<500):
-                vals = vals.astype('str')            
-        src = "{}/obs/{}.p".format(userID,col.replace('/','_'))
-        tgt = "{}/var/{}.p".format(pathNew,col.replace('/','_'))
-        pickle_dumper(vals,src)
+        if isinstance(vals[0], np.integer):
+            if len(set(vals)) < 500:
+                vals = vals.astype("str")
+        src = "{}/obs/{}.p".format(userID, col.replace("/", "_"))
+        tgt = "{}/var/{}.p".format(pathNew, col.replace("/", "_"))
+        pickle_dumper(vals, src)
 
         if data_adaptor._joint_mode or initVar:
             if initVar:
-                pickle_dumper(vals,tgt)
+                pickle_dumper(vals, tgt)
 
             name = data_adaptor.NAME[mode]["obs"]
-            
+
             dtype = vals.dtype
             dtype_name = dtype.name
             dtype_kind = dtype.kind
-            a,c = np.unique(vals,return_counts=True)
-            flag =  a.size > 2000 or c.max() < 5
-            if not flag and (dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_):  
-                d = _df_to_dict(vals,name)
+            a, c = np.unique(vals, return_counts=True)
+            flag = a.size > 2000 or c.max() < 5
+            if not flag and (
+                dtype_name == "object" and dtype_kind == "O" or dtype.type is np.str_ or dtype.type is np.string_
+            ):
+                d = _df_to_dict(vals, name)
                 try:
-                    del d['unassigned']
+                    del d["unassigned"]
                 except:
-                    pass            
-                
+                    pass
+
                 if os.path.exists(f"{pathNew}/set/{col}/"):
-                    shutil.rmtree(f"{pathNew}/set/{col}/")            
+                    shutil.rmtree(f"{pathNew}/set/{col}/")
                 os.makedirs(f"{pathNew}/set/{col}/")
                 for dkey in d:
-                    pickle_dumper(d[dkey],f"{pathNew}/set/{col}/{dkey}.p")    
+                    pickle_dumper(d[dkey], f"{pathNew}/set/{col}/{dkey}.p")
+
 
 def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     """helper function to write annotations from fbs"""
@@ -412,7 +427,11 @@ def annotations_put_fbs_helper_var(data_adaptor, fbs, name):
     if not new_label_df.empty:
         userID = _get_user_id(data_adaptor)
         for col in new_label_df:
-            pickle_dumper(np.array(list(new_label_df[col]),dtype='object'),"{}/var/{};;{}.p".format(userID,col.replace('/','_'),name))
+            pickle_dumper(
+                np.array(list(new_label_df[col]), dtype="object"),
+                "{}/var/{};;{}.p".format(userID, col.replace("/", "_"), name),
+            )
+
 
 def check_new_labels_var(self, labels_df):
     """Check the new annotations labels, then set the labels_df index"""
@@ -447,8 +466,9 @@ def check_new_labels_var(self, labels_df):
                 labels_df[col] = labels_df[col].astype("int32")
             if isinstance(dtype, pd.Int64Dtype):
                 labels_df[col] = labels_df[col].astype("int64")
-    
+
     return labels_df
+
 
 def inflate(data):
     return zlib.decompress(data)
@@ -481,16 +501,18 @@ def data_var_put(request, data_adaptor):
         return abort(HTTPStatus.NOT_ACCEPTABLE)
 
     args = request.get_json()
-    filter = args.get("filter",None)
-    layer = args.get("layer","X")
-    logscale = args.get("logscale","false")=="true"
-    scale = args.get("scale","false")=="true"
+    filter = args.get("filter", None)
+    layer = args.get("layer", "X")
+    logscale = args.get("logscale", "false") == "true"
+    scale = args.get("scale", "false") == "true"
 
-    userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
-    mode=pickle.load(open(f"{userID}/mode.p",'rb'))
+    userID = _get_user_id(data_adaptor).split("/")[0].split("\\")[0]
+    mode = pickle.load(open(f"{userID}/mode.p", "rb"))
     try:
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR,layer=layer,logscale=logscale,scale=scale,mode=mode),
+            data_adaptor.data_frame_to_fbs_matrix(
+                filter, axis=Axis.VAR, layer=layer, logscale=logscale, scale=scale, mode=mode
+            ),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
@@ -502,26 +524,29 @@ def data_var_get(request, data_adaptor):
     preferred_mimetype = request.accept_mimetypes.best_match(["application/octet-stream"])
     if preferred_mimetype != "application/octet-stream":
         return abort(HTTPStatus.NOT_ACCEPTABLE)
-    
-    userID = _get_user_id(data_adaptor).split('/')[0].split('\\')[0]
-    mode=pickle.load(open(f"{userID}/mode.p",'rb'))
-    
+
+    userID = _get_user_id(data_adaptor).split("/")[0].split("\\")[0]
+    mode = pickle.load(open(f"{userID}/mode.p", "rb"))
+
     try:
         layer = request.values.get("layer", default="X")
         logscale = request.values.get("logscale", default="false") == "true"
         scale = request.values.get("scale", default="false") == "true"
         args_filter_only = request.args.copy()
-        args_filter_only.poplist("layer")  
-        args_filter_only.poplist("logscale")     
-        args_filter_only.poplist("scale")        
+        args_filter_only.poplist("layer")
+        args_filter_only.poplist("logscale")
+        args_filter_only.poplist("scale")
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
-            data_adaptor.data_frame_to_fbs_matrix(filter, axis=Axis.VAR, layer=layer, logscale=logscale, scale=scale, mode=mode),
+            data_adaptor.data_frame_to_fbs_matrix(
+                filter, axis=Axis.VAR, layer=layer, logscale=logscale, scale=scale, mode=mode
+            ),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
     except (FilterError, ValueError, ExceedsLimitError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def colors_get(data_adaptor):
     """
@@ -533,6 +558,7 @@ def colors_get(data_adaptor):
         return abort_and_log(HTTPStatus.NOT_FOUND, str(e), include_exc_info=True)
     """
     return make_response(jsonify({}), HTTPStatus.OK)
+
 
 def diffexp_obs_post(data, data_adaptor):
     if not data_adaptor.dataset_config.diffexp__enable:
@@ -567,7 +593,8 @@ def diffexp_obs_post(data, data_adaptor):
         # JSON encoding failure, usually due to bad data. Just let it ripple up
         # to default exception handler.
         current_app.logger.warning(JSON_NaN_to_num_warning_msg)
-        raise  
+        raise
+
 
 def layout_obs_get(request, data_adaptor):
     fields = request.args.getlist("layout-name", None)
@@ -593,6 +620,7 @@ def layout_obs_get(request, data_adaptor):
             include_exc_info=True,
         )
 
+
 def layout_obs_get_joint(request, data_adaptor):
     fields = request.args.getlist("layout-name", None)
     num_columns_requested = len(data_adaptor.get_embedding_names()) if len(fields) == 0 else len(fields)
@@ -617,22 +645,24 @@ def layout_obs_get_joint(request, data_adaptor):
             include_exc_info=True,
         )
 
+
 def sankey_data_put(request, data_adaptor):
     args = request.get_json()
     labels = args.get("labels", None)
     name = args.get("name", None)
-    filter = args.get("filter",None)
+    filter = args.get("filter", None)
 
     if not labels:
-        return make_response(jsonify({"edges":[],"weights":[]}),HTTPStatus.OK, {"Content-Type": "application/json"})
-    
+        return make_response(jsonify({"edges": [], "weights": []}), HTTPStatus.OK, {"Content-Type": "application/json"})
 
     try:
-        userID = _get_user_id(data_adaptor)          
-        edges,weights = data_adaptor.compute_sankey_df(labels,name,filter, userID)
+        userID = _get_user_id(data_adaptor)
+        edges, weights = data_adaptor.compute_sankey_df(labels, name, filter, userID)
         edges = [list(x) for x in edges]
         weights = list(weights)
-        return make_response(jsonify({"edges": edges, "weights": weights}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(
+            jsonify({"edges": edges, "weights": weights}), HTTPStatus.OK, {"Content-Type": "application/json"}
+        )
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -640,34 +670,36 @@ def sankey_data_put(request, data_adaptor):
 
 
 def upload_var_metadata_post(request, data_adaptor):
-    file = request.files['file']
-     #direc
-    userID = _get_user_id(data_adaptor)         
-    filename = file.filename.split('/')[-1].split('\\')[-1]
+    file = request.files["file"]
+    # direc
+    userID = _get_user_id(data_adaptor)
+    filename = file.filename.split("/")[-1].split("\\")[-1]
     file.save(f"{userID}/{filename}")
-    A = pd.read_csv(f"{userID}/{filename}",sep='\t',index_col=0)
-    v1 = np.array(list(A.index))    
+    A = pd.read_csv(f"{userID}/{filename}", sep="\t", index_col=0)
+    v1 = np.array(list(A.index))
     v2 = np.array(list(pickle_loader(f"{userID}/var/name_0.p")))
-    filt = np.in1d(v1,v2)
-    v1 = v1[filt]    
+    filt = np.in1d(v1, v2)
+    v1 = v1[filt]
     assert v1.size > 0
-    mode = userID.split('/')[-1].split('\\')[-1]
-    ID = userID.split('/')[0].split('\\')[0]
+    mode = userID.split("/")[-1].split("\\")[-1]
+    ID = userID.split("/")[0].split("\\")[0]
     otherMode = "VAR" if mode == "OBS" else "OBS"
-    ID+="/"+otherMode
-    v2rev = v2[np.in1d(v2,v1,invert=True)]
+    ID += "/" + otherMode
+    v2rev = v2[np.in1d(v2, v1, invert=True)]
     for k in A.columns:
-        vals = np.array(list(A[k]))[filt].astype('object')
-        if isinstance(vals[0],str):
+        vals = np.array(list(A[k]))[filt].astype("object")
+        if isinstance(vals[0], str):
             filler = "nan"
         else:
             filler = 0
-        valsrev = np.zeros(v2rev.size,dtype='object')
+        valsrev = np.zeros(v2rev.size, dtype="object")
         valsrev[:] = filler
-        vals = np.array(list(pd.Series(index=np.append(v1,v2rev),data=np.append(vals,valsrev))[v2].values)).astype('object')
-        pickle_dumper(vals,"{}/var/{}.p".format(userID,k.replace('/','_')))
+        vals = np.array(list(pd.Series(index=np.append(v1, v2rev), data=np.append(vals, valsrev))[v2].values)).astype(
+            "object"
+        )
+        pickle_dumper(vals, "{}/var/{}.p".format(userID, k.replace("/", "_")))
         if data_adaptor._joint_mode:
-            pickle_dumper(vals,"{}/obs/{}.p".format(ID,k.replace('/','_')))
+            pickle_dumper(vals, "{}/obs/{}.p".format(ID, k.replace("/", "_")))
 
     @after_this_request
     def remove_file(response):
@@ -675,41 +707,43 @@ def upload_var_metadata_post(request, data_adaptor):
             os.remove(f"{userID}/{filename}")
         except Exception as error:
             print(error)
-        return response    
+        return response
+
     schema = schema_get_helper(data_adaptor)
     return make_response(jsonify({"schema": schema}), HTTPStatus.OK)
 
+
 def save_var_metadata_put(request, data_adaptor):
     args = request.get_json()
-    embName = args['embName']
+    embName = args["embName"]
 
-     #direc
-    userID = _get_user_id(data_adaptor)        
+    # direc
+    userID = _get_user_id(data_adaptor)
 
     fnames = glob(f"{userID}/var/*.p")
     v = pickle_loader(f"{userID}/var/name_0.p")
-    var=pd.DataFrame(data=v[:,None],index=v,columns=["name_0"])
+    var = pd.DataFrame(data=v[:, None], index=v, columns=["name_0"])
     for f in fnames:
-        n = f.split('/')[-1].split('\\')[-1][:-2]
-        if ';;' in n:
-            tlay = n.split(';;')[-1]
+        n = f.split("/")[-1].split("\\")[-1][:-2]
+        if ";;" in n:
+            tlay = n.split(";;")[-1]
         else:
             tlay = ""
         if embName == tlay:
             l = pickle_loader(f"{userID}/var/{n}.p")
             if n != "name_0":
-                var[n.split(';;')[0]] = pd.Series(data=l,index=v)  
+                var[n.split(";;")[0]] = pd.Series(data=l, index=v)
 
     vkeys = list(var.keys())
     for f in fnames:
-        n = f.split('/')[-1].split('\\')[-1][:-2]
-        if ';;' not in n:
+        n = f.split("/")[-1].split("\\")[-1][:-2]
+        if ";;" not in n:
             if n not in vkeys:
                 l = pickle_loader(f"{userID}/var/{n}.p")
                 if n != "name_0":
-                    var[n] = pd.Series(data=l,index=v)                   
-    del var['name_0']    
-    var.to_csv(f"{userID}/output/var.txt",sep='\t')
+                    var[n] = pd.Series(data=l, index=v)
+    del var["name_0"]
+    var.to_csv(f"{userID}/output/var.txt", sep="\t")
 
     @after_this_request
     def remove_file(response):
@@ -721,35 +755,35 @@ def save_var_metadata_put(request, data_adaptor):
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/output/var.txt",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/var.txt", as_attachment=True)
 
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
 def save_metadata_put(request, data_adaptor):
     args = request.get_json()
-    labelNames = args.get("labelNames",None)
+    labelNames = args.get("labelNames", None)
     filter = args["filter"] if args else None
-    
+
     try:
         shape = data_adaptor.get_shape()
         obs_mask = data_adaptor._axis_filter_to_mask(Axis.OBS, filter["obs"], shape[0])
     except (KeyError, IndexError):
         raise FilterError("Error parsing filter")
 
-    userID = _get_user_id(data_adaptor)        
+    userID = _get_user_id(data_adaptor)
 
     labels = pd.DataFrame()
     for k in labelNames:
         labels[k] = pickle_loader(f"{userID}/obs/{k}.p")
-    
-    mode=userID.split('/')[-1].split('\\')[-1]
+
+    mode = userID.split("/")[-1].split("\\")[-1]
     labels.index = pd.Index(data_adaptor.NAME[mode]["obs"])
     labels = labels[obs_mask]
-    labels.to_csv(f"{userID}/output/obs.txt",sep='\t')
+    labels.to_csv(f"{userID}/output/obs.txt", sep="\t")
 
     @after_this_request
     def remove_file(response):
@@ -761,26 +795,27 @@ def save_metadata_put(request, data_adaptor):
 
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/output/obs.txt",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/obs.txt", as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def save_genedata_put(request, data_adaptor):
-    userID = _get_user_id(data_adaptor)        
+    userID = _get_user_id(data_adaptor)
     genesets = {}
     for k in glob(f"{userID}/set/*"):
-        kn = k.split('/')[-1].split('\\')[-1]
+        kn = k.split("/")[-1].split("\\")[-1]
         kn = "" if kn == "__blank__" else kn
         genesets[kn] = {}
         for k2 in glob(f"{userID}/set/{kn}/*.p"):
-            kn2 = k2.split('/')[-1].split('\\')[-1].split('.p')[0]
+            kn2 = k2.split("/")[-1].split("\\")[-1].split(".p")[0]
             genesets[kn][kn2] = pickle_loader(k2)
-    
-    annotations = data_adaptor.dataset_config.user_annotations  
+
+    annotations = data_adaptor.dataset_config.user_annotations
     with open(f"{userID}/output/gene-sets.csv", "w", newline="") as f:
-        f.write(annotations.gene_sets_to_csv(genesets)) 
+        f.write(annotations.gene_sets_to_csv(genesets))
 
     @after_this_request
     def remove_file(response):
@@ -789,27 +824,28 @@ def save_genedata_put(request, data_adaptor):
         except Exception as error:
             print(error)
         return response
-    
+
     try:
         direc = pathlib.Path().absolute()
-        return send_file(f"{direc}/{userID}/output/gene-sets.csv",as_attachment=True)
+        return send_file(f"{direc}/{userID}/output/gene-sets.csv", as_attachment=True)
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)  
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
 def _get_user_id(data_adaptor):
-    annotations = data_adaptor.dataset_config.user_annotations        
-    userID = f"{annotations._get_userdata_idhash(data_adaptor)}"       
+    annotations = data_adaptor.dataset_config.user_annotations
+    userID = f"{annotations._get_userdata_idhash(data_adaptor)}"
     return userID
+
 
 def delete_obsm_put(request, data_adaptor):
     args = request.get_json()
-    embNames = args.get("embNames",None)
-    fail=False
+    embNames = args.get("embNames", None)
+    fail = False
     userID = _get_user_id(data_adaptor)
-    ID = userID.split('/')[0].split('\\')[0]
+    ID = userID.split("/")[0].split("\\")[0]
     paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
 
     if embNames is not None:
@@ -822,7 +858,7 @@ def delete_obsm_put(request, data_adaptor):
                     del paired_embeddings[k2]
                 except:
                     pass
-                pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")                
+                pickle_dumper(paired_embeddings, f"{ID}/paired_embeddings.p")
 
         for embName in embNames:
             if os.path.exists(f"{userID}/emb/{embName}.p"):
@@ -830,93 +866,98 @@ def delete_obsm_put(request, data_adaptor):
             if os.path.exists(f"{userID}/nnm/{embName}.p"):
                 os.remove(f"{userID}/nnm/{embName}.p")
             if os.path.exists(f"{userID}/params/{embName}.p"):
-                os.remove(f"{userID}/params/{embName}.p")                
+                os.remove(f"{userID}/params/{embName}.p")
 
             fns = glob(f"{userID}/pca/*.p")
             for f in fns:
-                if ";;"+embName in f:
+                if ";;" + embName in f:
                     os.remove(f)
 
             fns = glob(f"{userID}/var/*.p")
             for f in fns:
-                if ";;"+embName in f:
+                if ";;" + embName in f:
                     os.remove(f)
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def delete_obs_put(request, data_adaptor):
     args = request.get_json()
-    name = args.get("name",None)
-    fail=False
+    name = args.get("name", None)
+    fail = False
     userID = _get_user_id(data_adaptor)
-    mode = userID.split('/')[-1].split('\\')[-1]
+    mode = userID.split("/")[-1].split("\\")[-1]
     otherMode = "OBS" if mode == "VAR" else "VAR"
-    ID = userID.split('/')[0].split('\\')[0]+'/'+ otherMode
+    ID = userID.split("/")[0].split("\\")[0] + "/" + otherMode
 
     if os.path.exists(f"{userID}/obs/{name}.p"):
         os.remove(f"{userID}/obs/{name}.p")
-    
+
     if data_adaptor._joint_mode:
         if os.path.exists(f"{ID}/var/{name}.p"):
             os.remove(f"{ID}/var/{name}.p")
         if os.path.exists(f"{ID}/set/{name}/"):
-            shutil.rmtree(f"{ID}/set/{name}/")                
-    
+            shutil.rmtree(f"{ID}/set/{name}/")
+
     try:
         return make_response(jsonify({"fail": fail}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def rename_obs_put(request, data_adaptor):
     args = request.get_json()
-    oldName = args.get("oldName",None)
-    newName = args.get("newName",None)
+    oldName = args.get("oldName", None)
+    newName = args.get("newName", None)
     userID = _get_user_id(data_adaptor)
-    mode = userID.split('/')[-1].split('\\')[-1]
+    mode = userID.split("/")[-1].split("\\")[-1]
     otherMode = "OBS" if mode == "VAR" else "VAR"
-    ID = userID.split('/')[0].split('\\')[0]+'/'+ otherMode
-    
+    ID = userID.split("/")[0].split("\\")[0] + "/" + otherMode
+
     if os.path.exists(f"{userID}/obs/{oldName}.p"):
-        os.rename(f"{userID}/obs/{oldName}.p",f"{userID}/obs/{newName}.p")
-        
+        os.rename(f"{userID}/obs/{oldName}.p", f"{userID}/obs/{newName}.p")
+
         if data_adaptor._joint_mode:
             try:
-                os.rename(f"{ID}/var/{oldName}.p",f"{ID}/var/{newName}.p")
+                os.rename(f"{ID}/var/{oldName}.p", f"{ID}/var/{newName}.p")
             except:
                 pass
             try:
                 shutil.rmtree(f"{ID}/set/{oldName}/")
             except:
-                pass    
+                pass
     try:
-        return make_response(jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(
+            jsonify({"schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"}
+        )
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
-def switch_cxg_mode(request,data_adaptor):
+def switch_cxg_mode(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     mode = userID.split("/")[-1].split("\\")[-1]
     ID = userID.split("/")[0].split("\\")[0]
-    newMode = "OBS" if mode == "VAR" else "VAR"    
-    pickle.dump(newMode, open(f"{ID}/mode.p",'wb'))
+    newMode = "OBS" if mode == "VAR" else "VAR"
+    pickle.dump(newMode, open(f"{ID}/mode.p", "wb"))
 
     try:
         return make_response(jsonify({"success": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-def _df_to_dict(a,b):
+
+def _df_to_dict(a, b):
     idx = np.argsort(a)
     a = a[idx]
     b = b[idx]
@@ -928,50 +969,53 @@ def _df_to_dict(a,b):
     d = dict(zip(np.unique(a), [list(x) for x in slists]))
     return d
 
+
 def rename_set_put(request, data_adaptor):
     args = request.get_json()
-    oldName = args.get("oldName",None)
-    newName = args.get("newName",None)
-    if '//;;//' in oldName and '//;;//' not in newName:
-        newName+='//;;//'
-    oldName = oldName.replace('//;;//','__DEG__')
-    newName = newName.replace('//;;//','__DEG__')
+    oldName = args.get("oldName", None)
+    newName = args.get("newName", None)
+    if "//;;//" in oldName and "//;;//" not in newName:
+        newName += "//;;//"
+    oldName = oldName.replace("//;;//", "__DEG__")
+    newName = newName.replace("//;;//", "__DEG__")
 
     userID = _get_user_id(data_adaptor)
-    
+
     if os.path.exists(f"{userID}/set/{oldName.replace('/','_')}"):
-        os.rename(f"{userID}/set/{oldName.replace('/','_')}",f"{userID}/set/{newName.replace('/','_')}")
-    
+        os.rename(f"{userID}/set/{oldName.replace('/','_')}", f"{userID}/set/{newName.replace('/','_')}")
+
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def delete_set_put(request, data_adaptor):
     args = request.get_json()
-    name = args.get("name",None)
-    name = name.replace('//;;//','__DEG__')
+    name = args.get("name", None)
+    name = name.replace("//;;//", "__DEG__")
     userID = _get_user_id(data_adaptor)
 
     if os.path.exists(f"{userID}/set/{name.replace('/','_')}"):
         shutil.rmtree(f"{userID}/set/{name.replace('/','_')}")
-        
+
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def rename_geneset_put(request, data_adaptor):
     args = request.get_json()
-    set = args.get("set",None)
+    set = args.get("set", None)
     set = "__blank__" if set == "" else set
-    newSet = args.get("newSet",None)
-    oldName = args.get("oldName",None)
-    newName = args.get("newName",None)
+    newSet = args.get("newSet", None)
+    oldName = args.get("oldName", None)
+    newName = args.get("newName", None)
     userID = _get_user_id(data_adaptor)
     src = f"{userID}/set/{set.replace('/','_')}/{oldName.replace('/','_')}.p"
     tgtFolder = f"{userID}/set/{newSet.replace('/','_')}/"
@@ -979,22 +1023,23 @@ def rename_geneset_put(request, data_adaptor):
         os.makedirs(tgtFolder)
     tgt = f"{tgtFolder}/{newName.replace('/','_')}.p"
     if os.path.exists(src):
-        os.rename(src,tgt)
+        os.rename(src, tgt)
 
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def delete_geneset_put(request, data_adaptor):
     args = request.get_json()
-    set = args.get("set",None)
+    set = args.get("set", None)
     set = "__blank__" if set == "" else set
-    name = args.get("name",None)
+    name = args.get("name", None)
     userID = _get_user_id(data_adaptor)
-    src = f"{userID}/set/{set.replace('/','_')}/{name.replace('/','_')}.p"    
+    src = f"{userID}/set/{set.replace('/','_')}/{name.replace('/','_')}.p"
 
     if os.path.exists(src):
         os.remove(src)
@@ -1004,48 +1049,51 @@ def delete_geneset_put(request, data_adaptor):
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def rename_diff_put(request, data_adaptor):
     args = request.get_json()
-    oldName = args.get("oldName",None)
-    newName = args.get("newName",None)
+    oldName = args.get("oldName", None)
+    newName = args.get("newName", None)
     userID = _get_user_id(data_adaptor)
-    
+
     if os.path.exists(f"{userID}/diff/{oldName.replace('/','_')}"):
-        os.rename(f"{userID}/diff/{oldName.replace('/','_')}",f"{userID}/diff/{newName.replace('/','_')}")
-    
+        os.rename(f"{userID}/diff/{oldName.replace('/','_')}", f"{userID}/diff/{newName.replace('/','_')}")
+
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def delete_diff_put(request, data_adaptor):
     args = request.get_json()
-    name = args.get("name",None)
+    name = args.get("name", None)
     userID = _get_user_id(data_adaptor)
-    
+
     try:
         if os.path.exists(f"{userID}/diff/{name.replace('/','_')}"):
             fs = glob(f"{userID}/diff/{name.replace('/','_')}/*")
             for f in fs:
                 os.remove(f)
             os.rmdir(f"{userID}/diff/{name.replace('/','_')}")
-    except: 
+    except:
         pass
-    
+
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-def diff_group_get(request,data_adaptor):
-    name = request.args.get("name",None)
-    pop = request.args.get("pop",None)
+
+def diff_group_get(request, data_adaptor):
+    name = request.args.get("name", None)
+    pop = request.args.get("pop", None)
     userID = _get_user_id(data_adaptor)
     try:
         x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}.p")
@@ -1053,11 +1101,12 @@ def diff_group_get(request,data_adaptor):
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-def diff_stats_get(request,data_adaptor):
-    name = request.args.get("name",None)
-    pop = request.args.get("pop",None)
+
+def diff_stats_get(request, data_adaptor):
+    name = request.args.get("name", None)
+    pop = request.args.get("pop", None)
     userID = _get_user_id(data_adaptor)
     try:
         x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_output.p")
@@ -1065,11 +1114,12 @@ def diff_stats_get(request,data_adaptor):
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-def diff_genes_get(request,data_adaptor):
-    name = request.args.get("name",None)
-    pop = request.args.get("pop",None)
+
+def diff_genes_get(request, data_adaptor):
+    name = request.args.get("name", None)
+    pop = request.args.get("pop", None)
     userID = _get_user_id(data_adaptor)
     try:
         x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
@@ -1077,109 +1127,112 @@ def diff_genes_get(request,data_adaptor):
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
-def diff_genes_put(request,data_adaptor):
+
+def diff_genes_put(request, data_adaptor):
     args = request.get_json()
-    name = args['name']
-    pop = args['pop']
-    sg = args['selectedGenes']
+    name = args["name"]
+    pop = args["pop"]
+    sg = args["selectedGenes"]
     userID = _get_user_id(data_adaptor)
     try:
-        pickle_dumper(sg,f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
+        pickle_dumper(sg, f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
         return make_response(jsonify({"ok": True}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
-def initialize_user(data_adaptor):            
+def initialize_user(data_adaptor):
     userID = _get_user_id(data_adaptor).split("/")[0].split("\\")[0]
     if not os.path.exists(f"{userID}/"):
         os.system(f"mkdir {userID}")
         os.system(f"cp -r {data_adaptor.guest_idhash}/* {userID}/")
 
     if not current_app.hosted_mode:
-        session.clear()        
+        session.clear()
 
     try:
         return make_response(jsonify({"fail": False}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)    
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
 
 
-def rename_wrapper(item,oldName,newName):
+def rename_wrapper(item, oldName, newName):
     if f";;{oldName};;" in item:
-        newItem = item.replace(f";;{oldName};;",f";;{newName};;")
+        newItem = item.replace(f";;{oldName};;", f";;{newName};;")
     elif f"{oldName};;" in item:
-        newItem = item.replace(f"{oldName};;",f"{newName};;")
+        newItem = item.replace(f"{oldName};;", f"{newName};;")
     elif f";;{oldName}" in item:
-        newItem = item.replace(f";;{oldName}",f";;{newName}")
+        newItem = item.replace(f";;{oldName}", f";;{newName}")
     elif oldName == item:
         newItem = newName
     return newItem
 
+
 def rename_obsm_put(request, data_adaptor):
     args = request.get_json()
-    embNames = args.get("embNames",None)
-    oldName = args.get("oldName",None)
-    newName = args.get("newName",None)
+    embNames = args.get("embNames", None)
+    oldName = args.get("oldName", None)
+    newName = args.get("newName", None)
     userID = _get_user_id(data_adaptor)
-    ID = userID.split('/')[0].split('\\')[0]
+    ID = userID.split("/")[0].split("\\")[0]
     paired_embeddings = pickle_loader(f"{ID}/paired_embeddings.p")
 
     if embNames is not None and oldName is not None and newName is not None:
         for embName in embNames:
-            newItem = rename_wrapper(embName,oldName,newName)                        
+            newItem = rename_wrapper(embName, oldName, newName)
             if embName in paired_embeddings:
                 k1 = paired_embeddings[embName]
                 k2 = embName
-                del paired_embeddings[k1]; 
+                del paired_embeddings[k1]
                 try:
                     del paired_embeddings[k2]
                 except:
                     pass
                 paired_embeddings[newItem] = k1
                 paired_embeddings[k1] = newItem
-                pickle_dumper(paired_embeddings,f"{ID}/paired_embeddings.p")                                          
-        
-            newItem = rename_wrapper(embName,oldName,newName)                        
+                pickle_dumper(paired_embeddings, f"{ID}/paired_embeddings.p")
+
+            newItem = rename_wrapper(embName, oldName, newName)
             if os.path.exists(f"{userID}/emb/{embName}.p"):
-                os.rename(f"{userID}/emb/{embName}.p",f"{userID}/emb/{newItem}.p")
+                os.rename(f"{userID}/emb/{embName}.p", f"{userID}/emb/{newItem}.p")
             if os.path.exists(f"{userID}/nnm/{embName}.p"):
-                os.rename(f"{userID}/nnm/{embName}.p",f"{userID}/nnm/{newItem}.p")
+                os.rename(f"{userID}/nnm/{embName}.p", f"{userID}/nnm/{newItem}.p")
             if os.path.exists(f"{userID}/params/{embName}.p"):
-                os.rename(f"{userID}/params/{embName}.p",f"{userID}/params/{newItem}.p")
+                os.rename(f"{userID}/params/{embName}.p", f"{userID}/params/{newItem}.p")
 
             fns = glob(f"{userID}/pca/*.p")
             for f in fns:
-                if ";;"+embName in f:
-                    os.rename(f,f.replace(embName,newItem))
-            
+                if ";;" + embName in f:
+                    os.rename(f, f.replace(embName, newItem))
+
             fns = glob(f"{userID}/var/*.p")
             for f in fns:
-                if ";;"+embName in f:
-                    os.rename(f,f.replace(embName,newItem))              
+                if ";;" + embName in f:
+                    os.rename(f, f.replace(embName, newItem))
     try:
         layout_schema = {"name": newName, "type": "float32", "dims": [f"{newName}_0", f"{newName}_1"]}
         return make_response(jsonify({"schema": layout_schema}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
-        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True) 
+        return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
+
 
 def leiden_put(request, data_adaptor):
     args = request.get_json()
     name = args.get("name", None)
     cName = args.get("cName", None)
-    resolution = args.get('resolution',1.0)
-    filter = args.get('filter',None)
+    resolution = args.get("resolution", 1.0)
+    filter = args.get("filter", None)
     try:
         userID = _get_user_id(data_adaptor)
-        cl = list(data_adaptor.compute_leiden(name,cName,resolution,filter,userID))
+        cl = list(data_adaptor.compute_leiden(name, cName, resolution, filter, userID))
         return make_response(jsonify({"clusters": cl}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
@@ -1198,9 +1251,15 @@ def layout_obs_put(request, data_adaptor):
     embName = args["embName"] if args else None
 
     try:
-        userID = _get_user_id(data_adaptor)                 
-        schema = data_adaptor.compute_embedding(method, filter, reembedParams, parentName, embName, userID, hosted = current_app.hosted_mode)
-        return make_response(jsonify({"layoutSchema": schema, "schema": schema_get_helper(data_adaptor)}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        userID = _get_user_id(data_adaptor)
+        schema = data_adaptor.compute_embedding(
+            method, filter, reembedParams, parentName, embName, userID, hosted=current_app.hosted_mode
+        )
+        return make_response(
+            jsonify({"layoutSchema": schema, "schema": schema_get_helper(data_adaptor)}),
+            HTTPStatus.OK,
+            {"Content-Type": "application/json"},
+        )
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -1213,11 +1272,13 @@ def preprocess_put(request, data_adaptor):
     filter = args["filter"] if args else None
     if not filter:
         return abort_and_log(HTTPStatus.BAD_REQUEST, "obs filter is required")
-        
+
     try:
-        userID = _get_user_id(data_adaptor)            
+        userID = _get_user_id(data_adaptor)
         data_adaptor.compute_preprocess(reembedParams, filter, userID)
-        return make_response(jsonify(schema_get_helper(data_adaptor)), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(
+            jsonify(schema_get_helper(data_adaptor)), HTTPStatus.OK, {"Content-Type": "application/json"}
+        )
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -1232,11 +1293,10 @@ def reembed_parameters_get(request, data_adaptor):
     try:
         annotations = data_adaptor.dataset_config.user_annotations
         (reembedParams) = annotations.read_reembed_parameters(data_adaptor)
-        return make_response(
-            jsonify({"reembedParams": reembedParams}), HTTPStatus.OK
-        )
+        return make_response(jsonify({"reembedParams": reembedParams}), HTTPStatus.OK)
     except (ValueError, KeyError, AnnotationsError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e))
+
 
 def reembed_parameters_obsm_put(request, data_adaptor):
     embName = request.get_json()["embName"]
@@ -1249,36 +1309,33 @@ def reembed_parameters_obsm_put(request, data_adaptor):
     if reembedParams is not None:
         reembedParams = reembedParams.copy()
         try:
-            del reembedParams['parentParams']
+            del reembedParams["parentParams"]
         except:
             pass
         try:
-            del reembedParams['sample_ids']
+            del reembedParams["sample_ids"]
         except:
             pass
         try:
-            del reembedParams['feature_ids']
+            del reembedParams["feature_ids"]
         except:
             pass
         try:
-            del reembedParams['feature_weights']
+            del reembedParams["feature_weights"]
         except:
             pass
 
     try:
         if reembedParams is not None:
             for k in reembedParams.keys():
-                if type(reembedParams[k]).__module__ == 'numpy':
+                if type(reembedParams[k]).__module__ == "numpy":
                     reembedParams[k] = reembedParams[k].item()
-            return make_response(
-                jsonify({"reembedParams": reembedParams}), HTTPStatus.OK
-            )
+            return make_response(jsonify({"reembedParams": reembedParams}), HTTPStatus.OK)
         else:
-            return make_response(
-                jsonify({"reembedParams": {}}), HTTPStatus.OK
-            )            
+            return make_response(jsonify({"reembedParams": {}}), HTTPStatus.OK)
     except (ValueError, KeyError, AnnotationsError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e))
+
 
 def reembed_parameters_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
@@ -1302,42 +1359,42 @@ def reembed_parameters_put(request, data_adaptor):
     except (ObsoleteRequest, TypeError) as e:
         return abort(HTTPStatus.NOT_FOUND, description=str(e))
 
+
 def genesets_get(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     genesets = {}
     for k in glob(f"{userID}/set/*"):
-        k = k.split('/')[-1].split('\\')[-1]
+        k = k.split("/")[-1].split("\\")[-1]
         set = "" if k == "__blank__" else k
-        set = set.replace('__DEG__','//;;//') if set.endswith('__DEG__') else set
+        set = set.replace("__DEG__", "//;;//") if set.endswith("__DEG__") else set
         genesets[set] = {}
         for k2 in glob(f"{userID}/set/{k}/*.p"):
-            kn2 = k2.split('/')[-1].split('\\')[-1].split('.p')[0]
+            kn2 = k2.split("/")[-1].split("\\")[-1].split(".p")[0]
             genesets[set][kn2] = pickle_loader(k2)
 
-    return make_response(
-        jsonify({"genesets": genesets}), HTTPStatus.OK
-    )
+    return make_response(jsonify({"genesets": genesets}), HTTPStatus.OK)
+
 
 def genesets_put(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     genesets = request.get_json()
     for set in genesets:
         setn = "__blank__" if set == "" else set
-        setn = setn.replace('//;;//','__DEG__')
+        setn = setn.replace("//;;//", "__DEG__")
         if not os.path.exists(f"{userID}/set/{setn}/"):
-            os.makedirs(f"{userID}/set/{setn}/")        
+            os.makedirs(f"{userID}/set/{setn}/")
         for name in genesets[set]:
-            pickle_dumper(genesets[set][name],f"{userID}/set/{setn}/{name}.p")
+            pickle_dumper(genesets[set][name], f"{userID}/set/{setn}/{name}.p")
 
-        if '//;;//' not in set and data_adaptor._joint_mode:
+        if "//;;//" not in set and data_adaptor._joint_mode:
             # convert genesets to obs
             v = pickle_loader(f"{userID}/var/name_0.p")
-            ID = userID.split('/')[0].split('\\')[0]
-            mode = userID.split('/')[-1].split('\\')[-1]
+            ID = userID.split("/")[0].split("\\")[0]
+            mode = userID.split("/")[-1].split("\\")[-1]
             otherMode = "OBS" if mode == "VAR" else "VAR"
             genesets = {}
             for k2 in glob(f"{userID}/set/{setn}/*.p"):
-                kn2 = k2.split('/')[-1].split('\\')[-1].split('.p')[0]
+                kn2 = k2.split("/")[-1].split("\\")[-1].split(".p")[0]
                 genesets[kn2] = pickle_loader(k2)
 
             if set != "":
@@ -1346,29 +1403,32 @@ def genesets_put(request, data_adaptor):
                 for key2 in genesets:
                     o = genesets[key2]
                     O.extend(o)
-                    C.extend([key2]*len(o))
+                    C.extend([key2] * len(o))
                 C = np.array(C)
                 O = np.array(O)
-                d = _df_to_dict(O,C)
+                d = _df_to_dict(O, C)
 
                 for kk in d.keys():
-                    if len(d[kk])>1:
-                        d[kk] = d[kk][np.argmin(np.array([np.where(np.array(genesets[mm])==kk)[0][0] for  mm in d[kk]]))]
+                    if len(d[kk]) > 1:
+                        d[kk] = d[kk][
+                            np.argmin(np.array([np.where(np.array(genesets[mm]) == kk)[0][0] for mm in d[kk]]))
+                        ]
                     else:
                         d[kk] = d[kk][0]
                 C = np.array(list(d.values()))
                 O = np.array(list(d.keys()))
-                
-                f = np.in1d(v,O,invert=True)
-                vnot = v[f] 
-                C = np.append(C,["unassigned"]*len(vnot)) 
-                O = np.append(O,vnot) 
-                vals = pd.Series(data=C,index=O)[v].values.flatten()
 
-                pickle_dumper(vals,f"{ID}/{otherMode}/obs/{set}.p")
+                f = np.in1d(v, O, invert=True)
+                vnot = v[f]
+                C = np.append(C, ["unassigned"] * len(vnot))
+                O = np.append(O, vnot)
+                vals = pd.Series(data=C, index=O)[v].values.flatten()
+
+                pickle_dumper(vals, f"{ID}/{otherMode}/obs/{set}.p")
 
     return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
-   
+
+
 def genesets_rename_put(request, data_adaptor):
     annotations = data_adaptor.dataset_config.user_annotations
     if not annotations.gene_sets_save_enabled():
@@ -1381,7 +1441,7 @@ def genesets_rename_put(request, data_adaptor):
         annotations.set_collection(anno_collection)
 
     args = request.get_json()
-    
+
     oldName = args.get("oldName", None)
     newName = args.get("newName", None)
     if oldName is None or newName is None:
@@ -1390,9 +1450,8 @@ def genesets_rename_put(request, data_adaptor):
     genesets, _ = annotations.read_gene_sets(data_adaptor)
     genesets[newName] = genesets[oldName]
     del genesets[oldName]
-    annotations.write_gene_sets(genesets, annotations.last_geneset_tid+1, data_adaptor)
+    annotations.write_gene_sets(genesets, annotations.last_geneset_tid + 1, data_adaptor)
     return make_response(jsonify({"status": "OK"}), HTTPStatus.OK)
-
 
 
 def summarize_var_helper(request, data_adaptor, key, raw_query):
@@ -1413,17 +1472,18 @@ def summarize_var_helper(request, data_adaptor, key, raw_query):
     args_filter_only.poplist("scale")
 
     try:
-        layer = request.values.get("layer", default="X")  
-        logscale = request.values.get("logscale", default="false")=="true"        
-        scale = request.values.get("scale", default="false")=="true"  
+        layer = request.values.get("layer", default="X")
+        logscale = request.values.get("logscale", default="false") == "true"
+        scale = request.values.get("scale", default="false") == "true"
         filter = _query_parameter_to_filter(args_filter_only)
         return make_response(
             data_adaptor.summarize_var(summary_method, filter, query_hash, layer, logscale, scale),
             HTTPStatus.OK,
             {"Content-Type": "application/octet-stream"},
         )
-    except (ValueError) as e:
+    except ValueError as e:
         return abort(HTTPStatus.NOT_FOUND, description=str(e))
+
 
 def summarize_var_get(request, data_adaptor):
     return summarize_var_helper(request, data_adaptor, None, request.query_string)

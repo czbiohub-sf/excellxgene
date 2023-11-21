@@ -3,8 +3,8 @@
 # Exploratory CellxGene (ExCellxGene)
 
 
-## V2.9.2
-The latest stable version is V2.9.2. The current version of exCellxgene relies on anndata==0.7.8, so might crash with anndata objects generated with anndata==0.8.0 or above. Until we fix this bug, we recommend users to follow the installation instruction below. The key part is installing exCellxgene, then upgrading the anndata version to 0.8.0 in the "cxg" conda environment.
+## V2.9.5
+The latest stable version is V2.9.5. The current version of exCellxgene relies on anndata==0.7.8, so might crash with anndata objects generated with anndata==0.8.0 or above. Until we fix this bug, we recommend users to follow the installation instruction below. The key part is installing exCellxgene, then upgrading the anndata version to 0.8.0 in the "cxg" conda environment.
 
 ### Installation
 

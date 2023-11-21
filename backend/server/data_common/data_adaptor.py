@@ -66,7 +66,6 @@ class DataAdaptor(metaclass=ABCMeta):
         """return an numpy array for the given pre-computed embedding name."""
         pass
 
-    
     @abstractmethod
     def compute_sankey_df(self, labels, name):
         """compute sankey"""
@@ -86,7 +85,6 @@ class DataAdaptor(metaclass=ABCMeta):
     @abstractmethod
     def get_shape(self):
         pass
-
 
     @abstractmethod
     def get_colors(self):
@@ -115,7 +113,6 @@ class DataAdaptor(metaclass=ABCMeta):
     def get_corpora_props(self):
         return None
 
-
     @abstractmethod
     def annotation_to_fbs_matrix(self, axis, field=None, uid=None):
         """
@@ -130,7 +127,7 @@ class DataAdaptor(metaclass=ABCMeta):
         parameters.update(self.parameters)
 
     def _index_filter_to_mask(self, filter, count):
-        mask = np.zeros((count,), dtype=np.bool)
+        mask = np.zeros((count,), dtype="bool")
         for i in filter:
             if isinstance(i, list):
                 mask[i[0] : i[1]] = True
@@ -139,7 +136,7 @@ class DataAdaptor(metaclass=ABCMeta):
         return mask
 
     def _axis_filter_to_mask(self, axis, filter, count):
-        mask = np.ones((count,), dtype=np.bool)
+        mask = np.ones((count,), dtype="bool")
         if "index" in filter:
             mask = np.logical_and(mask, self._index_filter_to_mask(filter["index"], count))
         if "annotation_value" in filter:
@@ -148,7 +145,7 @@ class DataAdaptor(metaclass=ABCMeta):
         return mask
 
     def _annotation_filter_to_mask(self, axis, filter, count):
-        mask = np.ones((count,), dtype=np.bool)
+        mask = np.ones((count,), dtype="bool")
         for v in filter:
             name = v["name"]
             if axis == Axis.VAR:
@@ -223,7 +220,7 @@ class DataAdaptor(metaclass=ABCMeta):
                     labels_df[col] = labels_df[col].astype("int32")
                 if isinstance(dtype, pd.Int64Dtype):
                     labels_df[col] = labels_df[col].astype("int64")
-        
+
         return labels_df
 
     def check_new_gene_sets(self, genesets, context=None):
@@ -241,22 +238,21 @@ class DataAdaptor(metaclass=ABCMeta):
         * currently only supports access on VAR axis
         * currently only supports filtering on VAR axis
         """
-        
-        
+
         if axis != Axis.VAR:
             raise ValueError("Only VAR dimension access is supported")
         try:
-            d = filter['var']['annotation_value'][0]
+            d = filter["var"]["annotation_value"][0]
             col = self.NAME[mode]["var"]
-            vals = d['values']
-            var_selector = np.in1d(col,vals)
-            
+            vals = d["values"]
+            var_selector = np.in1d(col, vals)
+
         except (KeyError, IndexError, TypeError, AttributeError):
             raise FilterError("Error parsing filter")
 
         col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
-        X = self.get_X_array(col_idx,layer=layer,logscale=logscale, scale=scale)
-        
+        X = self.get_X_array(col_idx, layer=layer, logscale=logscale, scale=scale)
+
         return encode_matrix_fbs(X, col_idx=col_idx, row_idx=None)
 
     def diffexp_topN(self, obsFilterA, obsFilterB, top_n=None):
@@ -318,8 +314,8 @@ class DataAdaptor(metaclass=ABCMeta):
             min = np.NaN
             max = np.NaN
 
-        diff = max-min
-        if np.abs(diff).sum()==0:
+        diff = max - min
+        if np.abs(diff).sum() == 0:
             normalized_layout = embedding
             normalized_layout[np.invert(np.isnan(normalized_layout))] = 0.5
         else:
@@ -385,7 +381,7 @@ class DataAdaptor(metaclass=ABCMeta):
                 df = pd.DataFrame()
             fbs = encode_matrix_fbs(df, col_idx=df.columns, row_idx=None)
 
-        return fbs        
+        return fbs
 
     def get_last_mod_time(self):
         try:
@@ -394,19 +390,19 @@ class DataAdaptor(metaclass=ABCMeta):
             lastmod = None
         return lastmod
 
-    def summarize_var(self, method, filter, query_hash,layer="X",logscale=False, scale=False):
+    def summarize_var(self, method, filter, query_hash, layer="X", logscale=False, scale=False):
         if method != "mean":
             raise UnsupportedSummaryMethod("Unknown gene set summary method.")
 
-        d = filter['var']['annotation_value'][0]
-        col = self.NAME[self.mode_getter()]["var"]    
-        vals = d['values']
-        var_selector = np.in1d(col,vals)
+        d = filter["var"]["annotation_value"][0]
+        col = self.NAME[self.mode_getter()]["var"]
+        vals = d["values"]
+        var_selector = np.in1d(col, vals)
         if var_selector is None or np.count_nonzero(var_selector) == 0:
             mean = np.zeros((self.get_shape()[0], 1), dtype=np.float32)
         else:
             col_idx = np.nonzero([] if var_selector is None else var_selector)[0]
-            X = self.get_X_array(col_idx,layer=layer,logscale=logscale, scale=scale)
+            X = self.get_X_array(col_idx, layer=layer, logscale=logscale, scale=scale)
             if sparse.issparse(X):
                 mean = X.mean(axis=1)
             else:
