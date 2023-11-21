@@ -10,6 +10,7 @@ from flask import make_response, jsonify, current_app, abort, send_file, after_t
 from urllib.parse import unquote
 import shutil
 import pickle
+from backend.common.utils.utils import jsonify_numpy
 from backend.common.utils.type_conversion_utils import get_schema_type_hint_of_array
 from backend.server.common.config.client_config import get_client_config, get_client_userinfo
 from backend.common.constants import Axis, DiffExpMode, JSON_NaN_to_num_warning_msg
@@ -1110,7 +1111,7 @@ def diff_stats_get(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     try:
         x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_output.p")
-        return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(jsonify_numpy({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
@@ -1123,7 +1124,7 @@ def diff_genes_get(request, data_adaptor):
     userID = _get_user_id(data_adaptor)
     try:
         x = pickle_loader(f"{userID}/diff/{name.replace('/','_')}/{pop.replace('/','_')}_sg.p")
-        return make_response(jsonify({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
+        return make_response(jsonify_numpy({"pop": x}), HTTPStatus.OK, {"Content-Type": "application/json"})
     except NotImplementedError as e:
         return abort_and_log(HTTPStatus.NOT_IMPLEMENTED, str(e))
     except (ValueError, DisabledFeatureError, FilterError) as e:
