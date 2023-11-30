@@ -4,7 +4,7 @@
 
 
 ## V2.9.6
-The latest stable version is V2.9.6. The current version of exCellxgene relies on anndata==0.7.8, so might crash with anndata objects generated with anndata==0.8.0 or above. Until we fix this bug, we recommend users to follow the installation instruction below. The key part is installing exCellxgene, then upgrading the anndata version to 0.8.0 in the "cxg" conda environment.
+The latest stable version is V2.9.6. 
 
 ### Installation
 
@@ -18,14 +18,13 @@ bash ~/miniconda.sh -b -p $HOME/miniconda
 2. Create and activate a new environment:
 
 ```
-conda create -n cxg python=3.8
+conda create -n cxg python=3.9
 conda activate cxg
 ```
 
 3. Install excellxgene with pip:
 ```
 pip install excellxgene
-pip install anndata==0.8.0
 ```
 
 If your operating system is CentOS, then you may run into issues installing dependencies that require up-to-date `gcc` or `g++` compilers. Please install with the following and try reinstalling `excellxgene` with pip:
