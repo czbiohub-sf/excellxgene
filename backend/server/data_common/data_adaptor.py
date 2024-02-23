@@ -283,6 +283,7 @@ class DataAdaptor(metaclass=ABCMeta):
         ):
             raise ExceedsLimitError("Diffexp request exceeds max cell count limit")
 
+        print("DEBUG -- BEFORE")
         result = self.compute_diffexp_ttest(
             maskA=obs_mask_A,
             maskB=obs_mask_B,

@@ -27,7 +27,8 @@ const getCoordinatesByLabel = (
   categoryName,
   categoryDf,
   layoutChoice,
-  layoutDf
+  layoutDf,
+  maxCategoricalOptionsToDisplay
 ) => {
   const coordsByCategoryLabel = new Map();
   // If the coloredBy is not a categorical col
@@ -42,7 +43,8 @@ const getCoordinatesByLabel = (
 
   const categorySummary = createCategorySummaryFromDfCol(
     categoryDf.col(categoryName),
-    schema.annotations.obsByName[categoryName]
+    schema.annotations.obsByName[categoryName],
+    maxCategoricalOptionsToDisplay
   );
 
   const {
@@ -108,7 +110,8 @@ const calcMedianCentroid = (
   categoryName,
   categoryDf,
   layoutChoice,
-  layoutDf
+  layoutDf,
+  maxCategoricalOptionsToDisplay
 ) => {
   // generate a map describing the coordinates for each label within the given category
   const dataMap = getCoordinatesByLabel(
@@ -116,7 +119,8 @@ const calcMedianCentroid = (
     categoryName,
     categoryDf,
     layoutChoice,
-    layoutDf
+    layoutDf,
+    maxCategoricalOptionsToDisplay
   );
 
   // label => [medianXCoordinate, medianYCoordinate]
@@ -147,13 +151,14 @@ const hashMedianCentroid = (
   categoryName,
   categoryDf,
   layoutChoice,
-  layoutDf
+  layoutDf,
+  maxCategoricalOptionsToDisplay
 ) => {
   const category = categoryDf.col(categoryName);
   const layoutDimNames = layoutChoice.currentDimNames;
   const layoutX = layoutDf.col(layoutDimNames[0]);
   const layoutY = layoutDf.col(layoutDimNames[1]);
-  return `${category.__id}+${layoutX.__id}:${layoutY.__id}`;
+  return `${category.__id}+${layoutX.__id}:${layoutY.__id}:${maxCategoricalOptionsToDisplay}`;
 };
 // export the memoized calculation function
 export default memoize(calcMedianCentroid, hashMedianCentroid);

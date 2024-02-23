@@ -1,5 +1,6 @@
 import uniq from "lodash.uniq";
 import filter from "lodash.filter";
+import { maxCategoricalOptionsToDisplay } from "../globals";
 
 const Controls = (
   state = {
@@ -41,7 +42,8 @@ const Controls = (
     lastClickedGene: null,
     lastClickedGeneset: null,
     currentlyDragged: null,
-    justCreatedGeneset: false
+    justCreatedGeneset: false,
+    maxCategoricalOptionsToDisplay: maxCategoricalOptionsToDisplay
   },
   action
 ) => {
@@ -71,6 +73,12 @@ const Controls = (
       return {
         ...state,
         multiGeneSelect: true
+      }
+    }
+    case "set max categorical options": {
+      return {
+        ...state,
+        maxCategoricalOptionsToDisplay: action.maxCategoricalOptionsToDisplay
       }
     }
     case "set multiple gene select off": {

@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { connect } from "react-redux";
-import { ButtonGroup, Button, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, Checkbox, MenuItem, Classes } from "@blueprintjs/core";
+import { ButtonGroup, Button, AnchorButton, Slider, Tooltip, HotkeysContext, Dialog, ControlGroup, Checkbox, MenuItem, Classes, NumericInput } from "@blueprintjs/core";
 import { Select } from "@blueprintjs/select"
 import { Popover2 } from "@blueprintjs/popover2";
 import * as globals from "../../globals";
@@ -130,7 +130,8 @@ const continuous = (selectorId, colorScale) => {
     jointEmbeddingFlag: state.controls.jointEmbeddingFlag,
     jointMode: state.controls.jointMode,
     screenCap: state.controls.screenCap,
-    sankeyScreenCap: state.sankeySelection.screenCap
+    sankeyScreenCap: state.sankeySelection.screenCap,
+    maxCategoricalOptionsToDisplay: state.controls.maxCategoricalOptionsToDisplay,
   };
 })
 class MenuBar extends React.PureComponent {
@@ -429,7 +430,8 @@ class MenuBar extends React.PureComponent {
       jointEmbeddingFlag,
       jointMode,
       screenCap,
-      sankeyScreenCap
+      sankeyScreenCap,
+      maxCategoricalOptionsToDisplay,
     } = this.props;
     const { preferencesDialogOpen, pendingClipPercentiles, threshold, saveDataWarningDialogOpen, revealSankeyDialog, sankeyMethod, numEdges, numGenes, samHVG, dataLayer, geneMetadata } = this.state;
     const isColoredByCategorical = !!categoricalSelection?.[colorAccessor];
@@ -574,6 +576,22 @@ class MenuBar extends React.PureComponent {
                 id="continuous_legend_preferences"
               />
             </ControlGroup>
+
+            <div style={{paddingTop: "20px", paddingBottom: "5px"}}>
+                <b>Max categorial options:</b>
+            </div>
+            <ControlGroup fill={true} vertical={false}>
+              <NumericInput
+                value={maxCategoricalOptionsToDisplay}
+                min={1}
+                max={10000000}
+                onValueChange={(valueAsNumber) => {
+                  dispatch({type: "set max categorical options", maxCategoricalOptionsToDisplay: valueAsNumber})
+                }}
+              />
+            </ControlGroup>
+
+
           </div>
         </Dialog>        
         <UndoRedoReset

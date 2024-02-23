@@ -84,8 +84,7 @@ export function selectableCategoryNames(schema, names) {
   return names.filter((name) => isSelectableCategoryName(schema, name));
 }
 
-export function createCategorySummaryFromDfCol(dfCol, colSchema) {
-  const N = globals.maxCategoricalOptionsToDisplay;
+export function createCategorySummaryFromDfCol(dfCol, colSchema, N) {
   const { writable: isUserAnno } = colSchema;
 
   /*

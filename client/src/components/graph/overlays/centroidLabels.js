@@ -15,7 +15,8 @@ export default
   categoricalSelection: state.categoricalSelection,
   showLabels: state.centroidLabels?.showLabels,
   genesets: state.genesets.genesets,
-  modifyingLayouts: state.controls.modifyingLayouts
+  modifyingLayouts: state.controls.modifyingLayouts,
+  maxCategoricalOptionsToDisplay: state.controls.maxCategoricalOptionsToDisplay,
 }))
 class CentroidLabels extends PureComponent {
   static watchAsync(props, prevProps) {
@@ -29,7 +30,8 @@ class CentroidLabels extends PureComponent {
       layoutChoice,
       categoricalSelection,
       showLabels,
-      modifyingLayouts
+      modifyingLayouts,
+      maxCategoricalOptionsToDisplay,
     } = props.watchProps;
     if (!modifyingLayouts){
       const { schema } = annoMatrix;
@@ -43,7 +45,8 @@ class CentroidLabels extends PureComponent {
           colorAccessor,
           colorDf,
           layoutChoice,
-          layoutDf
+          layoutDf,
+          maxCategoricalOptionsToDisplay,
         );
       } else {
         labels = new Map();
@@ -118,7 +121,8 @@ class CentroidLabels extends PureComponent {
       colors,
       annoMatrix,
       layoutChoice,
-      modifyingLayouts
+      modifyingLayouts,
+      maxCategoricalOptionsToDisplay,
     } = this.props;
 
     return (
@@ -132,7 +136,8 @@ class CentroidLabels extends PureComponent {
           categoricalSelection,
           dilatedValue,
           showLabels,
-          modifyingLayouts
+          modifyingLayouts,
+          maxCategoricalOptionsToDisplay,
         }}
       >
         <Async.Fulfilled>

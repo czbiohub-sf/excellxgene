@@ -56,7 +56,8 @@ const LABEL_WIDTH_ANNO = LABEL_WIDTH - ANNO_BUTTON_WIDTH;
     refresher: refresher,
     userLoggedIn: state.controls.userInfo ? true : false,
     chromeKeyCategorical: state.controls.chromeKeyCategorical,
-    chromeKeyContinuous: state.controls.chromeKeyContinuous
+    chromeKeyContinuous: state.controls.chromeKeyContinuous,
+    maxCategoricalOptionsToDisplay: state.controls.maxCategoricalOptionsToDisplay,
   };
 })
 class Category extends React.PureComponent {
@@ -279,7 +280,7 @@ class Category extends React.PureComponent {
     */
     const { schema } = annoMatrix;
     const { colorAccessor, colorMode } = colors;
-    const { genesets } = this.props;
+    const { genesets, maxCategoricalOptionsToDisplay } = this.props;
     let colorDataPromise = Promise.resolve(null);
     if (colorAccessor) {
       const query = createColorQuery(
@@ -300,7 +301,8 @@ class Category extends React.PureComponent {
     const colSchema = schema.annotations.obsByName[metadataField];
     const categorySummary = this.createCategorySummaryFromDfCol(
       column,
-      colSchema
+      colSchema,
+      maxCategoricalOptionsToDisplay,
     ); 
     return [categoryData, categorySummary, colorData];
   }
@@ -363,7 +365,8 @@ class Category extends React.PureComponent {
       sankeyController,
       userLoggedIn,
       leftSidebarWidth,
-      chromeKeyCategorical
+      chromeKeyCategorical,
+      maxCategoricalOptionsToDisplay,
     } = this.props;
     
     const sankeyLoading = !!sankeyController?.pendingFetch;
@@ -452,6 +455,9 @@ class Category extends React.PureComponent {
                   }}
                   userLoggedIn={userLoggedIn}
                   leftSidebarWidth={leftSidebarWidth}
+                  maxCategoricalOptionsToDisplay={
+                    maxCategoricalOptionsToDisplay
+                  }
                 />
               );
             }}
@@ -557,7 +563,8 @@ const CategoryHeader = React.memo(
     histToggler,
     indexOfSankeyCategory,
     sankeyLoading,
-    userLoggedIn
+    userLoggedIn,
+    maxCategoricalOptionsToDisplay,
   }) => {
     /*
     Render category name and controls (eg, color-by button).
@@ -674,7 +681,7 @@ const CategoryHeader = React.memo(
           <Tooltip
             content={
               isTruncated
-                ? `Coloring by ${metadataField} is disabled, as it exceeds the limit of ${globals.maxCategoricalOptionsToDisplay} labels`
+                ? `Coloring by ${metadataField} is disabled, as it exceeds the limit of ${maxCategoricalOptionsToDisplay} labels`
                 : "Use as color scale"
             }
             position={Position.LEFT}
@@ -751,7 +758,8 @@ const CategoryRender = React.memo(
     filterValue,
     filterValueSetter,
     userLoggedIn,
-    leftSidebarWidth
+    leftSidebarWidth,
+    maxCategoricalOptionsToDisplay,
   }) => {
     /*
     Render the core of the category, including checkboxes, controls, etc.
@@ -809,6 +817,7 @@ const CategoryRender = React.memo(
             indexOfSankeyCategory={indexOfSankeyCategory}
             sankeyLoading={sankeyLoading}
             userLoggedIn={userLoggedIn}
+            maxCategoricalOptionsToDisplay={maxCategoricalOptionsToDisplay}
           />
         </div>
         <div style={{ marginLeft: 26 }}>

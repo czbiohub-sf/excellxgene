@@ -587,6 +587,7 @@ def diffexp_obs_post(data, data_adaptor):
 
     try:
         diffexp = data_adaptor.diffexp_topN(set1_filter, set2_filter, count)
+        print("DEBUG -- END")
         return make_response(diffexp, HTTPStatus.OK, {"Content-Type": "application/json"})
     except (ValueError, DisabledFeatureError, FilterError, ExceedsLimitError) as e:
         return abort_and_log(HTTPStatus.BAD_REQUEST, str(e), include_exc_info=True)
